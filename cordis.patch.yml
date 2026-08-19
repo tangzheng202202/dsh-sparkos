@@ -1,0 +1,4 @@
+# Mount the host and Web client halves of the SparkOS plugin.
+- insert:
+    - id: sparkos
+      name: dsh-sparkos
