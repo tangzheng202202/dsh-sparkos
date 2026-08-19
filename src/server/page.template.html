@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SparkOS 工作台</title>
+<style>
+:root{--bg:#FFF8EF;--card:#fff;--border:#E8DCC8;--text:#3B3226;--dim:#8A7B63;--muted:#B5A78E;
+--accent:#E8563D;--accent2:#F5A95C;--blue:#7FA8C9;--green:#7FA88A;--radius:12px;
+--shadow:0 1px 3px rgba(59,50,38,.06),0 1px 2px rgba(59,50,38,.04)}
+*{box-sizing:border-box;margin:0}
+body{font-family:'PingFang SC',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);padding:20px 24px}
+header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+h1{font-size:24px;font-weight:700}.subtitle{color:var(--dim);font-size:13px;margin-top:2px}
+.brand{font-size:12px;color:#fff;background:var(--accent);padding:4px 12px;border-radius:20px;font-weight:600}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.nav-tab{border:1px solid var(--border);background:var(--card);border-radius:20px;padding:7px 15px;font-size:13.5px;cursor:pointer;color:var(--dim);font-weight:500}
+.nav-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:13px 16px;box-shadow:var(--shadow)}
+.stat-label{font-size:11.5px;color:var(--dim);font-weight:600}.stat-value{font-size:24px;font-weight:700;margin-top:3px}
+.section-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:14px}
+.section-title{font-size:14.5px;font-weight:700;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px 6px;border-bottom:1px solid var(--border);text-align:left}th{color:var(--dim);font-size:12px}
+.line-chip{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;width:240px;background:var(--card);color:var(--text)}
+.hidden{display:none}
+.btn{border:none;border-radius:8px;padding:5px 12px;font-size:12.5px;cursor:pointer;font-weight:600;margin-right:4px}
+.btn.adopt{background:var(--green);color:#fff}.btn.ignore{background:transparent;border:1px solid var(--border);color:var(--dim)}
+.btn:disabled{opacity:.35;cursor:default}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:30px}
+.legend{display:flex;gap:6px;flex-wrap:wrap}
+.leg{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:12px;background:var(--card)}
+.swim{display:flex;align-items:center;height:34px;border-left:3px solid var(--accent2);margin-bottom:6px;border-radius:0 8px 8px 0;background:linear-gradient(90deg,#FFFDF8,var(--card));padding-right:10px}
+.swim .nm{font-size:12.5px;font-weight:600;padding:0 10px;min-width:180px}
+.swim .cnt{font-size:11.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>SparkOS 工作台</h1><div class="subtitle" id="subtitle"></div></div>
+  <span class="brand">SparkOS</span>
+</header>
+<nav id="nav"></nav>
+<div class="stats-row" id="stats"></div>
+
+<div id="tab-brief" class="tab">
+  <div class="section-card"><div class="section-title">🌅 今日简报</div><div id="briefBody"></div></div>
+</div>
+
+<div id="tab-lines" class="tab hidden">
+  <div class="section-card"><div class="section-title">🛤️ 叙事主线泳道</div><div id="swimBody"></div></div>
+  <div class="section-card"><div class="section-title">📋 知识卡（只读 · 数据源 timeline_data.json）</div>
+    <input class="search" id="q" placeholder="搜索标题/编号/主线…">
+    <div style="max-height:420px;overflow:auto"><table id="tbl"><thead><tr><th>键</th><th>类型</th><th>日期</th><th>标题</th><th>主线</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<div id="tab-topics" class="tab hidden">
+  <div class="section-card"><div class="section-title">💡 选题推荐（adopt/ignore 决策落 VAULT state）</div><div id="topicsBody"></div></div>
+</div>
+
+<div id="tab-draft" class="tab hidden">
+  <div class="section-card"><div class="section-title">📝 草稿工作区</div><div id="draftBody"></div></div>
+</div>
+
+<div id="tab-cards" class="tab hidden">
+  <div class="section-card"><div class="section-title">🔥 蒸馏审核队列（写回星火库仅经人工审核）</div><div id="distillBody"></div></div>
+</div>
+
+<div id="tab-sources" class="tab hidden">
+  <div class="section-card"><div class="section-title">📡 信息源（RSS + 星火库增量 · intel 扩展位预留）</div><div id="sourcesBody"></div></div>
+</div>
+
+<div id="tab-publish" class="tab hidden">
+  <div class="section-card"><div class="section-title">📊 发布表现（合并发布节奏）</div><div id="publishBody"></div></div>
+</div>
+
+<div id="tab-advise" class="tab hidden">
+  <div class="section-card"><div class="section-title">🧭 系统建议（只读 · 守卫⑤）</div><div id="adviseBody"></div></div>
+</div>
+
+<script>
+const D = window._embeddedDailyData;
+const TABS = [["brief","今日简报"],["lines","叙事主线"],["topics","选题推荐"],["draft","草稿工作区"],["cards","知识卡·蒸馏"],["sources","信息源"],["publish","发布表现"],["advise","系统建议"]];
+
+// ---- header / stats / nav ----
+document.getElementById("subtitle").textContent =
+  `数据注入 ${D.generatedAt} · VAULT ${D.vaultRoot}`;
+const stats = [["主线", D.lines.length],["知识卡", D.timeline.cards.length],["事件", D.events],["草稿", D.drafts.length],["蒸馏队列", D.distillQueue.length],["决策", D.decisions.length]];
+document.getElementById("stats").innerHTML = stats.map(([l,v]) =>
+  `<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value">${v}</div></div>`).join("");
+
+const nav = document.getElementById("nav");
+for (const [id, label] of TABS) {
+  const b = document.createElement("button");
+  b.className = "nav-tab"; b.textContent = label; b.dataset.tab = id;
+  b.onclick = () => {
+    document.querySelectorAll(".nav-tab").forEach(x => x.classList.toggle("active", x === b));
+    document.querySelectorAll(".tab").forEach(x => x.classList.toggle("hidden", x.id !== "tab-" + id));
+  };
+  nav.appendChild(b);
+}
+nav.firstChild.classList.add("active");
+
+// ---- brief ----
+document.getElementById("briefBody").innerHTML =
+  `<table><tr><th>主叙事窗</th><td>${D.timeline.d0 ?? "—"} 起 ${D.timeline.days ?? "?"} 天</td></tr>` +
+  `<tr><th>主线热度 Top</th><td>${topLines(5).map(l => `<span class="line-chip" style="background:${lineColor(l.id)}"></span>${l.name}(${l.count})`).join(" · ") || "—"}</td></tr>` +
+  `<tr><th>待办</th><td>蒸馏队列 ${D.distillQueue.length} 项 · 未决策选题 ${undecided("topic")} 项 · 未决策建议 ${undecided("advice")} 项</td></tr></table>`;
+
+// ---- lines tab ----
+function lineColor(id){const P=["#E8563D","#F5A95C","#7FA8C9","#7FA88A","#B58BC9","#D98BA0","#8AB5C9","#C9B58B","#8AC9A5","#C98B8B"];let h=0;for(const c of id)h=(h*31+c.charCodeAt(0))>>>0;return P[h%P.length];}
+function cardLine(c){return c.line ?? "—"}
+function topLines(n){const m=new Map();for(const c of D.timeline.cards){const k=cardLine(c);m.set(k,(m.get(k)||0)+1)}
+  return [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n).map(([id,count])=>({id,count,name:(D.lines.find(l=>l.id===id)||{}).name||id}));}
+function renderSwim(){document.getElementById("swimBody").innerHTML = topLines(99).map(l =>
+  `<div class="swim" style="border-left-color:${lineColor(l.id)}"><span class="nm"><span class="line-chip" style="background:${lineColor(l.id)}"></span>${l.name}</span><span class="cnt">${l.count} 卡</span></div>`).join("");}
+renderSwim();
+
+const kindName = { observation: "观察", model: "模型", judgment: "判断" };
+function renderTable(filter){const q=(filter||"").toLowerCase();
+  const rows = D.timeline.cards.filter(c => !q || (c.title||"").toLowerCase().includes(q) || (c.k||"").includes(q) || (cardLine(c)||"").includes(q));
+  document.querySelector("#tbl tbody").innerHTML = rows.map(c =>
+    `<tr><td>${c.k ?? "—"}</td><td>${kindName[c.kind] ?? c.kind ?? "—"}</td><td>${c.date ?? "—"}</td><td>${c.title ?? "—"}</td><td><span class="line-chip" style="background:${lineColor(cardLine(c))}"></span>${cardLine(c)}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="empty">无匹配卡片</td></tr>`;}
+renderTable("");
+document.getElementById("q").oninput = e => renderTable(e.target.value);
+
+// ---- adopt/ignore helpers ----
+function undecided(kind){return 99;} // 骨架：具体候选由 topics/advise 子命令产出后接入
+function decisionOf(kind,id){const d=[...D.decisions].reverse().find(x=>x.kind===kind&&x.id===id);return d?d.action:null;}
+async function decide(kind,id,action,btn){btn.disabled=true;
+  try{const r=await fetch("/sparkos/mutate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind,id,action})});
+    const j=await r.json();if(!j.ok)throw new Error(j.error?.message||"失败");
+    D.decisions.push(j.entry);btn.textContent=action==="adopt"?"已采纳 ✓":"已忽略 ✓";}
+  catch(e){btn.disabled=false;btn.textContent="重试";}}
+
+// ---- topics / draft / distill / sources / publish / advise 骨架渲染 ----
+function listOrEmpty(arr,fmt){return arr.length?arr.map(fmt).join(""):`<div class="empty">暂无数据（待子命令产出）</div>`;}
+document.getElementById("topicsBody").innerHTML = `<div class="empty">选题候选由 sparkos_run topics 产出后接入 · 已记录决策 ${D.decisions.filter(d=>d.kind==="topic").length} 条</div>`;
+document.getElementById("draftBody").innerHTML = listOrEmpty(D.drafts, f => `<div style="padding:6px 0;border-bottom:1px solid var(--border)">📝 ${f}</div>`);
+document.getElementById("distillBody").innerHTML = listOrEmpty(D.distillQueue, f => `<div style="padding:6px 0;border-bottom:1px solid var(--border)">🔥 ${f}</div>`);
+document.getElementById("sourcesBody").innerHTML = `<div class="empty">RSS + 星火库增量（intel 扩展位预留，P2）</div>`;
+document.getElementById("publishBody").innerHTML = `<div class="empty">发布节奏与表现待 publish 子命令产出后接入</div>`;
+document.getElementById("adviseBody").innerHTML = `<div class="empty">系统建议只读（守卫⑤）· 已记录决策 ${D.decisions.filter(d=>d.kind==="advice").length} 条</div>`;
+</script>
+</body>
+</html>

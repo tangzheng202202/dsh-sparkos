@@ -18,6 +18,7 @@ async function run() {
     format: 'esm',
     target: 'node20',
     packages: 'external',
+    loader: { '.html': 'text' },
     sourcemap: false,
     banner: { js: '/* dsh-sparkos host half — built. Edit src/, then `pnpm build`. */' },
     logLevel: 'info',

@@ -8,10 +8,12 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { registerRunTool } from './tools/run.ts'
+import { registerWorkbench } from './server/routes.ts'
 
 export const name = 'sparkos'
 export const inject = ['tools']
 
 export function apply(ctx: Context): void {
   registerRunTool(ctx)
+  registerWorkbench(ctx)
 }
