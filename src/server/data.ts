@@ -31,8 +31,40 @@ export interface WorkbenchData {
   timeline: { d0?: string; days?: number; cards: unknown[] }
   events: number
   drafts: string[]
-  distillQueue: string[]
+  distillQueue: Array<{ file: string; summary: string; targets: string[] }>
+  distillReviewed: { approved: string[]; rejected: string[] }
   decisions: Array<{ at: string; kind: string; id: string; action: 'adopt' | 'ignore'; note?: string }>
+}
+
+/** 蒸馏队列条目：distill_queue/*.md，头部 YAML 摘要（title/lines）。 */
+interface DistillEntry {
+  file: string
+  summary: string
+  targets: string[]
+}
+
+function loadDistillQueue(): DistillEntry[] {
+  const dir = path.join(VAULT_ROOT, 'distill_queue')
+  return listFiles(dir).filter((f) => f.endsWith('.md')).map((file) => {
+    let raw = ''
+    try { raw = readFileSync(path.join(dir, file), 'utf8') } catch { /* 忽略 */ }
+    const title = /^title:\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? file
+    const targets = [...raw.matchAll(/^lines?:\s*\[(.+)\]$/gm), ...raw.matchAll(/^line:\s*(.+)$/gm)]
+      .flatMap((m) => m[1].split(',')).map((s) => s.trim()).filter((s) => s !== '')
+    const body = raw.split(/^---\s*$/m)[2]?.trim() ?? raw.trim()
+    return { file, summary: `${title}${body !== '' ? ` — ${body.slice(0, 120)}` : ''}`, targets }
+  })
+}
+
+/** 四条红线（intel 蓝图 §8，蒸馏采纳前硬检查）。 */
+const RED_LINE_PATTERNS: Array<{ id: string; label: string; pattern: RegExp }> = [
+  { id: 'A', label: '不得要求写情报管道 state/ 或动 token/钥匙串/launchd', pattern: /(华夏舆参|百草堂|管道).{0,20}(state\/|token|钥匙串|launchd)|(state\/|token|钥匙串|launchd).{0,20}(华夏舆参|百草堂|管道)/ },
+  { id: 'B', label: 'ownership 必须保持 pending（不允许一刀切接管）', pattern: /ownership.{0,20}(takeover|接管生效|owner\s*[:=]\s*dsch?)/i },
+  { id: 'D', label: '不得自动定夺发布（最终裁决归人工）', pattern: /自动发布|自动定夺|无需人工|跳过审核/ },
+]
+
+export function redLineCheck(content: string): string[] {
+  return RED_LINE_PATTERNS.filter((r) => r.pattern.test(content)).map((r) => `红线${r.id}：${r.label}`)
 }
 
 export function buildWorkbenchData(): WorkbenchData {
@@ -64,6 +96,9 @@ export function buildWorkbenchData(): WorkbenchData {
   const decisions = readJsonIf<WorkbenchData['decisions']>(
     path.join(VAULT_ROOT, 'state', 'decisions.json'), [],
   )
+  const reviewed = readJsonIf<WorkbenchData['distillReviewed']>(
+    path.join(VAULT_ROOT, 'state', 'distill_reviewed.json'), { approved: [], rejected: [] },
+  )
 
   return {
     generatedAt: new Date().toISOString(),
@@ -72,9 +107,30 @@ export function buildWorkbenchData(): WorkbenchData {
     timeline: { d0: timeline.d0, days: timeline.days, cards: timeline.cards ?? [] },
     events,
     drafts: listFiles(path.join(VAULT_ROOT, 'drafts')),
-    distillQueue: listFiles(path.join(VAULT_ROOT, 'distill_queue')),
+    distillQueue: loadDistillQueue().filter((e) => !reviewed.approved.includes(e.file) && !reviewed.rejected.includes(e.file)),
+    distillReviewed: reviewed,
     decisions,
   }
+}
+
+/** 蒸馏条目决策：采纳前跑四红线；条目移入 approved（待人工写回星火库）/ rejected（不再出现）。 */
+export function reviewDistill(file: string, action: 'adopt' | 'ignore'): { entry: WorkbenchData['decisions'][number]; violations: string[] } {
+  const queueDir = path.join(VAULT_ROOT, 'distill_queue')
+  let content = ''
+  try { content = readFileSync(path.join(queueDir, file), 'utf8') } catch { /* 条目可能已处理 */ }
+  const violations = action === 'adopt' ? redLineCheck(content) : []
+  if (violations.length > 0) {
+    throw new Error(`红线检查未过：${violations.join('；')}`)
+  }
+  const stateDir = path.join(VAULT_ROOT, 'state')
+  const reviewedFile = path.join(stateDir, 'distill_reviewed.json')
+  const reviewed = readJsonIf<WorkbenchData['distillReviewed']>(reviewedFile, { approved: [], rejected: [] })
+  const list = action === 'adopt' ? reviewed.approved : reviewed.rejected
+  if (!list.includes(file)) list.push(file)
+  mkdirSync(stateDir, { recursive: true })
+  writeFileSync(reviewedFile, `${JSON.stringify(reviewed, null, 2)}\n`)
+  const entry = recordDecision('distill', file, action)
+  return { entry, violations }
 }
 
 export function recordDecision(kind: string, id: string, action: 'adopt' | 'ignore', note?: string): WorkbenchData['decisions'][number] {

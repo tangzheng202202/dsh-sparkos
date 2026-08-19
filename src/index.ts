@@ -9,6 +9,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { registerRunTool } from './tools/run.ts'
 import { registerWorkbench } from './server/routes.ts'
+import { registerSchedule } from './schedule.ts'
 
 export const name = 'sparkos'
 export const inject = ['tools']
@@ -16,4 +17,5 @@ export const inject = ['tools']
 export function apply(ctx: Context): void {
   registerRunTool(ctx)
   registerWorkbench(ctx)
+  registerSchedule(ctx)
 }

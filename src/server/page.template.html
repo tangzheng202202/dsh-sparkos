@@ -114,8 +114,9 @@ function lineColor(id){const P=["#E8563D","#F5A95C","#7FA8C9","#7FA88A","#B58BC9
 function cardLine(c){return c.line ?? "—"}
 function topLines(n){const m=new Map();for(const c of D.timeline.cards){const k=cardLine(c);m.set(k,(m.get(k)||0)+1)}
   return [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n).map(([id,count])=>({id,count,name:(D.lines.find(l=>l.id===id)||{}).name||id}));}
-function renderSwim(){document.getElementById("swimBody").innerHTML = topLines(99).map(l =>
-  `<div class="swim" style="border-left-color:${lineColor(l.id)}"><span class="nm"><span class="line-chip" style="background:${lineColor(l.id)}"></span>${l.name}</span><span class="cnt">${l.count} 卡</span></div>`).join("");}
+function renderSwim(){const cnt=id=>D.timeline.cards.filter(c=>cardLine(c)===id).length;
+  document.getElementById("swimBody").innerHTML = D.lines.map(l =>
+    `<div class="swim" style="border-left-color:${lineColor(l.id)}"><span class="nm"><span class="line-chip" style="background:${lineColor(l.id)}"></span>${l.name}</span><span class="cnt">${cnt(l.id)} 卡</span></div>`).join("");}
 renderSwim();
 
 const kindName = { observation: "观察", model: "模型", judgment: "判断" };
@@ -140,7 +141,27 @@ async function decide(kind,id,action,btn){btn.disabled=true;
 function listOrEmpty(arr,fmt){return arr.length?arr.map(fmt).join(""):`<div class="empty">暂无数据（待子命令产出）</div>`;}
 document.getElementById("topicsBody").innerHTML = `<div class="empty">选题候选由 sparkos_run topics 产出后接入 · 已记录决策 ${D.decisions.filter(d=>d.kind==="topic").length} 条</div>`;
 document.getElementById("draftBody").innerHTML = listOrEmpty(D.drafts, f => `<div style="padding:6px 0;border-bottom:1px solid var(--border)">📝 ${f}</div>`);
-document.getElementById("distillBody").innerHTML = listOrEmpty(D.distillQueue, f => `<div style="padding:6px 0;border-bottom:1px solid var(--border)">🔥 ${f}</div>`);
+renderDistill();
+function renderDistill(){
+  const el=document.getElementById("distillBody");
+  if(!D.distillQueue.length){el.innerHTML=`<div class="empty">队列已清空 · 已采纳 ${D.distillReviewed.approved.length} 项（待人工写回星火库）· 已驳回 ${D.distillReviewed.rejected.length} 项</div>`;return;}
+  el.innerHTML=D.distillQueue.map(e=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+    <div>🔥 <b>${e.file}</b>${e.targets.length?` · 主线 ${e.targets.join(",")}`:""}</div>
+    <div style="color:var(--dim);margin:4px 0">${e.summary}</div>
+    <button class="nav-tab" data-kind="distill" data-id="${e.file}" data-action="adopt">✓ 采纳（过四红线）</button>
+    <button class="nav-tab" data-kind="distill" data-id="${e.file}" data-action="ignore">✗ 驳回</button>
+  </div>`).join("");
+  el.querySelectorAll("button[data-kind=distill]").forEach(b=>b.onclick=()=>distillDecide(b));}
+async function distillDecide(btn){
+  btn.disabled=true;btn.textContent="…";
+  try{const r=await fetch("/sparkos/mutate",{method:"POST",headers:{"content-type":"application/json"},
+    body:JSON.stringify({kind:"distill",id:btn.dataset.id,action:btn.dataset.action})});
+    const j=await r.json();
+    if(!j.ok){btn.textContent="✗ "+(j.error?.code==="red-line"?"红线拦截":"失败");btn.disabled=false;return;}
+    if(btn.dataset.action==="adopt"){D.distillReviewed.approved.push(btn.dataset.id);}
+    else{D.distillReviewed.rejected.push(btn.dataset.id);}
+    D.distillQueue=D.distillQueue.filter(e=>e.file!==btn.dataset.id);renderDistill();}
+  catch(e){btn.disabled=false;btn.textContent="重试";}}
 document.getElementById("sourcesBody").innerHTML = `<div class="empty">RSS + 星火库增量（intel 扩展位预留，P2）</div>`;
 document.getElementById("publishBody").innerHTML = `<div class="empty">发布节奏与表现待 publish 子命令产出后接入</div>`;
 document.getElementById("adviseBody").innerHTML = `<div class="empty">系统建议只读（守卫⑤）· 已记录决策 ${D.decisions.filter(d=>d.kind==="advice").length} 条</div>`;

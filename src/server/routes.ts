@@ -8,7 +8,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { buildWorkbenchData, recordDecision } from './data.ts'
+import { buildWorkbenchData, recordDecision, reviewDistill } from './data.ts'
 import template from './page.template.html'
 
 function respondJson(res: import('node:http').ServerResponse, status: number, body: unknown): void {
@@ -60,6 +60,15 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       }
       if (action !== 'adopt' && action !== 'ignore') {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'action 只允许 adopt/ignore' } })
+        return
+      }
+      if (kind === 'distill') {
+        try {
+          const r = reviewDistill(id, action)
+          respondJson(res, 200, { ok: true, entry: r.entry })
+        } catch (error) {
+          respondJson(res, 422, { ok: false, error: { code: 'red-line', message: error instanceof Error ? error.message : String(error) } })
+        }
         return
       }
       const entry = recordDecision(kind, id, action, typeof body.note === 'string' ? body.note : undefined)
