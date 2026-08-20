@@ -4,11 +4,24 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 
 ## 能力
 
-- **sparkos_run 工具**：`brief / topics / draft / distill / sources / publish / advise` 七个子命令执行每日内容工作流；写操作先过五守卫（48h 窗口 / event_id 去重 / 引用卡存在性 / 主线存在 / 建议只读）；支持 `dryRun` 只校验不落盘。
-- **8-tab 工作台 UI**：宿主 webServer 挂载 `/sparkos/app`（今日简报 / 叙事主线 / 选题推荐 / 草稿工作区 / 知识卡 / 信息源 / 发布表现 / 系统建议），`_embeddedDailyData` 注入 + adopt/ignore 交互（`/sparkos/mutate`）。
-- **数据与代码分离**：VAULT 默认 `~/DeepSeek harness/sparkos/`，首次启动幂等迁移并落 MANIFEST。
-- **intel 信源扩展位**：`src/intel/types.ts` 预留 Provider 接口（仅类型与注册位，默认空，实现须走蓝图确认关卡）。
-- **定时任务**：默认关闭；`SPARKOS_SCHEDULE=1` 时每日仅向 `VAULT/system/schedule.log` 追加"brief due"提醒，不做任何自动写操作。
+- **sparkos_run 工具（8 子命令全部实装）**：
+  - `brief` 今日简报：读最新 `daily_briefing_*.md` + `daily_data_*.json` 全文；`payload.daily` 提供整份 daily_data 时走五守卫（`payload.commit=true` 才入库）
+  - `topics` 选题推荐：当日 must_reads 按新鲜度排序 + 主线名 + 补充角度；`payload.top=N` 取 Top N
+  - `draft` 草稿：列出 runtime（daily_brief/drafts）+ VAULT（drafts）草稿；`payload.get=<文件名>` 读全文
+  - `distill` 蒸馏审核：runtime + vault 合并队列 + 审核状态（采纳/驳回在工作台操作）
+  - `sources` 信息源：`config/info_sources.json` 注册表（只读）+ intel 健康快照
+  - `publish` 发布表现：`perf/*.json` 按平台聚合（篇数/总阅读/平均/最近），缺失降级不阻塞
+  - `advise` 系统建议：daily_data.suggestions 只读（守卫⑤ G5）+ 已记录决策
+  - `intel` 情报指挥所：ingest/health/run 留痕；`payload.fusion=true` 日频融合；`payload.dispatch=true` 生成下发建议
+- **9-tab 工作台 UI**：宿主 webServer 挂载 `/sparkos/app`（今日简报/叙事主线/选题推荐/草稿工作区/蒸馏审核+待写回/信息源/发布表现/系统建议/情报指挥所），`_embeddedDailyData` 注入；
+  - 今日简报 tab 渲染真实 `daily_briefing` + `daily_data` 摘要（必读/主线增量/草稿/建议/蒸馏候选）
+  - 选题 tab 对 must_reads 直接 adopt/ignore（决策落 VAULT state/）
+  - 草稿 tab 可查看全文（`GET /sparkos/draft?file=`，仅白名单目录、防穿越）
+  - 蒸馏采纳过四红线后进入**待写回清单**（`state/writeback_queue.json`），一键复制全文 + 逐条移除，写回星火库仍由人工完成
+  - 情报指挥所 tab 展示融合事实清单与下发建议（只读，发布权归原 Owner）
+- **数据与代码分离**：VAULT 默认 `~/DeepSeek harness/sparkos/`；每日产物从运行时根（默认 `contentos-x`）只读接入；首次启动幂等迁移并落 MANIFEST
+- **intel 信源扩展位**：`src/intel/types.ts` Provider 接口 + 注册位（实现须走蓝图确认关卡）；健康灯 pending-source 不计入 overall
+- **定时任务**：默认关闭；`SPARKOS_SCHEDULE=1` 每日 brief 提醒；`SPARKOS_INTEL_SCHEDULE=1` 每小时 intel tick + 每日 09:30 融合（不自动外发）
 
 ## 安装（DSH profile）
 
@@ -19,15 +32,41 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 
 然后重启 DSH 宿主，访问 `http://<host>:<port>/sparkos/app`。
 
+## 路径配置（env，均有默认值，默认指向本机运行时）
+
+| env | 默认 | 说明 |
+|---|---|---|
+| `SPARKOS_VAULT_ROOT` | `~/DeepSeek harness/sparkos` | 插件数据区（决策/intel/守卫账本） |
+| `SPARKOS_CONTENTOS_ROOT` | `/Users/mac/cow/projects/contentos-x` | 每日工作流运行时根（只读） |
+| `SPARKOS_DAILY_BRIEF_DIR` | `$CONTENTOS_ROOT/daily_brief` | daily_data / daily_briefing / drafts |
+| `SPARKOS_PERF_DIR` | `$CONTENTOS_ROOT/perf` | 发布表现 JSON |
+| `SPARKOS_RUNTIME_DISTILL_QUEUE` | `$CONTENTOS_ROOT/obsidian-bridge/distill_queue` | 蒸馏候选（只读） |
+| `SPARKOS_RUNTIME_EVENTS` | `$CONTENTOS_ROOT/archive/events.jsonl` | 运行时事件账本（显示用） |
+| `SPARKOS_KNOWLEDGE_ROOT` | `/Users/mac/cow/knowledge` | 星火知识库（只读，G3 引用卡校验） |
+| `SPARKOS_TIMELINE_DATA` | `/Users/mac/cow/visualization/timeline_data.json` | 时间线卡数据 |
+| `SPARKOS_ALPHA_ARCHIVE` / `SPARKOS_HERMES_ARCHIVE` / `SPARKOS_BAICAOTANG_ARCHIVE` | `~/.openclaw/...` / `~/.hermes/...` / null | intel 三源 archive 目录 |
+
+## HTTP 端点
+
+- `GET /sparkos/app` 工作台 HTML（内嵌数据）
+- `GET /sparkos/data` 工作台数据 JSON（含每日产物/intel/待写回）
+- `GET /sparkos/intel` 情报指挥所数据（只读）
+- `POST /sparkos/intel/tick` 手动一轮 ingest（不自动融合）
+- `POST /sparkos/mutate` `{kind,id,action:adopt|ignore}` 决策落 VAULT state/
+- `GET /sparkos/draft?file=` 草稿全文（防穿越）
+- `GET /sparkos/writeback` 待写回清单；`POST /sparkos/writeback/remove {file}` 逐条移除；`POST /sparkos/writeback/clear` 清空
+
 ## 设计红线
 
-- 星火知识库对插件**只读**；写回仅经 distill_queue 人工审核。
-- 系统建议只读（守卫⑤），任何"采纳"动作都必须人工触发。
+- 星火知识库对插件**只读**；写回仅经蒸馏审核 + 待写回清单人工复制
+- 系统建议只读（守卫⑤），任何采纳动作必须人工触发
+- intel 不自动外发；发布权/所有权归原 Owner
 
 ## 开发
 
 ```bash
 npm run check   # tsc
-npm test        # 守卫/VAULT/数据 双向测试
-npm run build   # esbuild host 半 + client 半
+npm test        # 守卫/VAULT/数据/intel/daily/HTTP 路由 双向测试（33 项）
+npm run test:dom# 渲染 /tmp/sparkos-wb.html 并跑 Chrome DOM 断言
+npm run build   # esbuild host 半 + client 半（模板拷贝进 lib/）
 ```

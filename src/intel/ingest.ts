@@ -8,9 +8,9 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import { VAULT_ROOT } from '../vault.ts'
+import { VAULT_ROOT, envPath } from '../vault.ts'
 
-export type SnapshotStatus = 'ok' | 'blocked' | 'rejected' | 'unknown'
+export type SnapshotStatus = 'ok' | 'blocked' | 'rejected' | 'expired' | 'unknown'
 
 export interface IntelSourceDef {
   id: string
@@ -35,17 +35,17 @@ export function defaultIntelConfig(): IntelConfig {
     sources: [
       {
         id: 'alpha-signal',
-        dir: path.join(homedir(), '.openclaw', 'telegram-newsroom', 'state', 'archive'),
+        dir: envPath('SPARKOS_ALPHA_ARCHIVE', path.join(homedir(), '.openclaw', 'telegram-newsroom', 'state', 'archive')),
         maxStalenessHours: 48,
         pattern: 'all',
       },
       {
         id: 'hermes-cn',
-        dir: path.join(homedir(), '.hermes', 'newsroom-cn', 'state', 'archive'),
+        dir: envPath('SPARKOS_HERMES_ARCHIVE', path.join(homedir(), '.hermes', 'newsroom-cn', 'state', 'archive')),
         maxStalenessHours: 24,
         pattern: 'published-only',
       },
-      { id: 'baicaotang', dir: null, maxStalenessHours: 24, pattern: 'all' },
+      { id: 'baicaotang', dir: envPath('SPARKOS_BAICAOTANG_ARCHIVE', '' ) || null, maxStalenessHours: 24, pattern: 'all' },
     ],
     outDir: path.join(VAULT_ROOT, 'ops-intel', 'ingest'),
     runsDir: path.join(VAULT_ROOT, 'ops-intel', 'runs'),
@@ -63,9 +63,11 @@ export function statusOf(filename: string, body: Record<string, unknown>): Snaps
   if (/\.published\.json$/.test(filename)) return 'ok'
   if (/\.unsent-scope-blocked\.json$/.test(filename)) return 'blocked'
   if (/\.rejected\.json$/.test(filename)) return 'rejected'
+  if (/\.expired\.json$/.test(filename)) return 'expired'
   const s = body.status
   if (s === 'published') return 'ok'
   if (s === 'rejected') return 'rejected'
+  if (s === 'expired') return 'expired'
   return 'unknown'
 }
 

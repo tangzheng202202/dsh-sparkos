@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
-"""Chrome headless DOM 渲染检查（P1 验收习惯：关键词断言）。"""
-import subprocess, sys
+"""Chrome headless DOM 渲染检查（工作台升级后断言集：真实每日产物渲染）。"""
+import subprocess, sys, os
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 src = sys.argv[1] if len(sys.argv) > 1 else "/tmp/sparkos-wb.html"
+if not os.path.exists(CHROME):
+    print("SKIP: Chrome not found at " + CHROME)
+    sys.exit(0)
 dom = subprocess.run([CHROME, "--headless", "--disable-gpu", "--dump-dom", "file://" + src],
                      capture_output=True, text=True, timeout=60).stdout
 ok = True
-for kw in ["今日简报", "叙事主线", "选题推荐", "草稿工作区", "知识卡", "信息源", "发布表现", "系统建议",
-           "SparkOS 工作台", "泳道", "蒸馏审核"]:
-    hit = kw in dom
-    ok = ok and hit
-    print(("OK " if hit else "MISS ") + kw)
-print("swim rows:", dom.count('class="swim"'))
-print("table rows:", dom.count("<tr>"))
-print("active nav:", dom.count('class="nav-tab active"'))
-print("RESULT:", "PASS" if ok and dom.count('class="swim"') >= 5 and dom.count("<tr>") >= 70 else "FAIL")
+def check(name, cond):
+    global ok
+    ok = ok and bool(cond)
+    print(("OK  " if cond else "MISS ") + name)
+
+for kw in ["SparkOS 工作台", "今日简报", "叙事主线", "选题推荐", "草稿工作区", "蒸馏审核",
+           "待写回", "信息源", "发布表现", "系统建议", "情报指挥所", "情报源健康", "下发建议"]:
+    check("keyword " + kw, kw in dom)
+
+# 结构断言
+check("swim rows >= 5", dom.count('class="swim"') >= 5)
+check("table rows >= 60", dom.count("<tr>") >= 60)
+check("stats has 今日必读", "今日必读" in dom)
+check("topic rows rendered (real daily data)", dom.count('class="topic-row"') >= 1)
+check("nav tabs = 9", dom.count('class="nav-tab') >= 9)
+print("RESULT:", "PASS" if ok else "FAIL")
+sys.exit(0 if ok else 1)

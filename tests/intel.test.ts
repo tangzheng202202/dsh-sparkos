@@ -145,3 +145,39 @@ test('S3 dispatch：preferences.json 生成且发布权归原 Owner（fixture）
   assert.ok(existsSync(join(root, 'alpha-archive', 'd20260810123456_a001.published.json')))
   rmSync(root, { recursive: true, force: true })
 })
+test('expired 状态：statusOf 映射 + countArchive 计数（alpha 词表补全）', () => {
+  const { root, cfg, alphaDir } = fixtureCfg()
+  try {
+    // statusOf 直接映射
+    assert.equal(statusOf('a.expired.json', {}), 'expired')
+    assert.equal(statusOf('a.json', { status: 'expired' }), 'expired')
+    // fixture 加一个 expired 文件，countArchive 应计入
+    writeFileSync(join(alphaDir, 'd20260811111111_a003.expired.json'), JSON.stringify({ created_at: '2026-08-11T00:00:00Z', title: 'expired item' }))
+    const counts = buildIntelReport(cfg).archiveCounts
+    const alpha = counts.find((c) => c.source === 'alpha-signal')!
+    assert.equal(alpha.total, 3)
+    assert.equal(alpha.expired, 1, 'expired 单独计数')
+    // ingest 也识别 expired
+    const r = runIngest(cfg)
+    const snap = JSON.parse(readFileSync(join(cfg.outDir, 'alpha-signal', 'd20260811111111_a003.snapshot.json'), 'utf8'))
+    assert.equal(snap.status, 'expired')
+    assert.equal(r.ok, true)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('健康 overall 语义：pending-source 不计入；仅全部 pending 才 pending', () => {
+  const { root, cfg, alphaDir } = fixtureCfg()
+  try {
+    const fresh = new Date('2026-08-20T08:00:00Z')
+    // 给 alpha 补一条新鲜的 published（fixture 原有 08-10 的已过期）
+    writeFileSync(join(alphaDir, 'd20260820080000_a004.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-20T07:30:00Z', title: 'fresh alpha' }))
+    const h = computeHealth(cfg, fresh)
+    // hermes 新鲜 + alpha 新鲜 → green；baicaotang pending 不影响 overall
+    assert.equal(h.overall, 'green', '真实源健康时 overall 不应因 pending-source 变 pending')
+    const allPending = computeHealth({ ...cfg, sources: [{ id: 'baicaotang', dir: null, maxStalenessHours: 24, pattern: 'all' }] }, fresh)
+    assert.equal(allPending.overall, 'pending', '全部 pending 才 pending')
+    const stale = new Date('2026-08-21T20:00:00Z')
+    const hr = computeHealth(cfg, stale)
+    assert.equal(hr.overall, 'red', '任一真实源红则整体红')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})

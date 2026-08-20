@@ -10,10 +10,18 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { buildWorkbenchData, recordDecision, reviewDistill } from './data.ts'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { buildWorkbenchData, loadWritebackQueue, recordDecision, reviewDistill } from './data.ts'
 import { buildIntelReport } from '../intel/report.ts'
 import { runIntelTick } from '../intel/tick.ts'
-import template from './page.template.html'
+import { listRuntimeDrafts, listVaultDrafts, readDraft } from '../daily.ts'
+
+
+/** 工作台模板：运行时读取（esbuild 打包时 build.mjs 会拷贝一份到 lib/）。 */
+function loadTemplate(): string {
+  return readFileSync(fileURLToPath(new URL('./page.template.html', import.meta.url)), 'utf8')
+}
 
 function respondJson(res: import('node:http').ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body)
@@ -33,7 +41,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
   try {
     if (req.method === 'GET' && (path === '/sparkos' || path === '/sparkos/app')) {
       const data = JSON.stringify(buildWorkbenchData()).replace(/</g, '\\u003c')
-      const html = (template as string).replace(
+      const html = loadTemplate().replace(
         '<script>',
         `<script>window._embeddedDailyData = ${data};</script>\n<script>`,
       )
@@ -54,6 +62,61 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       // 手动触发一轮 ingest + 健康 + run 留痕（不自动融合）
       const r = runIntelTick()
       respondJson(res, 200, { ok: r.ingest.ok && r.overall !== 'red', value: r.ingest })
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/writeback') {
+      // 待写回清单（蒸馏采纳产物，人工复制后写回星火库）
+      respondJson(res, 200, { ok: true, value: loadWritebackQueue() })
+      return
+    }
+    if (req.method === 'POST' && path === '/sparkos/writeback/clear') {
+      // 人工确认写回完成后清空清单（只动 VAULT state/，不触碰星火库）
+      const { writeFileSync, mkdirSync } = await import('node:fs')
+      const { VAULT_ROOT } = await import('../vault.ts')
+      const { join } = await import('node:path')
+      mkdirSync(join(VAULT_ROOT, 'state'), { recursive: true })
+      writeFileSync(join(VAULT_ROOT, 'state', 'writeback_queue.json'), '[]\n')
+      respondJson(res, 200, { ok: true })
+      return
+    }
+    if (req.method === 'POST' && path === '/sparkos/writeback/remove') {
+      // 逐条移除待写回（人工确认已写回星火库后）
+      let body: Record<string, unknown>
+      try {
+        body = await readJsonBody(req)
+      } catch {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
+        return
+      }
+      const file = typeof body.file === 'string' ? body.file : ''
+      if (file === '') {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'file 必填' } })
+        return
+      }
+      const { writeFileSync, mkdirSync } = await import('node:fs')
+      const { VAULT_ROOT } = await import('../vault.ts')
+      const { join } = await import('node:path')
+      const queueFile = join(VAULT_ROOT, 'state', 'writeback_queue.json')
+      const queue = loadWritebackQueue().filter((e) => e.file !== file)
+      mkdirSync(join(VAULT_ROOT, 'state'), { recursive: true })
+      writeFileSync(queueFile, JSON.stringify(queue, null, 2) + '\n')
+      respondJson(res, 200, { ok: true, value: queue })
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/draft') {
+      // 按文件名读草稿全文（仅允许两个已知草稿目录内的文件，拒绝路径穿越）
+      const file = typeof url.searchParams.get('file') === 'string' ? String(url.searchParams.get('file')) : ''
+      if (file === '' || file.includes('/') || file.includes('\\') || file.includes('..')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'file 不合法' } })
+        return
+      }
+      const candidates = [...listRuntimeDrafts(), ...listVaultDrafts()].filter((d) => d.file === file)
+      if (candidates.length === 0) {
+        respondJson(res, 404, { ok: false, error: { code: 'not-found', message: 'draft: ' + file } })
+        return
+      }
+      const content = readDraft(candidates[0].path)
+      respondJson(res, 200, { ok: true, value: { file, path: candidates[0].path, content: content ?? '' } })
       return
     }
     if (req.method === 'POST' && path === '/sparkos/mutate') {

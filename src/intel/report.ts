@@ -11,6 +11,7 @@ import type { IntelConfig } from './ingest.ts'
 import { computeHealth } from './health.ts'
 import type { HealthReport } from './health.ts'
 import { listRuns } from './runs.ts'
+import type { FusionOutput } from './fusion.ts'
 import type { IntelRun } from './runs.ts'
 
 export interface IntelArchiveCount {
@@ -18,6 +19,7 @@ export interface IntelArchiveCount {
   published: number
   blocked: number
   rejected: number
+  expired: number
   total: number
 }
 
@@ -32,7 +34,7 @@ export interface IntelReport {
 
 function countArchive(cfg: IntelConfig): IntelArchiveCount[] {
   return cfg.sources.map((src) => {
-    const base: IntelArchiveCount = { source: src.id, published: 0, blocked: 0, rejected: 0, total: 0 }
+    const base: IntelArchiveCount = { source: src.id, published: 0, blocked: 0, rejected: 0, expired: 0, total: 0 }
     if (src.dir === null || !existsSync(src.dir)) return base
     for (const f of readdirSync(src.dir)) {
       if (!f.endsWith('.json') || f.startsWith('.')) continue
@@ -44,11 +46,14 @@ function countArchive(cfg: IntelConfig): IntelArchiveCount[] {
         ? 'published'
         : /\.unsent-scope-blocked\.json$/.test(f) ? 'blocked'
           : /\.rejected\.json$/.test(f) ? 'rejected'
-            : raw.status === 'published' ? 'published'
-              : raw.status === 'rejected' ? 'rejected' : 'unknown'
+            : /\.expired\.json$/.test(f) ? 'expired'
+              : raw.status === 'published' ? 'published'
+                : raw.status === 'rejected' ? 'rejected'
+                  : raw.status === 'expired' ? 'expired' : 'unknown'
       if (status === 'published') base.published++
       else if (status === 'blocked') base.blocked++
       else if (status === 'rejected') base.rejected++
+      else if (status === 'expired') base.expired++
     }
     return base
   })
@@ -73,6 +78,16 @@ function countSnapshots(outDir: string): number {
       } catch { return acc }
     }, 0)
   } catch { return 0 }
+}
+
+/** 最新一份 fusion JSON 产物（FusionOutput），无则 null。 */
+export function latestFusion(cfg: IntelConfig = defaultIntelConfig()): FusionOutput | null {
+  const dir = path.join(path.dirname(cfg.outDir), 'fusion')
+  const files = listFusion(cfg)
+  if (files.length === 0) return null
+  try {
+    return JSON.parse(readFileSync(path.join(dir, files[0]), 'utf8')) as FusionOutput
+  } catch { return null }
 }
 
 export function buildIntelReport(cfg: IntelConfig = defaultIntelConfig()): IntelReport {

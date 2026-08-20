@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { IntelConfig } from './ingest.ts'
+import { defaultIntelConfig } from './ingest.ts'
 
 export interface DispatchItem {
   source: string
@@ -46,6 +47,14 @@ export function latestFusionItems(cfg: IntelConfig): DispatchItem[] {
 }
 
 /** 生成 preferences.json（幂等覆盖当天建议；只写 dispatch/，不碰源目录）。 */
+/** 读取最近一次生成的 preferences.json，无则 null。 */
+export function latestDispatch(): DispatchPreferences | null {
+  const dir = path.join(path.dirname(defaultIntelConfig().outDir), 'dispatch')
+  try {
+    return JSON.parse(readFileSync(path.join(dir, 'preferences.json'), 'utf8')) as DispatchPreferences
+  } catch { return null }
+}
+
 export function generateDispatch(cfg: IntelConfig, now = new Date()): DispatchPreferences {
   const items = latestFusionItems(cfg)
   const out: DispatchPreferences = {

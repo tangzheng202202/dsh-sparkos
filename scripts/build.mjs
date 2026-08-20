@@ -5,7 +5,7 @@
  *   wrapped into the window.__ModuleLoader__.load closure format.
  */
 import { build } from 'esbuild'
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, rmSync, copyFileSync } from 'node:fs'
 
 async function run() {
   mkdirSync('lib', { recursive: true })
@@ -38,6 +38,7 @@ ${indent(inner, 4)}
 })
 `
   writeFileSync('lib/client.js', wrapped)
+  copyFileSync('src/server/page.template.html', 'lib/page.template.html')
   rmSync('lib/client.tmp.js', { force: true })
   console.log('built lib/index.js and lib/client.js')
 }

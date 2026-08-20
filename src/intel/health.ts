@@ -85,8 +85,10 @@ export function computeHealth(cfg: IntelConfig, now = new Date()): HealthReport 
       maxStalenessHours: src.maxStalenessHours, failStreak: streak,
     }
   })
-  const overall: HealthStatus = sources.some((s) => s.status === 'red')
+  // overall 只反映真实接入源：pending-source（待接入）不计入，避免健康灯永远 pending 失去信号意义。
+  const real = sources.filter((s) => s.status !== 'pending')
+  const overall: HealthStatus = real.some((s) => s.status === 'red')
     ? 'red'
-    : sources.some((s) => s.status === 'pending') ? 'pending' : 'green'
+    : real.length === 0 ? 'pending' : 'green'
   return { at: now.toISOString(), sources, overall }
 }

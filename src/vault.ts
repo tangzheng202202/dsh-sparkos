@@ -10,13 +10,29 @@ import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from
 import { homedir } from 'node:os'
 import path from 'node:path'
 
-export const VAULT_ROOT = path.join(homedir(), 'DeepSeek harness', 'sparkos')
+export function envPath(name: string, fallback: string): string {
+  const v = process.env[name]
+  return v && v.trim() !== '' ? v : fallback
+}
+
+export const VAULT_ROOT = envPath('SPARKOS_VAULT_ROOT', path.join(homedir(), 'DeepSeek harness', 'sparkos'))
 
 /** 只读外部资产（绝不写入）。 */
-export const KNOWLEDGE_ROOT = '/Users/mac/cow/knowledge'
-export const TIMELINE_DATA = '/Users/mac/cow/visualization/timeline_data.json'
+export const KNOWLEDGE_ROOT = envPath('SPARKOS_KNOWLEDGE_ROOT', '/Users/mac/cow/knowledge')
+export const TIMELINE_DATA = envPath('SPARKOS_TIMELINE_DATA', '/Users/mac/cow/visualization/timeline_data.json')
 
 /** 首次迁移的种子资产：源（参考实现，只读） → VAULT 内目标。 */
+/** 每日工作流运行时根（sparkos-daily skill 的真实产出区，工作台只读）。 */
+export const CONTENTOS_ROOT = envPath('SPARKOS_CONTENTOS_ROOT', '/Users/mac/cow/projects/contentos-x')
+/** 每日产物目录：daily_data_*.json / daily_briefing_*.md / drafts/。 */
+export const DAILY_BRIEF_DIR = envPath('SPARKOS_DAILY_BRIEF_DIR', path.join(CONTENTOS_ROOT, 'daily_brief'))
+/** 发布表现目录：perf/*.json（缺失则发布表现降级为空）。 */
+export const PERF_DIR = envPath('SPARKOS_PERF_DIR', path.join(CONTENTOS_ROOT, 'perf'))
+/** 运行时蒸馏队列（sparkos-daily skill 写候选处，工作台只读）。 */
+export const RUNTIME_DISTILL_QUEUE = envPath('SPARKOS_RUNTIME_DISTILL_QUEUE', path.join(CONTENTOS_ROOT, 'obsidian-bridge', 'distill_queue'))
+/** 运行时事件账本（skill 的 validate_daily.py --commit 写这里）。 */
+export const RUNTIME_EVENTS = envPath('SPARKOS_RUNTIME_EVENTS', path.join(CONTENTOS_ROOT, 'archive', 'events.jsonl'))
+
 const MIGRATION: ReadonlyArray<{ src: string; dest: string; note: string }> = [
   { src: '/Users/mac/cow/projects/contentos-x/config/narrative_lines.json', dest: 'config/narrative_lines.json', note: '10 叙事主线' },
   { src: '/Users/mac/cow/projects/contentos-x/config/line_names.json', dest: 'config/line_names.json', note: '主线命名' },
