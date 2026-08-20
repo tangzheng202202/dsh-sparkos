@@ -3,10 +3,12 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, statSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import path from 'node:path'
 import { runIngest, eventKeyOf, statusOf, defaultIntelConfig, type IntelConfig } from '../src/intel/ingest.ts'
 import { computeHealth } from '../src/intel/health.ts'
 import { runIntelTick } from '../src/intel/tick.ts'
-import { initOpsIntel } from '../src/intel/report.ts'
+import { buildIntelReport, initOpsIntel } from '../src/intel/report.ts'
+import { generateDispatch } from '../src/intel/dispatch.ts'
 import { VAULT_ROOT } from '../src/vault.ts'
 
 function fixtureCfg() {
@@ -104,5 +106,42 @@ test('tick 全链：initOpsIntel 建目录 + run 留痕 + 空源 run.ok=false', 
   const created = initOpsIntel(join(root, 'vault'))
   assert.ok(created.created.includes('ingest'))
   assert.ok(existsSync(join(root, 'vault', 'ops-intel', 'runs')))
+  rmSync(root, { recursive: true, force: true })
+})
+
+test('S1 report：archiveCounts 实算 published/blocked/rejected/total（fixture）', () => {
+  const { root, cfg } = fixtureCfg()
+  const counts = buildIntelReport(cfg).archiveCounts
+  const alpha = counts.find((c) => c.source === 'alpha-signal')!
+  const hermes = counts.find((c) => c.source === 'hermes-cn')!
+  assert.equal(alpha.total, 2)
+  assert.equal(alpha.published, 1)
+  assert.equal(alpha.blocked, 1)
+  assert.equal(alpha.rejected, 0)
+  assert.equal(hermes.total, 1)
+  assert.equal(hermes.published, 1)
+  assert.equal(hermes.blocked, 0)
+  rmSync(root, { recursive: true, force: true })
+})
+
+test('S3 dispatch：preferences.json 生成且发布权归原 Owner（fixture）', () => {
+  const { root, cfg } = fixtureCfg()
+  // 先造一份 fusion 供 dispatch 读取
+  const fusionDir = join(path.dirname(cfg.outDir), 'fusion')
+  mkdirSync(fusionDir, { recursive: true })
+  writeFileSync(join(fusionDir, 'fusion-20260820.json'), JSON.stringify({
+    items: [{ eventKey: 'd20260820070000_h001', source: 'hermes-cn', title: 'hermes item' }],
+  }))
+  const d = generateDispatch(cfg)
+  assert.equal(d.items.length, 1)
+  const file = join(fusionDir, '..', 'dispatch', 'preferences.json')
+  assert.ok(existsSync(file))
+  const saved = JSON.parse(readFileSync(file, 'utf8'))
+  assert.equal(saved.mode, 'manual-optional')
+  assert.ok(saved.redLine.includes('红线'))
+  assert.ok(saved.ownerNote.includes('原 Owner'))
+  assert.equal(saved.items[0].source, 'hermes-cn')
+  // 不碰源目录
+  assert.ok(existsSync(join(root, 'alpha-archive', 'd20260810123456_a001.published.json')))
   rmSync(root, { recursive: true, force: true })
 })

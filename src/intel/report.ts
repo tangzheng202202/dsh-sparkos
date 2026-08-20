@@ -3,7 +3,7 @@
  * @module dsh-sparkos/src/intel/report
  */
 
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { VAULT_ROOT } from '../vault.ts'
 import { defaultIntelConfig } from './ingest.ts'
@@ -34,7 +34,22 @@ function countArchive(cfg: IntelConfig): IntelArchiveCount[] {
   return cfg.sources.map((src) => {
     const base: IntelArchiveCount = { source: src.id, published: 0, blocked: 0, rejected: 0, total: 0 }
     if (src.dir === null || !existsSync(src.dir)) return base
-
+    for (const f of readdirSync(src.dir)) {
+      if (!f.endsWith('.json') || f.startsWith('.')) continue
+      if (src.pattern === 'published-only' && !/\.published\.json$/.test(f)) continue
+      base.total++
+      let raw: Record<string, unknown> = {}
+      try { raw = JSON.parse(readFileSync(path.join(src.dir, f), 'utf8')) as Record<string, unknown> } catch { /* unknown */ }
+      const status = /\.published\.json$/.test(f)
+        ? 'published'
+        : /\.unsent-scope-blocked\.json$/.test(f) ? 'blocked'
+          : /\.rejected\.json$/.test(f) ? 'rejected'
+            : raw.status === 'published' ? 'published'
+              : raw.status === 'rejected' ? 'rejected' : 'unknown'
+      if (status === 'published') base.published++
+      else if (status === 'blocked') base.blocked++
+      else if (status === 'rejected') base.rejected++
+    }
     return base
   })
 }

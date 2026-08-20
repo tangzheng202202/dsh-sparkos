@@ -22,6 +22,7 @@ export function usage(): string {
     '  sources  信息源管理（RSS + 星火库增量；intel 扩展位预留）',
     '  publish  发布表现',
     '  advise   系统建议（只读，守卫⑤）',
+    '  intel    情报指挥所（ingest/health；payload.fusion=true 融合；payload.dispatch=true 生成选题建议）',
     '参数：action(string, 可选) 子命令；payload(object, 可选)；dryRun(bool) 只校验不落盘',
     `VAULT：${VAULT_ROOT}`,
   ].join('\n')
@@ -85,6 +86,12 @@ export function registerRunTool(ctx: Context): void {
             const { defaultIntelConfig } = await import('../intel/ingest.ts')
             const f = fuseDaily(defaultIntelConfig())
             lines.push(`fusion: ${f.items.length} 条（${f.files.join(', ')}）`, ...f.notes.map((n) => `  ${n}`))
+          }
+          if (args.payload?.dispatch === true) {
+            const { generateDispatch } = await import('../intel/dispatch.ts')
+            const { defaultIntelConfig } = await import('../intel/ingest.ts')
+            const d = generateDispatch(defaultIntelConfig())
+            lines.push(`dispatch: preferences.json 已生成（${d.items.length} 条建议，发布权仍归原 Owner）`)
           }
           return { text: lines.join('\n') }
         }

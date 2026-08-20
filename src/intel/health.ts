@@ -4,7 +4,7 @@
  * @module dsh-sparkos/src/intel/health
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { IntelConfig, IntelSourceDef } from './ingest.ts'
 
@@ -31,9 +31,18 @@ function latestPublished(src: IntelSourceDef, now: number): string | null {
   let best: { iso: string; ts: number } | null = null
   for (const f of readdirSync(src.dir)) {
     if (!f.endsWith('.json') || f.startsWith('.')) continue
-    const p = path.join(src.dir, f)
-    let ts: number
-    try { ts = statSync(p).mtimeMs } catch { continue }
+    // 只把「已发布」稿件计入健康新鲜度（blocked/rejected/unknown 不算发布）
+    let published = false
+    let ts: number | null = null
+    try {
+      const raw = JSON.parse(readFileSync(path.join(src.dir, f), 'utf8')) as Record<string, unknown>
+      published = /\.published\.json$/.test(f) || raw.status === 'published'
+      const publishedAt = typeof raw.published_at === 'string' ? Date.parse(raw.published_at) : NaN
+      const createdAt = typeof raw.created_at === 'string' ? Date.parse(raw.created_at) : NaN
+      if (Number.isFinite(publishedAt)) ts = publishedAt
+      else if (Number.isFinite(createdAt)) ts = createdAt
+    } catch { /* 无法解析的 json 不算 published */ }
+    if (!published || ts === null) continue
     if (best === null || ts > best.ts) best = { iso: new Date(ts).toISOString(), ts }
   }
   return best?.iso ?? null
