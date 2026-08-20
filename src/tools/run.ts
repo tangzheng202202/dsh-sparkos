@@ -8,7 +8,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { initVault, VAULT_ROOT } from '../vault.ts'
 import { validateDaily } from '../guards.ts'
 
-export const SUBCOMMANDS = ['brief', 'topics', 'draft', 'distill', 'sources', 'publish', 'advise'] as const
+export const SUBCOMMANDS = ['brief', 'topics', 'draft', 'distill', 'sources', 'publish', 'advise', 'intel'] as const
 export type Subcommand = (typeof SUBCOMMANDS)[number]
 
 export function usage(): string {
@@ -71,7 +71,24 @@ export function registerRunTool(ctx: Context): void {
         else lines.push('结果: 校验通过(未入库, payload.commit=true 才入库)')
         return { text: lines.join('\n') }
       }
-      if (dryRun) {
+              if (args.action === 'intel') {
+          // 情报指挑所：ingest + 健康 + run 留痕；payload.fusion=true 追加当日融合装配（每条带 eventKey 回链）
+          const { runIntelTick } = await import('../intel/tick.ts')
+          const r = runIntelTick()
+          const lines = [
+            `intel tick ok=${r.ingest.ok} overall=${r.overall}`,
+            ...r.ingest.sources.map((s) =>
+              `  ${s.source}: ok=${s.ok}${s.error ? ` error=${s.error}` : ''} scanned=${s.scanned} added=${s.added} skipped=${s.skipped}`),
+          ]
+          if (args.payload?.fusion === true) {
+            const { fuseDaily } = await import('../intel/fusion.ts')
+            const { defaultIntelConfig } = await import('../intel/ingest.ts')
+            const f = fuseDaily(defaultIntelConfig())
+            lines.push(`fusion: ${f.items.length} 条（${f.files.join(', ')}）`, ...f.notes.map((n) => `  ${n}`))
+          }
+          return { text: lines.join('\n') }
+        }
+if (dryRun) {
         return { text: `[dryRun] ${args.action} 参数校验通过，未落盘。payload keys: ${Object.keys(args.payload ?? {}).join(',') || '(空)'}` }
       }
       return { text: `${args.action} 已受理（骨架阶段）。vault=${vault.vaultRoot} 迁移=${vault.migrated.length} 已存在=${vault.alreadyPresent.length}` }

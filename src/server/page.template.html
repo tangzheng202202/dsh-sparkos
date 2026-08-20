@@ -80,9 +80,18 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
   <div class="section-card"><div class="section-title">🧭 系统建议（只读 · 守卫⑤）</div><div id="adviseBody"></div></div>
 </div>
 
+<div id="tab-intel" class="tab hidden">
+  <div class="section-card"><div class="section-title">🗺️ 情报源健康（只读接斶 · 异常标红）</div>
+    <div id="intelHealthBody"></div></div>
+  <div class="section-card"><div class="section-title">📦 archive 计数与最近 run</div>
+    <div id="intelCountsBody"></div></div>
+  <div class="section-card"><div class="section-title">🧭 日频融合（agent 经 sparkos_run intel 手动触发）</div>
+    <div id="intelFusionBody"></div></div>
+</div>
+
 <script>
 const D = window._embeddedDailyData;
-const TABS = [["brief","今日简报"],["lines","叙事主线"],["topics","选题推荐"],["draft","草稿工作区"],["cards","知识卡·蒸馏"],["sources","信息源"],["publish","发布表现"],["advise","系统建议"]];
+const TABS = [["brief","今日简报"],["lines","叙事主线"],["topics","选题推荐"],["draft","草稿工作区"],["cards","知识卡·蒸馏"],["sources","信息源"],["publish","发布表现"],["advise","系统建议"],["intel","情报指挥所"]];
 
 // ---- header / stats / nav ----
 document.getElementById("subtitle").textContent =
@@ -165,6 +174,26 @@ async function distillDecide(btn){
 document.getElementById("sourcesBody").innerHTML = `<div class="empty">RSS + 星火库增量（intel 扩展位预留，P2）</div>`;
 document.getElementById("publishBody").innerHTML = `<div class="empty">发布节奏与表现待 publish 子命令产出后接入</div>`;
 document.getElementById("adviseBody").innerHTML = `<div class="empty">系统建议只读（守卫⑤）· 已记录决策 ${D.decisions.filter(d=>d.kind==="advice").length} 条</div>`;
+
+// ---- intel tab (第9 tab 情报指挥所) ----
+(function(){
+  const I = D.intel || { health:{sources:[],overall:"pending"}, lastRun:null, archiveCounts:[], snapshotCount:0, fusionAvailable:[] };
+  const light = { green:"#7FA88A", red:"#E8563D", pending:"#B5A78E" };
+  const label = { green:"绿灯", red:"红灯≈异常", pending:"待接入" };
+  document.getElementById("intelHealthBody").innerHTML = I.health.sources.map(h =>
+    `<div class="swim" style="border-left-color:${light[h.status]}">
+      <span class="nm"><span class="line-chip" style="background:${light[h.status]}"></span>${h.id}</span>
+      <span class="cnt">${label[h.status]} · 阈值≤${h.maxStalenessHours}h · staleness ${h.stalenessHours ?? "—"}h · 连败 ${h.failStreak} 次${h.note ? " · " + h.note : ""}</span>
+    </div>`).join("") + `<div class="legend" style="margin-top:8px"><span class="leg">overall: ${I.health.overall}</span></div>`;
+  document.getElementById("intelCountsBody").innerHTML =
+    `<table><thead><tr><th>源</th><th>published</th><th>blocked</th><th>rejected</th><th>合计</th></tr></thead><tbody>` +
+    I.archiveCounts.map(c => `<tr><td>${c.source}</td><td>${c.published}</td><td>${c.blocked}</td><td>${c.rejected}</td><td>${c.total}</td></tr>`).join("") +
+    `</tbody></table>
+     <div style="margin-top:8px;color:var(--dim);font-size:12.5px">快照 ${I.snapshotCount} 条（14 天滚动） · 最近 run: ${I.lastRun ? (I.lastRun.ok ? "ok" : "FAIL") + " @ " + I.lastRun.at + (I.lastRun.error ? " err=" + I.lastRun.error : "") : "—（尚无调度记录）"}</div>`;
+  document.getElementById("intelFusionBody").innerHTML = I.fusionAvailable.length
+    ? I.fusionAvailable.map(f => `<div style="padding:4px 0">📄 ${f}</div>`).join("")
+    : `<div class="empty">尚无融合产物 · 触发方式：sparkos_run {action:"intel", payload:{fusion:true}}（不自动外发）</div>`;
+})();
 </script>
 </body>
 </html>

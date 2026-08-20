@@ -7,6 +7,8 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { TIMELINE_DATA, VAULT_ROOT } from '../vault.ts'
+import { buildIntelReport } from '../intel/report.ts'
+import type { IntelReport } from '../intel/report.ts'
 
 function readJsonIf<T>(file: string, fallback: T): T {
   try {
@@ -34,6 +36,8 @@ export interface WorkbenchData {
   distillQueue: Array<{ file: string; summary: string; targets: string[] }>
   distillReviewed: { approved: string[]; rejected: string[] }
   decisions: Array<{ at: string; kind: string; id: string; action: 'adopt' | 'ignore'; note?: string }>
+  /** 第 9 tab「情报指挥所」数据（M0/M1）。 */
+  intel: IntelReport
 }
 
 /** 蒸馏队列条目：distill_queue/*.md，头部 YAML 摘要（title/lines）。 */
@@ -110,6 +114,7 @@ export function buildWorkbenchData(): WorkbenchData {
     distillQueue: loadDistillQueue().filter((e) => !reviewed.approved.includes(e.file) && !reviewed.rejected.includes(e.file)),
     distillReviewed: reviewed,
     decisions,
+    intel: buildIntelReport(),
   }
 }
 
@@ -117,7 +122,12 @@ export function buildWorkbenchData(): WorkbenchData {
 export function reviewDistill(file: string, action: 'adopt' | 'ignore'): { entry: WorkbenchData['decisions'][number]; violations: string[] } {
   const queueDir = path.join(VAULT_ROOT, 'distill_queue')
   let content = ''
-  try { content = readFileSync(path.join(queueDir, file), 'utf8') } catch { /* 条目可能已处理 */ }
+  let exists = false
+  try { content = readFileSync(path.join(queueDir, file), 'utf8'); exists = true } catch { /* 条目可能已处理 */ }
+  if (action === 'adopt' && !exists) {
+    // 静默降级防护：条目不存在时拒绝无内容采纳（intel 蓝图：失败必须显式化）
+    throw new Error(`蒸馏条目不存在或不可读：${file}，拒绝无内容采纳`)
+  }
   const violations = action === 'adopt' ? redLineCheck(content) : []
   if (violations.length > 0) {
     throw new Error(`红线检查未过：${violations.join('；')}`)
