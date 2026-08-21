@@ -2,7 +2,7 @@
  * VAULT（数据区）路径解析与初始化迁移。
  *
  * 数据与代码分离：VAULT = ~/DeepSeek harness/sparkos/（不进 git）；
- * 星火知识库 (/Users/mac/cow/knowledge) 对插件只读，写回仅经 distill_queue 人工审核。
+ * 星火知识库（SPARKOS_KNOWLEDGE_ROOT）对插件只读，写回仅经 distill_queue 人工审核。
  * @module dsh-sparkos/src/vault
  */
 
@@ -19,11 +19,11 @@ export function envPath(name: string, fallback: string): string {
 export const VAULT_ROOT = envPath('SPARKOS_VAULT_ROOT', path.join(homedir(), 'DeepSeek harness', 'sparkos'))
 
 /** 只读外部资产（绝不写入）。 */
-export const KNOWLEDGE_ROOT = envPath('SPARKOS_KNOWLEDGE_ROOT', '/Users/mac/cow/knowledge')
-export const TIMELINE_DATA = envPath('SPARKOS_TIMELINE_DATA', '/Users/mac/cow/visualization/timeline_data.json')
+export const KNOWLEDGE_ROOT = envPath('SPARKOS_KNOWLEDGE_ROOT', path.join(homedir(), 'cow', 'knowledge'))
+export const TIMELINE_DATA = envPath('SPARKOS_TIMELINE_DATA', path.join(homedir(), 'cow', 'visualization', 'timeline_data.json'))
 
 /** 每日工作流运行时根（sparkos-daily skill 的真实产出区，工作台只读）。 */
-export const CONTENTOS_ROOT = envPath('SPARKOS_CONTENTOS_ROOT', '/Users/mac/cow/projects/contentos-x')
+export const CONTENTOS_ROOT = envPath('SPARKOS_CONTENTOS_ROOT', path.join(homedir(), 'cow', 'projects', 'contentos-x'))
 /** 每日产物目录：daily_data_*.json / daily_briefing_*.md / drafts/。 */
 export const DAILY_BRIEF_DIR = envPath('SPARKOS_DAILY_BRIEF_DIR', path.join(CONTENTOS_ROOT, 'daily_brief'))
 /** 发布表现目录：perf/*.json（缺失则发布表现降级为空）。 */

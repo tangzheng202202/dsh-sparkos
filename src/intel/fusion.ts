@@ -148,7 +148,7 @@ export function fuseDaily(cfg: IntelConfig, date = new Date()): FusionOutput & {
   const dupGroups = clusterDuplicates(items)
   const notes = [
     '机械装配清单：每条带 eventKey 回链；判断与措辞由 agent 完成（intel 蓝图：不自动外发）。',
-    '参照：星火知识库只读（/Users/mac/cow/knowledge），本融合不写入星火库。',
+    '参照：星火知识库只读（SPARKOS_KNOWLEDGE_ROOT），本融合不写入星火库。',
     '数据源：当日 ingest 快照（observedAt 本地日期归类；晚落盘可重跑融合补齐）。',
     items.length === 0 ? '当日无新稿。' : '当日新稿 ' + items.length + ' 条，覆盖源 ' + new Set(items.map((i) => i.source)).size + ' 个。',
     dupGroups.length > 0 ? '疑似重复主题 ' + dupGroups.length + ' 组（见文末，仅供判断）。' : '无疑似重复主题。',

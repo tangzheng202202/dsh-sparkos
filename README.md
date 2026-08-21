@@ -42,13 +42,13 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 | env | 默认 | 说明 |
 |---|---|---|
 | `SPARKOS_VAULT_ROOT` | `~/DeepSeek harness/sparkos` | 插件数据区（决策/intel/守卫账本） |
-| `SPARKOS_CONTENTOS_ROOT` | `/Users/mac/cow/projects/contentos-x` | 每日工作流运行时根（只读） |
+| `SPARKOS_CONTENTOS_ROOT` | `~/cow/projects/contentos-x` | 每日工作流运行时根（只读） |
 | `SPARKOS_DAILY_BRIEF_DIR` | `$CONTENTOS_ROOT/daily_brief` | daily_data / daily_briefing / drafts |
 | `SPARKOS_PERF_DIR` | `$CONTENTOS_ROOT/perf` | 发布表现 JSON |
 | `SPARKOS_RUNTIME_DISTILL_QUEUE` | `$CONTENTOS_ROOT/obsidian-bridge/distill_queue` | 蒸馏候选（只读） |
 | `SPARKOS_RUNTIME_EVENTS` | `$CONTENTOS_ROOT/archive/events.jsonl` | 运行时事件账本（显示用） |
-| `SPARKOS_KNOWLEDGE_ROOT` | `/Users/mac/cow/knowledge` | 星火知识库（只读，G3 引用卡校验） |
-| `SPARKOS_TIMELINE_DATA` | `/Users/mac/cow/visualization/timeline_data.json` | 时间线卡数据 |
+| `SPARKOS_KNOWLEDGE_ROOT` | `~/cow/knowledge` | 星火知识库（只读，G3 引用卡校验） |
+| `SPARKOS_TIMELINE_DATA` | `~/cow/visualization/timeline_data.json` | 时间线卡数据 |
 | `SPARKOS_ALPHA_ARCHIVE` / `SPARKOS_HERMES_ARCHIVE` / `SPARKOS_BAICAOTANG_ARCHIVE` | `~/.openclaw/...` / `~/.hermes/...` / null | intel 三源 archive 目录 |
 
 ## HTTP 端点
@@ -70,8 +70,8 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 ## 开发
 
 ```bash
-npm run check   # tsc
-npm test        # 守卫/VAULT/数据/intel/daily/HTTP 路由 双向测试（33 项）
+npm run check   # tsc（tsconfig paths 依赖本地 DSH monorepo 源码，需按环境调整）
+npm test        # 守卫/VAULT/数据/intel/daily/HTTP 路由 双向测试（39 项，env 隔离 fixture）
 npm run test:dom# 渲染 /tmp/sparkos-wb.html 并跑 Chrome DOM 断言
 npm run build   # esbuild host 半 + client 半（模板拷贝进 lib/）
 ```
