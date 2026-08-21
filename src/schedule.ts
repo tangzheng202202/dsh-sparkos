@@ -43,7 +43,7 @@ function writeDailyCycle(fusionDate: string, ok: boolean): void {
       fusionAt: new Date().toISOString(),
       fusionDate,
       status: ok ? 'due' : 'failed',
-      note: ok ? '今日 09:30 融合已完成；请触发 sparkos-daily 跑今日内容循环（sparkos_run brief / topics）' : '融合失败，内容循环提醒暂缓',
+      note: ok ? '今日 09:30 融合已完成；可先跑情报簇分析（sparkos-intel-cluster-analysis skill，sparkos_run intel analyze/submitCluster），再触发 sparkos-daily 跑今日内容循环（sparkos_run brief / topics）' : '融合失败，内容循环提醒暂缓',
     }, null, 2) + '\n')
   } catch { /* 提醒写入失败不阻塞调度 */ }
 }
