@@ -159,7 +159,7 @@ function renderBrief(){
   var el=document.getElementById("briefBody");
   var d=D.daily||{};var data=d.data||null;var html=[];
   var dc=D.dailyCycle||{status:"idle"};
-  if(dc.status==="due"){html.push("<div style=\"padding:8px 12px;border-radius:8px;background:#F9EFD8;color:#A97B2F;font-size:13px;font-weight:600;margin-bottom:10px\">📣 今日 09:30 融合已完成 · 内容循环待跑（触发 sparkos_run brief / topics 或 sparkos-daily skill）</div>");}
+  if(dc.status==="due"){html.push("<div style=\"padding:8px 12px;border-radius:8px;background:#F9EFD8;color:#A97B2F;font-size:13px;font-weight:600;margin-bottom:10px\">📣 今日 09:30 融合已完成 · 情报簇分析 + 内容循环待跑（先 sparkos_run intel analyze/submitCluster，再 sparkos_run brief / topics 或 sparkos-daily skill）</div>");}
   else if(dc.status==="done"){html.push("<div style=\"padding:8px 12px;border-radius:8px;background:#E4EFE6;color:#4E7A58;font-size:13px;font-weight:600;margin-bottom:10px\">✅ 今日内容循环已产出</div>");}
   if(d.date){
     var age=d.ageDays;
