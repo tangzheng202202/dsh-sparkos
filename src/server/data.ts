@@ -60,6 +60,7 @@ export interface WorkbenchData {
     briefingDate: string | null
     briefing: string | null
     data: DailyData | null
+    ageDays: number | null
   }
   runtimeDrafts: Array<{ file: string; path: string; platform?: string; preview: string; bytes: number }>
   perf: PerfSummary
@@ -92,6 +93,18 @@ function suggestTarget(content: string): string {
 
 export function redLineCheck(content: string): string[] {
   return RED_LINE_PATTERNS.filter((r) => r.pattern.test(content)).map((r) => '红线' + r.id + '：' + r.label)
+}
+
+/** 本地日期差（天）：'YYYY-MM-DD' 距今，负数=未来，null=无法解析。 */
+function daysSince(dateStr: string | undefined): number | null {
+  if (!dateStr) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
+  if (!m) return null
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  if (Number.isNaN(d.getTime())) return null
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.round((today.getTime() - d.getTime()) / 86400000)
 }
 
 export function buildWorkbenchData(): WorkbenchData {
@@ -147,6 +160,7 @@ export function buildWorkbenchData(): WorkbenchData {
       briefingDate: briefing?.date ?? null,
       briefing: briefing?.text ?? null,
       data: dailyData,
+      ageDays: daysSince(dailyData?.date),
     },
     runtimeDrafts: runtimeDrafts.map(({ file, path, platform, preview, bytes }) => ({ file, path, platform, preview, bytes })),
     perf: listPerf(),

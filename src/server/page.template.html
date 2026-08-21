@@ -156,6 +156,11 @@ function renderBriefMd(text){
 function renderBrief(){
   var el=document.getElementById("briefBody");
   var d=D.daily||{};var data=d.data||null;var html=[];
+  if(d.date){
+    var age=d.ageDays;
+    if(age!=null&&age>0){html.push("<div style=\"padding:8px 12px;border-radius:8px;background:#FBE4DF;color:#C24B33;font-size:13px;font-weight:600;margin-bottom:10px\">⚠️ 最近每日产物是 "+esc(d.date)+" · 已 "+age+" 天无更新（sparkos-daily skill 未运行 · 手动触发：sparkos_run brief / topics）</div>");}
+    else if(age!=null){html.push("<div style=\"padding:8px 12px;border-radius:8px;background:#E4EFE6;color:#4E7A58;font-size:13px;font-weight:600;margin-bottom:10px\">✅ 今日产物已就绪（"+esc(d.date)+"）</div>");}
+  }
   if(d.briefing){
     html.push("<div class=\"dim\" style=\"margin-bottom:8px\">📄 daily_briefing_"+esc(d.briefingDate||"")+".md（完整内容）</div>");
     html.push("<div class=\"brief-md\">"+renderBriefMd(d.briefing)+"</div>");

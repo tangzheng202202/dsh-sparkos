@@ -1,17 +1,21 @@
 /**
- * M1 · 日频判断融合：输入当天三源 archive 新稿 + 星火知识库参照（只读），
+ * M1 · 日频判断融合：输入当天 ingest 快照（ops-intel/ingest/，时间已归一），
  * 输出 ops-intel/fusion/fusion-YYYYMMDD.md + .json。每条判断必须回链 ≥1 个 eventKey。
- * 融合由 agent 经 sparkos_run intel --payload.fusion 手动/半自动触发，不自动外发任何内容。
  *
- * 说明：本插件不调用 LLM——融合产物是「机械装配的事实清单（全部带 eventKey 回链）」，
- * 判断与措辞由 agent 在此基础上人工完成，保持 intel 蓝图的只读+人工裁决红线。
+ * 数据源用 ingest 快照而非源 archive 的原因：
+ * 1) 源文件名时区不统一（alpha=UTC / hermes=本地），按文件名前缀归类会错天；
+ *    快照 observedAt 是 ISO，统一转本地日期归类。
+ * 2) 源落盘有延迟（alpha 稿件可能上午才写入 archive），只要当天被 ingest 就能进当日融合；
+ *    晚落盘稿件可手动重跑融合（同名覆盖）补齐。
+ *
+ * 融合由 agent 经 sparkos_run intel --payload.fusion 手动/半自动触发，不自动外发任何内容。
+ * 本插件不调用 LLM——融合产物是「机械装配的事实清单」，判断与措辞由 agent 人工完成。
  * @module dsh-sparkos/src/intel/fusion
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import type { IntelConfig } from './ingest.ts'
-import { eventKeyOf, statusOf } from './ingest.ts'
 
 export interface FusionItem {
   eventKey: string
@@ -30,7 +34,14 @@ export interface FusionOutput {
 
 function localDate(d: Date): string {
   const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0')
-  return `${y}${m}${day}`
+  return y + m + day
+}
+
+/** ISO 字符串 → 本地 YYYYMMDD（与 localDate 对齐）；无法解析返回空串。 */
+function localDateOf(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return localDate(d)
 }
 
 function titleOf(raw: Record<string, unknown>): string {
@@ -40,23 +51,27 @@ function titleOf(raw: Record<string, unknown>): string {
   return typeof t === 'string' && t !== '' ? t : '(无标题)'
 }
 
-/** 当天（本地时区）发布的 archive 新稿清单（只读扫描）。 */
+/** 当日（本地时区）被 ingest 的快照清单（只读；observedAt 转本地日期归类）。 */
 export function collectDailyItems(cfg: IntelConfig, date: Date): FusionItem[] {
-  const prefix = `d${localDate(date)}`
+  const day = localDate(date)
   const items: FusionItem[] = []
-  for (const src of cfg.sources) {
-    if (src.dir === null || !existsSync(src.dir)) continue
-    for (const f of readdirSync(src.dir)) {
-      if (!f.endsWith('.json') || f.startsWith('.') || !f.startsWith(prefix)) continue
-      if (src.pattern === 'published-only' && !/\.published\.json$/.test(f)) continue
-      let raw: Record<string, unknown> = {}
-      try { raw = JSON.parse(readFileSync(path.join(src.dir, f), 'utf8')) as Record<string, unknown> } catch { continue }
+  if (!existsSync(cfg.outDir)) return items
+  for (const source of readdirSync(cfg.outDir)) {
+    const sub = path.join(cfg.outDir, source)
+    try { if (!statSync(sub).isDirectory()) continue } catch { continue }
+    for (const f of readdirSync(sub)) {
+      if (!f.endsWith('.snapshot.json')) continue
+      let snap: Record<string, unknown>
+      try { snap = JSON.parse(readFileSync(path.join(sub, f), 'utf8')) as Record<string, unknown> } catch { continue }
+      const observedAt = typeof snap.observedAt === 'string' ? snap.observedAt : ''
+      if (observedAt === '' || localDateOf(observedAt) !== day) continue
+      const raw = (snap.raw ?? {}) as Record<string, unknown>
       items.push({
-        eventKey: eventKeyOf(f),
-        source: src.id,
-        status: statusOf(f, raw),
+        eventKey: String(snap.eventKey ?? f.slice(0, -'.snapshot.json'.length)),
+        source: String(snap.source ?? source),
+        status: String(snap.status ?? 'unknown'),
         title: titleOf(raw),
-        observedAt: typeof raw.created_at === 'string' ? raw.created_at : '',
+        observedAt,
       })
     }
   }
@@ -71,7 +86,8 @@ export function fuseDaily(cfg: IntelConfig, date = new Date()): FusionOutput & {
   const notes = [
     '机械装配清单：每条带 eventKey 回链；判断与措辞由 agent 完成（intel 蓝图：不自动外发）。',
     '参照：星火知识库只读（/Users/mac/cow/knowledge），本融合不写入星火库。',
-    items.length === 0 ? '当日无新稿。' : `当日新稿 ${items.length} 条，覆盖源 ${new Set(items.map((i) => i.source)).size} 个。`,
+    '数据源：当日 ingest 快照（observedAt 本地日期归类；晚落盘可重跑融合补齐）。',
+    items.length === 0 ? '当日无新稿。' : '当日新稿 ' + items.length + ' 条，覆盖源 ' + new Set(items.map((i) => i.source)).size + ' 个。',
   ]
   const out: FusionOutput & { files: string[] } = {
     date: stamp,
@@ -80,20 +96,20 @@ export function fuseDaily(cfg: IntelConfig, date = new Date()): FusionOutput & {
     notes,
     files: [],
   }
-  const jsonFile = path.join(fusionDir, `fusion-${stamp}.json`)
-  const mdFile = path.join(fusionDir, `fusion-${stamp}.md`)
-  writeFileSync(jsonFile, `${JSON.stringify({ date: out.date, generatedAt: out.generatedAt, items, notes }, null, 2)}\n`)
+  const jsonFile = path.join(fusionDir, 'fusion-' + stamp + '.json')
+  const mdFile = path.join(fusionDir, 'fusion-' + stamp + '.md')
+  writeFileSync(jsonFile, JSON.stringify({ date: out.date, generatedAt: out.generatedAt, items, notes }, null, 2) + '\n')
   const md = [
-    `# 情报融合 ${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`,
+    '# 情报融合 ' + stamp.slice(0, 4) + '-' + stamp.slice(4, 6) + '-' + stamp.slice(6, 8),
     '',
-    ...notes.map((n) => `> ${n}`),
+    ...notes.map((n) => '> ' + n),
     '',
     ...(items.length === 0
       ? ['（当日无新稿）']
       : [
           '| eventKey | 源 | 状态 | 标题 |',
           '| --- | --- | --- | --- |',
-          ...items.map((i) => `| ${i.eventKey} | ${i.source} | ${i.status} | ${i.title.replace(/\|/g, '\\|')} |`),
+          ...items.map((i) => '| ' + i.eventKey + ' | ' + i.source + ' | ' + i.status + ' | ' + i.title.replace(/\|/g, '\\|') + ' |'),
         ]),
     '',
   ].join('\n')
@@ -101,3 +117,4 @@ export function fuseDaily(cfg: IntelConfig, date = new Date()): FusionOutput & {
   out.files = [jsonFile, mdFile]
   return out
 }
+

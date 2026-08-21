@@ -9,6 +9,7 @@ import { computeHealth } from '../src/intel/health.ts'
 import { runIntelTick } from '../src/intel/tick.ts'
 import { buildIntelReport, initOpsIntel } from '../src/intel/report.ts'
 import { generateDispatch } from '../src/intel/dispatch.ts'
+import { collectDailyItems } from '../src/intel/fusion.ts'
 import { VAULT_ROOT } from '../src/vault.ts'
 
 function fixtureCfg() {
@@ -179,5 +180,38 @@ test('健康 overall 语义：pending-source 不计入；仅全部 pending 才 p
     const stale = new Date('2026-08-21T20:00:00Z')
     const hr = computeHealth(cfg, stale)
     assert.equal(hr.overall, 'red', '任一真实源红则整体红')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+test('fusion 快照输入：observedAt 本地日期归类 + 昨日排除 + title 提取', () => {
+  const { root, cfg } = fixtureCfg()
+  try {
+    const outAlpha = join(cfg.outDir, 'alpha-signal')
+    const outHermes = join(cfg.outDir, 'hermes-cn')
+    mkdirSync(outAlpha, { recursive: true })
+    mkdirSync(outHermes, { recursive: true })
+    const now = new Date()
+    const iso = (dayOffset: number, hour: number) =>
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, hour, 0).toISOString()
+    // 今日（本地）两条：alpha 用 UTC 命名的晚落盘稿件（observedAt 仍是今日本地时间）
+    writeFileSync(join(outAlpha, 'a1.snapshot.json'), JSON.stringify({
+      eventKey: 'a1', source: 'alpha-signal', status: 'ok', observedAt: iso(0, 8), raw: { title: 'alpha 今日稿' },
+    }))
+    writeFileSync(join(outHermes, 'h1.snapshot.json'), JSON.stringify({
+      eventKey: 'h1', source: 'hermes-cn', status: 'ok', observedAt: iso(0, 9), raw: { draft: { title: 'hermes 今日稿' } },
+    }))
+    // 昨日快照不应进今日
+    writeFileSync(join(outHermes, 'h0.snapshot.json'), JSON.stringify({
+      eventKey: 'h0', source: 'hermes-cn', status: 'ok', observedAt: iso(-1, 9), raw: { title: '昨日稿' },
+    }))
+    // 非法 JSON 快照跳过
+    writeFileSync(join(outHermes, 'bad.snapshot.json'), '{broken')
+    const items = collectDailyItems(cfg, now)
+    const keys = items.map((i) => i.eventKey).sort()
+    assert.deepEqual(keys, ['a1', 'h1'], '只有今日两条（含 UTC 命名的 alpha）')
+    assert.ok(items.every((i) => i.observedAt !== ''), 'observedAt 均非空')
+    const hermes = items.find((i) => i.eventKey === 'h1')!
+    assert.equal(hermes.title, 'hermes 今日稿', 'title 从 raw.draft 提取')
+    assert.equal(hermes.source, 'hermes-cn')
+    assert.equal(hermes.status, 'ok')
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
