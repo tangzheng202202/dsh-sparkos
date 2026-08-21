@@ -156,6 +156,9 @@ function renderBriefMd(text){
 function renderBrief(){
   var el=document.getElementById("briefBody");
   var d=D.daily||{};var data=d.data||null;var html=[];
+  var dc=D.dailyCycle||{status:"idle"};
+  if(dc.status==="due"){html.push("<div style=\"padding:8px 12px;border-radius:8px;background:#F9EFD8;color:#A97B2F;font-size:13px;font-weight:600;margin-bottom:10px\">📣 今日 09:30 融合已完成 · 内容循环待跑（触发 sparkos_run brief / topics 或 sparkos-daily skill）</div>");}
+  else if(dc.status==="done"){html.push("<div style=\"padding:8px 12px;border-radius:8px;background:#E4EFE6;color:#4E7A58;font-size:13px;font-weight:600;margin-bottom:10px\">✅ 今日内容循环已产出</div>");}
   if(d.date){
     var age=d.ageDays;
     if(age!=null&&age>0){html.push("<div style=\"padding:8px 12px;border-radius:8px;background:#FBE4DF;color:#C24B33;font-size:13px;font-weight:600;margin-bottom:10px\">⚠️ 最近每日产物是 "+esc(d.date)+" · 已 "+age+" 天无更新（sparkos-daily skill 未运行 · 手动触发：sparkos_run brief / topics）</div>");}
@@ -356,7 +359,7 @@ renderAdvise();
   document.getElementById("intelFusionBody").innerHTML = F && F.items && F.items.length
     ? "<div class=\"dim\" style=\"margin-bottom:6px\">"+esc(F.date||"")+" · "+F.items.length+" 条 · "+esc((F.notes||[]).join(" / "))+"</div>"+
       "<table><thead><tr><th>eventKey</th><th>源</th><th>状态</th><th>标题</th></tr></thead><tbody>"+
-      F.items.map(function(it){return "<tr><td>"+esc(it.eventKey)+"</td><td>"+esc(it.source)+"</td><td>"+esc(it.status)+"</td><td>"+esc(it.title)+"</td></tr>";}).join("")+"</tbody></table>"
+      (function(){var ds={};(F.dupGroups||[]).forEach(function(g){g.forEach(function(k){ds[k]=true;});});return F.items.map(function(it){return "<tr><td>"+esc(it.eventKey)+"</td><td>"+esc(it.source)+"</td><td>"+esc(it.status)+"</td><td>"+(ds[it.eventKey]?"🔁 ":"")+esc(it.title)+"</td></tr>";}).join("");})()+"</tbody></table>"
     : "<div class=\"empty\">尚无融合产物 · 触发：sparkos_run {action:\"intel\", payload:{fusion:true}}</div>";
   var DP = D.dispatch;
   document.getElementById("intelDispatchBody").innerHTML = DP && DP.items && DP.items.length

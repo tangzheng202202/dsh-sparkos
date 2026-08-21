@@ -18,7 +18,8 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
   - 选题 tab 对 must_reads 直接 adopt/ignore（决策落 VAULT state/）
   - 草稿 tab 可查看全文（`GET /sparkos/draft?file=`，仅白名单目录、防穿越）
   - 蒸馏采纳过四红线后进入**待写回清单**（`state/writeback_queue.json`），一键复制全文 + 逐条移除，写回星火库仍由人工完成
-  - 情报指挥所 tab 展示融合事实清单与下发建议（只读，发布权归原 Owner）
+  - 情报指挥所 tab 展示融合事实清单（疑似重复主题 🔁 标记）与下发建议（只读，发布权归原 Owner）
+  - **内容循环提醒**：每日 09:30 融合完成后写 `system/daily_cycle.json`，工作台简报 tab 显示「📣 内容循环待跑」；今日 daily_data 产出后自动变「✅ 已产出」
 - **数据与代码分离**：VAULT 默认 `~/DeepSeek harness/sparkos/`；每日产物从运行时根（默认 `contentos-x`）只读接入；首次启动幂等迁移并落 MANIFEST
 - **intel 信源扩展位**：`src/intel/types.ts` Provider 接口 + 注册位（实现须走蓝图确认关卡）；健康灯 pending-source 不计入 overall
 - **定时任务**：默认关闭；`SPARKOS_SCHEDULE=1` 每日 brief 提醒；`SPARKOS_INTEL_SCHEDULE=1` 每小时 intel tick + 每日 09:30 融合（不自动外发）

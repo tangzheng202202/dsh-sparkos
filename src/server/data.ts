@@ -62,6 +62,8 @@ export interface WorkbenchData {
     data: DailyData | null
     ageDays: number | null
   }
+  /** 内容循环提醒状态机：done=今日产物已就绪 / due=今日融合完成待跑内容循环 / idle=无待办。 */
+  dailyCycle: { status: 'done' | 'due' | 'idle'; fusionDate?: string; dailyDate?: string; note?: string }
   runtimeDrafts: Array<{ file: string; path: string; platform?: string; preview: string; bytes: number }>
   perf: PerfSummary
   infoSources: InfoSources | null
@@ -105,6 +107,25 @@ function daysSince(dateStr: string | undefined): number | null {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   return Math.round((today.getTime() - d.getTime()) / 86400000)
+}
+
+/** 本地日期 YYYY-MM-DD。 */
+function localDateStr(d: Date): string {
+  const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + day
+}
+
+/** 内容循环提醒：今天的 fusion 已跑且今日 daily_data 未产出 → due；今日产物就绪 → done。 */
+function buildDailyCycle(): { status: 'done' | 'due' | 'idle'; fusionDate?: string; dailyDate?: string; note?: string } {
+  const today = localDateStr(new Date())
+  const d = latestDailyData()
+  if (d?.date === today) return { status: 'done', dailyDate: today }
+  const cycle = readJsonIf<{ fusionDate?: string; status?: string; note?: string } | null>(path.join(VAULT_ROOT, 'system', 'daily_cycle.json'), null) ?? {}
+  if (cycle.status === 'due' && typeof cycle.fusionDate === 'string' && cycle.fusionDate.length === 8) {
+    const fDate = cycle.fusionDate.slice(0, 4) + '-' + cycle.fusionDate.slice(4, 6) + '-' + cycle.fusionDate.slice(6, 8)
+    if (fDate === today) return { status: 'due', fusionDate: fDate, dailyDate: d?.date ?? undefined, note: cycle.note }
+  }
+  return { status: 'idle', dailyDate: d?.date ?? undefined }
 }
 
 export function buildWorkbenchData(): WorkbenchData {
@@ -167,6 +188,7 @@ export function buildWorkbenchData(): WorkbenchData {
     infoSources: infoSources(),
     fusion: latestFusion(),
     dispatch: latestDispatch(),
+    dailyCycle: buildDailyCycle(),
   }
 }
 

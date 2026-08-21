@@ -8,7 +8,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { appendFileSync, mkdirSync } from 'node:fs'
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { VAULT_ROOT, initVault } from './vault.ts'
 import { defaultIntelConfig, runIngest } from './intel/ingest.ts'
@@ -32,6 +32,20 @@ function intelTick(): void {
     join(VAULT_ROOT, 'system', 'schedule.log'),
     `[${ingest.at}] intel tick ok=${run.ok} added=${ingest.sources.reduce((n, s) => n + s.added, 0)} health=${health.overall}\n`,
   )
+}
+
+/** 融合完成 → 写内容循环待办（工作台据此显示「内容循环待跑」提醒）。 */
+function writeDailyCycle(fusionDate: string, ok: boolean): void {
+  try {
+    const dir = join(VAULT_ROOT, 'system')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'daily_cycle.json'), JSON.stringify({
+      fusionAt: new Date().toISOString(),
+      fusionDate,
+      status: ok ? 'due' : 'failed',
+      note: ok ? '今日 09:30 融合已完成；请触发 sparkos-daily 跑今日内容循环（sparkos_run brief / topics）' : '融合失败，内容循环提醒暂缓',
+    }, null, 2) + '\n')
+  } catch { /* 提醒写入失败不阻塞调度 */ }
 }
 
 export function registerSchedule(ctx: Context): void {
@@ -73,6 +87,7 @@ export function registerSchedule(ctx: Context): void {
             join(VAULT_ROOT, 'system', 'schedule.log'),
             `[${new Date().toISOString()}] daily fusion ok items=${f.items.length} files=${f.files.join(',')}\n`,
           )
+          writeDailyCycle(f.date, true)
         } catch (error) {
           mkdirSync(join(VAULT_ROOT, 'system'), { recursive: true })
           appendFileSync(
@@ -88,6 +103,7 @@ export function registerSchedule(ctx: Context): void {
               join(VAULT_ROOT, 'system', 'schedule.log'),
               `[${new Date().toISOString()}] daily fusion ok items=${f.items.length} files=${f.files.join(',')}\n`,
             )
+            writeDailyCycle(f.date, true)
           } catch (error) {
             appendFileSync(
               join(VAULT_ROOT, 'system', 'schedule.log'),

@@ -9,7 +9,7 @@ import { computeHealth } from '../src/intel/health.ts'
 import { runIntelTick } from '../src/intel/tick.ts'
 import { buildIntelReport, initOpsIntel } from '../src/intel/report.ts'
 import { generateDispatch } from '../src/intel/dispatch.ts'
-import { collectDailyItems } from '../src/intel/fusion.ts'
+import { collectDailyItems, clusterDuplicates, titleSimilarity } from '../src/intel/fusion.ts'
 import { VAULT_ROOT } from '../src/vault.ts'
 
 function fixtureCfg() {
@@ -214,4 +214,27 @@ test('fusion 快照输入：observedAt 本地日期归类 + 昨日排除 + title
     assert.equal(hermes.source, 'hermes-cn')
     assert.equal(hermes.status, 'ok')
   } finally { rmSync(root, { recursive: true, force: true }) }
+})
+test('titleSimilarity：相似标题高分 / 不相关低分', () => {
+  const a = '伊朗外交部谴责美国新一轮经济制裁'
+  const b = '伊朗谴责美国新一轮制裁称将以一切手段维护国家利益'
+  const c = '市场监管部门整治驾校抱团涨价等乱象'
+  assert.ok(titleSimilarity(a, b) >= 0.5, '同主题应 ≥0.5，实际 ' + titleSimilarity(a, b))
+  assert.ok(titleSimilarity(a, c) < 0.4, '不相关应 <0.4，实际 ' + titleSimilarity(a, c))
+  assert.equal(titleSimilarity('', 'x'), 0, '空标题相似度 0')
+})
+
+test('clusterDuplicates：聚类疑似重复组；不相关不聚；阈值可调', () => {
+  const items = [
+    { eventKey: 'a', source: 'hermes', status: 'ok', title: '伊朗外交部谴责美国新一轮经济制裁', observedAt: '' },
+    { eventKey: 'b', source: 'hermes', status: 'ok', title: '伊朗谴责美国新一轮制裁称将以一切手段维护国家利益', observedAt: '' },
+    { eventKey: 'c', source: 'alpha', status: 'ok', title: 'NVIDIA 发布 SkillEvaluator 评估 AI Agent', observedAt: '' },
+    { eventKey: 'd', source: 'hermes', status: 'ok', title: '市场监管部门整治驾校抱团涨价等乱象', observedAt: '' },
+  ]
+  const groups = clusterDuplicates(items)
+  assert.equal(groups.length, 1, '只有 1 组疑似重复')
+  const g = groups[0].sort()
+  assert.deepEqual(g, ['a', 'b'], 'a/b 同主题归组')
+  // 更高阈值不聚类
+  assert.equal(clusterDuplicates(items, 0.9).length, 0, '阈值 0.9 不应聚类')
 })
