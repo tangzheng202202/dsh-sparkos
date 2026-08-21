@@ -226,10 +226,10 @@ test('titleSimilarity：相似标题高分 / 不相关低分', () => {
 
 test('clusterDuplicates：聚类疑似重复组；不相关不聚；阈值可调', () => {
   const items = [
-    { eventKey: 'a', source: 'hermes', status: 'ok', title: '伊朗外交部谴责美国新一轮经济制裁', observedAt: '' },
-    { eventKey: 'b', source: 'hermes', status: 'ok', title: '伊朗谴责美国新一轮制裁称将以一切手段维护国家利益', observedAt: '' },
-    { eventKey: 'c', source: 'alpha', status: 'ok', title: 'NVIDIA 发布 SkillEvaluator 评估 AI Agent', observedAt: '' },
-    { eventKey: 'd', source: 'hermes', status: 'ok', title: '市场监管部门整治驾校抱团涨价等乱象', observedAt: '' },
+    { eventKey: 'a', source: 'hermes', status: 'ok', title: '伊朗外交部谴责美国新一轮经济制裁', observedAt: '', evidenceUrl: '' },
+    { eventKey: 'b', source: 'hermes', status: 'ok', title: '伊朗谴责美国新一轮制裁称将以一切手段维护国家利益', observedAt: '', evidenceUrl: '' },
+    { eventKey: 'c', source: 'alpha', status: 'ok', title: 'NVIDIA 发布 SkillEvaluator 评估 AI Agent', observedAt: '', evidenceUrl: '' },
+    { eventKey: 'd', source: 'hermes', status: 'ok', title: '市场监管部门整治驾校抱团涨价等乱象', observedAt: '', evidenceUrl: '' },
   ]
   const groups = clusterDuplicates(items)
   assert.equal(groups.length, 1, '只有 1 组疑似重复')
@@ -256,5 +256,38 @@ test('同 key 多状态文件：写后即记 known，不互相覆盖（状态机
     // 第二轮零新增
     const r2 = runIngest(cfg)
     assert.equal(r2.sources.find((s) => s.source === 'alpha-signal')!.added, 0)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+test('情报簇：规则骨架预填（分组/来源数/证据URL/热度）+ 校验 + 合并写回', async () => {
+  const { root, cfg } = fixtureCfg()
+  try {
+    const { buildClusterSkeletons, validateCluster, saveClusters, loadClusters } = await import('../src/intel/cluster.ts')
+    const items = [
+      { eventKey: 'a', source: 'hermes', status: 'ok', title: '伊朗谴责制裁', observedAt: '', evidenceUrl: 'https://a.example' },
+      { eventKey: 'b', source: 'alpha', status: 'ok', title: '伊朗谴责制裁2', observedAt: '', evidenceUrl: 'https://b.example' },
+      { eventKey: 'c', source: 'alpha', status: 'ok', title: 'NVIDIA 发布', observedAt: '', evidenceUrl: 'https://c.example' },
+    ]
+    const sk = buildClusterSkeletons(items, [['a', 'b']], new Date(2026, 7, 21))
+    assert.equal(sk.length, 2, '1 组重复 + 1 单事件')
+    const dup = sk.find((c) => c.eventKeys.length === 2)!
+    assert.equal(dup.heat, 'high', '2 事件 + 跨源 → high')
+    assert.equal(dup.sourceCount, 2)
+    assert.ok(dup.evidenceUrls.includes('https://a.example'), '证据 URL 聚合')
+    assert.equal(dup.topic, '', '主题留待模型')
+    const single = sk.find((c) => c.eventKeys.length === 1)!
+    assert.equal(single.heat, 'low', '单事件单源 → low')
+    // 校验：合法通过 / 非法拒绝
+    const good = { ...dup, topic: '伊朗制裁' }
+    assert.equal(validateCluster(good).length, 0)
+    assert.ok(validateCluster({ ...dup, topic: '' }).some((e) => e.includes('topic')), '缺主题拒绝')
+    assert.ok(validateCluster({ ...dup, topic: 'x', heat: 'hot' as never }).some((e) => e.includes('heat')), '非法热度拒绝')
+    // 合并写回（同 id 覆盖）
+    const r1 = saveClusters(cfg, [good, single], new Date(2026, 7, 21))
+    assert.equal(r1.total, 2, '骨架 2 簇均写入')
+    const again = { ...good, topic: '伊朗制裁（更新）' }
+    saveClusters(cfg, [again], new Date(2026, 7, 21))
+    const loaded = loadClusters(cfg, new Date(2026, 7, 21))
+    assert.equal(loaded.length, 2)
+    assert.equal(loaded.find((c) => c.clusterId === good.clusterId)?.topic, '伊朗制裁（更新）', '同 id 覆盖')
   } finally { rmSync(root, { recursive: true, force: true }) }
 })

@@ -10,6 +10,9 @@ import { TIMELINE_DATA, VAULT_ROOT } from '../vault.ts'
 import { buildIntelReport, latestFusion } from '../intel/report.ts'
 import type { IntelReport } from '../intel/report.ts'
 import { latestDispatch } from '../intel/dispatch.ts'
+import { latestClusters } from '../intel/cluster.ts'
+import type { IntelCluster } from '../intel/cluster.ts'
+import { defaultIntelConfig } from '../intel/ingest.ts'
 import type { DispatchPreferences } from '../intel/dispatch.ts'
 import type { FusionOutput } from '../intel/fusion.ts'
 import {
@@ -69,6 +72,8 @@ export interface WorkbenchData {
   infoSources: InfoSources | null
   fusion: FusionOutput | null
   dispatch: DispatchPreferences | null
+  /** 最新情报簇（模型分析产物）。 */
+  clusters: { date: string | null; items: IntelCluster[] }
 }
 
 /** 蒸馏条目（合并队列）。 */
@@ -188,6 +193,7 @@ export function buildWorkbenchData(): WorkbenchData {
     infoSources: infoSources(),
     fusion: latestFusion(),
     dispatch: latestDispatch(),
+    clusters: (() => { const lc = latestClusters(defaultIntelConfig()); return lc ? { date: lc.date, items: lc.clusters } : { date: null, items: [] } })(),
     dailyCycle: buildDailyCycle(),
   }
 }

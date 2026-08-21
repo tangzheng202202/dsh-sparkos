@@ -15,8 +15,9 @@ def check(name, cond):
     ok = ok and bool(cond)
     print(("OK  " if cond else "MISS ") + name)
 
-for kw in ["SparkOS 工作台", "今日简报", "叙事主线", "选题推荐", "草稿工作区", "蒸馏审核",
-           "待写回", "信息源", "发布表现", "系统建议", "情报指挥所", "情报源健康", "下发建议"]:
+for kw in ["SparkOS 工作台", "今日中心", "情报中心", "创作中心", "审核中心", "增长中心",
+           "今日简报", "叙事主线", "选题推荐", "草稿工作区", "蒸馏审核", "待写回",
+           "信息源", "发布表现", "系统建议", "情报源健康", "情报簇", "下发建议"]:
     check("keyword " + kw, kw in dom)
 
 # 结构断言
@@ -24,6 +25,6 @@ check("swim rows >= 5", dom.count('class="swim"') >= 5)
 check("table rows >= 60", dom.count("<tr>") >= 60)
 check("stats has 今日必读", "今日必读" in dom)
 check("topic rows rendered (real daily data)", dom.count('class="topic-row"') >= 1)
-check("nav tabs = 9", dom.count('class="nav-tab') >= 9)
+check("nav centers = 5", dom.count('class="nav-tab') >= 5)
 print("RESULT:", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)

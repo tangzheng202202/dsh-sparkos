@@ -33,7 +33,7 @@ export function usage(): string {
     '  sources  信息源（info_sources.json + intel 健康快照）',
     '  publish  发布表现（perf/*.json 汇总，缺失降级）',
     '  advise   系统建议（只读，守卫⑤）',
-    '  intel    情报指挥所（ingest/health；payload.fusion=true 融合；payload.dispatch=true 生成选题建议）',
+    '  intel    情报指挥所（ingest/health；payload.fusion=true 融合；payload.analyze=true 生成情报簇待分析骨架；payload.clusters=true 列出；payload.submitCluster=<簇对象> 校验写回；payload.dispatch=true 生成选题建议）',
     '参数：action(string, 可选) 子命令；payload(object, 可选)；dryRun(bool) 只校验不落盘',
     'VAULT：' + VAULT_ROOT,
   ].join('\n')
@@ -95,6 +95,8 @@ export function registerRunTool(ctx: Context): void {
       if (args.action === 'advise') return { text: cmdAdvise(payload).join('\n') }
 
       if (args.action === 'intel') {
+        const { defaultIntelConfig } = await import('../intel/ingest.ts')
+        const cfg = defaultIntelConfig()
         const { runIntelTick } = await import('../intel/tick.ts')
         const r = runIntelTick()
         const lines = [
@@ -104,14 +106,42 @@ export function registerRunTool(ctx: Context): void {
         ]
         if (payload.fusion === true) {
           const { fuseDaily } = await import('../intel/fusion.ts')
-          const { defaultIntelConfig } = await import('../intel/ingest.ts')
-          const f = fuseDaily(defaultIntelConfig())
+          const f = fuseDaily(cfg)
           lines.push('fusion: ' + f.items.length + ' 条（' + f.files.join(', ') + '）', ...f.notes.map((n) => '  ' + n))
+        }
+        if (payload.analyze === true) {
+          const { buildClusterSkeletons, writeAnalyzeRequest } = await import('../intel/cluster.ts')
+          const { fuseDaily: fuseDaily2 } = await import('../intel/fusion.ts')
+          const f2 = fuseDaily2(cfg)
+          const skeletons = buildClusterSkeletons(f2.items, f2.dupGroups)
+          const r = writeAnalyzeRequest(cfg, skeletons)
+          lines.push('analyze: 生成 ' + skeletons.length + ' 个情报簇骨架（' + r.pending + ' 待模型分析 → analyze-' + f2.date + '.json）')
+          if (r.pending > 0) lines.push('  待补字段：topic/coreFacts/novelty/knowledgeCards/credibility/risks/platforms/angleSuggestions')
+        }
+        if (payload.clusters === true) {
+          const { latestClusters } = await import('../intel/cluster.ts')
+          const lc = latestClusters(cfg)
+          if (!lc) { lines.push('clusters: 暂无情报簇（先 payload.analyze=true 生成骨架）') }
+          else {
+            lines.push('clusters: ' + lc.date + ' 共 ' + lc.clusters.length + ' 簇')
+            for (const c of lc.clusters) {
+              lines.push('  - ' + c.clusterId + ' [' + c.heat + '] ' + (c.topic || '(待分析)') + ' · 来源 ' + c.sourceCount + ' · 事件 ' + c.eventKeys.length + (c.angleSuggestions.length ? ' · 角度 ' + c.angleSuggestions.join(' / ') : ''))
+            }
+          }
+        }
+        if (payload.submitCluster !== undefined) {
+          const { validateCluster, saveClusters } = await import('../intel/cluster.ts')
+          const c = payload.submitCluster as Record<string, unknown>
+          const errs = validateCluster(c as never)
+          if (errs.length > 0) { lines.push('submit-cluster FAIL: ' + errs.join('；')) }
+          else {
+            const r = saveClusters(cfg, [c as never], new Date())
+            lines.push('submit-cluster OK: ' + c.clusterId + ' → ' + r.file.split('/').pop() + '（共 ' + r.total + ' 簇）')
+          }
         }
         if (payload.dispatch === true) {
           const { generateDispatch } = await import('../intel/dispatch.ts')
-          const { defaultIntelConfig } = await import('../intel/ingest.ts')
-          const d = generateDispatch(defaultIntelConfig())
+          const d = generateDispatch(cfg)
           lines.push('dispatch: preferences.json 已生成（' + d.items.length + ' 条建议，发布权仍归原 Owner）')
         }
         return { text: lines.join('\n') }
@@ -124,4 +154,3 @@ export function registerRunTool(ctx: Context): void {
     },
   }))
 }
-

@@ -92,6 +92,7 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
 </div>
 
 <div id="tab-intel" class="tab hidden">
+  <div class="section-card"><div class="section-title">🧩 情报簇（规则骨架 + 模型分析 · sparkos_run intel analyze/submitCluster）</div><div id="clustersBody"></div></div>
   <div class="section-card"><div class="section-title">🗺️ 情报源健康（只读接入 · 异常标红）</div><div id="intelHealthBody"></div></div>
   <div class="section-card"><div class="section-title">📦 archive 计数与最近 run</div><div id="intelCountsBody"></div></div>
   <div class="section-card"><div class="section-title">🧭 日频融合（agent 经 sparkos_run intel 手动触发）</div><div id="intelFusionBody"></div></div>
@@ -100,7 +101,7 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
 
 <script>
 const D = window._embeddedDailyData;
-const TABS = [["brief","今日简报"],["lines","叙事主线"],["topics","选题推荐"],["draft","草稿工作区"],["cards","知识卡·蒸馏"],["sources","信息源"],["publish","发布表现"],["advise","系统建议"],["intel","情报指挥所"]];
+const CENTERS = [["today","今日中心",["brief"]],["intel","情报中心",["lines","intel"]],["create","创作中心",["topics","draft"]],["review","审核中心",["cards"]],["growth","增长中心",["publish","advise","sources"]]];
 
 // ---- helpers ----
 function esc(s){return String(s==null?"":s).split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;");}
@@ -112,17 +113,18 @@ function lineColor(id){var P=["#E8563D","#F5A95C","#7FA8C9","#7FA88A","#B58BC9",
 // ---- header / stats / nav ----
 document.getElementById("subtitle").textContent = "数据注入 " + D.generatedAt + " · VAULT " + D.vaultRoot;
 var mrCount = (D.daily && D.daily.data && D.daily.data.must_reads || []).length;
-var stats = [["主线", D.lines.length],["知识卡", D.timeline.cards.length],["事件", D.events],["今日必读", mrCount],["草稿", D.runtimeDrafts.length],["蒸馏待审", D.distillQueue.length],["待写回", D.writebackQueue.length]];
+var stats = [["主线", D.lines.length],["知识卡", D.timeline.cards.length],["事件", D.events],["今日必读", mrCount],["草稿", D.runtimeDrafts.length],["蒸馏待审", D.distillQueue.length],["待写回", D.writebackQueue.length],["情报簇", D.clusters?D.clusters.items.length:0]];
 document.getElementById("stats").innerHTML = stats.map(function(s){return "<div class=\"stat-card\"><div class=\"stat-label\">"+s[0]+"</div><div class=\"stat-value\">"+s[1]+"</div></div>";}).join("");
 
 var nav = document.getElementById("nav");
-for (var ti = 0; ti < TABS.length; ti++) {
-  var tb = TABS[ti];
+for (var ti = 0; ti < CENTERS.length; ti++) {
+  var tb = CENTERS[ti];
   var b = document.createElement("button");
-  b.className = "nav-tab"; b.textContent = tb[1]; b.dataset.tab = tb[0];
+  b.className = "nav-tab"; b.textContent = tb[1]; b.dataset.tabs = tb[2].join(",");
   b.onclick = function () {
+    var tabs = this.dataset.tabs.split(",");
     document.querySelectorAll(".nav-tab").forEach(function(x){x.classList.toggle("active", x === this);}.bind(this));
-    document.querySelectorAll(".tab").forEach(function(x){x.classList.toggle("hidden", x.id !== "tab-" + this.dataset.tab);}.bind(this));
+    document.querySelectorAll(".tab").forEach(function(x){x.classList.toggle("hidden", tabs.indexOf(x.id.replace("tab-","")) < 0);}.bind(this));
   };
   nav.appendChild(b);
 }
@@ -368,6 +370,24 @@ renderAdvise();
       "<div class=\"dim\" style=\"margin-top:8px\">"+esc(DP.ownerNote||"")+"</div>"
     : "<div class=\"empty\">暂无下发建议 · 先执行 fusion 再 dispatch</div>";
 })();
+// ---- 情报簇渲染 ----
+function renderClusters(){
+  var el=document.getElementById("clustersBody");
+  var cl=D.clusters||{items:[]};
+  if(!cl.items.length){el.innerHTML="<div class=\"empty\">暂无情报簇 · 生成骨架：sparkos_run intel payload.analyze=true；模型分析后 payload.submitCluster=<簇对象> 写回</div>";return;}
+  var heatMap={high:"badge-red",medium:"badge-amber",low:"badge-gray"};
+  el.innerHTML=cl.items.map(function(c){
+    return "<div style=\"padding:10px 0;border-bottom:1px solid var(--border)\"><div><b>"+esc(c.topic||"(待分析)")+"</b> <span class=\"badge "+heatMap[c.heat]+"\">"+esc(c.heat)+"</span> <span class=\"badge\">来源 "+c.sourceCount+"</span> <span class=\"badge\">事件 "+c.eventKeys.length+"</span> <span class=\"dim\">"+esc(c.clusterId)+"</span></div>"+
+      (c.coreFacts&&c.coreFacts.length?"<div class=\"dim\" style=\"margin:4px 0\">核心事实："+esc(c.coreFacts.join("；"))+"</div>":"")+
+      (c.evidenceUrls&&c.evidenceUrls.length?"<div class=\"dim\">🔗 "+c.evidenceUrls.map(esc).join(" · ")+"</div>":"")+
+      (c.knowledgeCards&&c.knowledgeCards.length?"<div class=\"dim\">📚 知识卡："+esc(c.knowledgeCards.join(", "))+"</div>":"")+
+      (c.risks&&c.risks.length?"<div class=\"dim\" style=\"color:#C24B33\">⚠️ "+esc(c.risks.join("；"))+"</div>":"")+
+      (c.platforms&&c.platforms.length?"<div class=\"dim\">平台："+esc(c.platforms.join(", "))+"</div>":"")+
+      (c.angleSuggestions&&c.angleSuggestions.length?"<div class=\"dim\" style=\"margin-top:4px\">🎯 选题角度："+esc(c.angleSuggestions.join(" / "))+"</div>":"")+
+      "</div>";
+  }).join("");
+}
+renderClusters();
 </script>
 </body>
 </html>

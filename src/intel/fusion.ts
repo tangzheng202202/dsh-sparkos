@@ -26,6 +26,8 @@ export interface FusionItem {
   status: string
   title: string
   observedAt: string
+  /** 关键证据 URL（来自快照 raw.source_hint.url / raw.url / raw.link）。 */
+  evidenceUrl: string
 }
 
 export interface FusionOutput {
@@ -47,6 +49,12 @@ function localDateOf(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   return localDate(d)
+}
+
+function evidenceUrlOf(raw: Record<string, unknown>): string {
+  const sh = raw.source_hint as Record<string, unknown> | undefined
+  const u = sh?.url ?? raw.url ?? raw.link
+  return typeof u === 'string' && u !== '' ? u : ''
 }
 
 function titleOf(raw: Record<string, unknown>): string {
@@ -125,6 +133,7 @@ export function collectDailyItems(cfg: IntelConfig, date: Date): FusionItem[] {
         status: String(snap.status ?? 'unknown'),
         title: titleOf(raw),
         observedAt,
+        evidenceUrl: evidenceUrlOf(raw),
       })
     }
   }
