@@ -130,3 +130,10 @@ test('404：未知路径返回 not-found', async () => {
   assert.equal(res.out.status, 404)
   assert.ok(JSON.parse(res.out.body).error.code === 'not-found')
 })
+test('POST body 超限返回 413', async () => {
+  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const big = { kind: 'topic', id: 'x', action: 'adopt', pad: 'a'.repeat(300 * 1024) }
+  const res = mockRes()
+  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', big), res.res)
+  assert.equal(res.out.status, 413)
+})

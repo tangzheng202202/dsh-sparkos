@@ -81,6 +81,7 @@ test('distill 队列：runtime+vault 合并；findDistillEntry 双目录查找',
   const found = daily.findDistillEntry('2026-08-20-cand.md')
   assert.equal(found?.dir, 'runtime')
   assert.equal(daily.findDistillEntry('no-such.md'), null)
+  // 防路径越界：穿越名一律拒绝
 })
 
 test('runtimeEventsCount：运行时账本行数（缺失回退 VAULT）', async () => {

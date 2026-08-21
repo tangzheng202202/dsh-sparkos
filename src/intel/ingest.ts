@@ -159,6 +159,7 @@ export function runIngest(cfg: IntelConfig, now = new Date()): IngestResult {
       const sub = path.join(cfg.outDir, src.id)
       mkdirSync(sub, { recursive: true })
       writeFileSync(path.join(sub, `${eventKey}.snapshot.json`), `${JSON.stringify(snapshot, null, 2)}\n`)
+      known.add(eventKey) // 同轮循环内防同 key 多状态文件互相覆盖（写后即记）
       added++
     }
     sources.push({ source: src.id, ok: true, scanned: files.length, added, skipped })

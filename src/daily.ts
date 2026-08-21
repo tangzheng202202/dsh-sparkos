@@ -287,6 +287,8 @@ export function listDistillQueue(): DistillEntry[] {
 }
 
 export function findDistillEntry(file: string): DistillEntry | null {
+  // 防路径越界：只允许纯文件名（拒绝 / \\ .. 与空串）
+  if (file === '' || file.includes('/') || file.includes('\\') || file.includes('..') || file.includes('\u0000')) return null
   const runtime = path.join(RUNTIME_DISTILL_QUEUE, file)
   if (existsSync(runtime)) return parseDistillEntry(file, 'runtime', runtime)
   const vault = path.join(VAULT_ROOT, 'distill_queue', file)

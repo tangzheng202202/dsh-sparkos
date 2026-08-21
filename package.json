@@ -45,7 +45,8 @@
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit",
     "test": "node --test --experimental-strip-types tests/guards.test.ts tests/vault.test.ts tests/data.test.ts tests/intel.test.ts tests/daily.test.ts tests/routes.test.ts",
-    "test:dom": "node --experimental-strip-types scripts/render-page.mjs && python3 scripts/dom-check.py /tmp/sparkos-wb.html"
+    "test:dom": "node --experimental-strip-types scripts/render-page.mjs && python3 scripts/dom-check.py /tmp/sparkos-wb.html",
+    "prepare": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -238,3 +238,23 @@ test('clusterDuplicates：聚类疑似重复组；不相关不聚；阈值可调
   // 更高阈值不聚类
   assert.equal(clusterDuplicates(items, 0.9).length, 0, '阈值 0.9 不应聚类')
 })
+test('同 key 多状态文件：写后即记 known，不互相覆盖（状态机防扫描顺序依赖）', () => {
+  const { root, cfg, alphaDir } = fixtureCfg()
+  try {
+    // 同一 eventKey 两个状态文件（published + blocked）
+    writeFileSync(join(alphaDir, 'dup001.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-20T00:00:00Z', title: 'dup pub' }))
+    writeFileSync(join(alphaDir, 'dup001.unsent-scope-blocked.json'), JSON.stringify({ created_at: '2026-08-20T01:00:00Z', title: 'dup blocked' }))
+    const r = runIngest(cfg)
+    const alpha = r.sources.find((s) => s.source === 'alpha-signal')!
+    assert.equal(alpha.added, 3, 'a001+a002+dup001 首个共 3（写后即记 known）')
+    assert.equal(alpha.skipped, 1, '另一状态文件被 skip（不覆盖）')
+    // 快照存在且内容来自首次写入
+    const snapFile = join(cfg.outDir, 'alpha-signal', 'dup001.snapshot.json')
+    assert.ok(existsSync(snapFile))
+    const snap = JSON.parse(readFileSync(snapFile, 'utf8'))
+    assert.equal(snap.eventKey, 'dup001')
+    // 第二轮零新增
+    const r2 = runIngest(cfg)
+    assert.equal(r2.sources.find((s) => s.source === 'alpha-signal')!.added, 0)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})

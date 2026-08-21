@@ -29,9 +29,21 @@ function respondJson(res: import('node:http').ServerResponse, status: number, bo
   res.end(payload)
 }
 
+/** 请求体上限 256KB（防内存滥用）。 */
+const MAX_BODY_BYTES = 256 * 1024
+
 async function readJsonBody(req: import('node:http').IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = []
-  for await (const chunk of req) chunks.push(chunk as Buffer)
+  let size = 0
+  for await (const chunk of req) {
+    chunks.push(chunk as Buffer)
+    size += (chunk as Buffer).length
+    if (size > MAX_BODY_BYTES) {
+      const err = new Error('request body too large') as Error & { code?: string }
+      err.code = 'BODY_TOO_LARGE'
+      throw err
+    }
+  }
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as Record<string, unknown>
 }
 
@@ -84,7 +96,11 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       let body: Record<string, unknown>
       try {
         body = await readJsonBody(req)
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && (error as Error & { code?: string }).code === 'BODY_TOO_LARGE') {
+          respondJson(res, 413, { ok: false, error: { code: 'payload-too-large', message: '请求体超过 256KB 上限' } })
+          return
+        }
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
         return
       }
@@ -123,7 +139,11 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       let body: Record<string, unknown>
       try {
         body = await readJsonBody(req)
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && (error as Error & { code?: string }).code === 'BODY_TOO_LARGE') {
+          respondJson(res, 413, { ok: false, error: { code: 'payload-too-large', message: '请求体超过 256KB 上限' } })
+          return
+        }
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
         return
       }
@@ -155,6 +175,11 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
     }
     respondJson(res, 404, { ok: false, error: { code: 'not-found', message: path } })
   } catch (error) {
+    const code = error instanceof Error && (error as Error & { code?: string }).code
+    if (code === 'BODY_TOO_LARGE') {
+      respondJson(res, 413, { ok: false, error: { code: 'payload-too-large', message: '请求体超过 256KB 上限' } })
+      return
+    }
     respondJson(res, 500, {
       ok: false,
       error: { code: 'internal', message: error instanceof Error ? error.message : String(error) },

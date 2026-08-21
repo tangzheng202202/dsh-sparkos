@@ -28,10 +28,14 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 
 ```jsonc
 // ~/.dsh/profiles/web/package.json
-{ "dependencies": { "dsh-sparkos": "…" }, "dsh": { "bundles": ["dsh-sparkos"] } }
+{ "dependencies": { "dsh-sparkos": "link:/绝对路径/dsh-sparkos" }, "dsh": { "bundles": ["dsh-sparkos"] } }
 ```
 
 然后重启 DSH 宿主，访问 `http://<host>:<port>/sparkos/app`。
+
+**干净环境可独立运行**：仓库自带 `seeds/` 种子数据（主线/命名/事件账本/知识卡/信息源示例），
+首次初始化在运行时资产缺失时自动回退 `seeds/`（`SPARKOS_CONTENTOS_ROOT` 指向真实工作流区时优先用之）。
+安装后 `prepare` 脚本自动执行 `npm run build` 生成 `lib/`。
 
 ## 路径配置（env，均有默认值，默认指向本机运行时）
 

@@ -1,0 +1,13 @@
+{
+  "rss": [
+    {
+      "name": "示例 RSS",
+      "url": "https://example.com/rss",
+      "tags": [
+        "example"
+      ]
+    }
+  ],
+  "x_lists": [],
+  "local_knowledge": {}
+}
