@@ -308,6 +308,11 @@ export function latestEditorialPlan(db: DatabaseSync, mode?: EditorialMode): Edi
   return run ? planFromRun(db, run) : null
 }
 
+export function editorialCardById(db: DatabaseSync, cardId: string): EditorialCard | null {
+  const row = db.prepare('SELECT * FROM editorial_cards WHERE id = ?').get(cardId) as CardRow | undefined
+  return row ? cardFromRow(row) : null
+}
+
 export function decideEditorialCard(
   db: DatabaseSync,
   cardId: string,

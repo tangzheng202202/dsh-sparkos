@@ -11,7 +11,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { envPath, VAULT_ROOT } from '../vault.ts'
 
-export const FACTORY_SCHEMA_VERSION = 2
+export const FACTORY_SCHEMA_VERSION = 3
 
 export function defaultFactoryDbPath(): string {
   return envPath('SPARKOS_DB_PATH', path.join(VAULT_ROOT, 'data', 'sparkos.db'))
@@ -175,6 +175,50 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
         ON editorial_cards(run_id, rank);
       CREATE INDEX IF NOT EXISTS idx_editorial_cards_decision
         ON editorial_cards(decision, created_at DESC);
+    `,
+  },
+  {
+    version: 3,
+    sql: `
+      CREATE TABLE IF NOT EXISTS draft_packages (
+        id TEXT PRIMARY KEY,
+        card_id TEXT NOT NULL REFERENCES editorial_cards(id),
+        revision INTEGER NOT NULL CHECK (revision >= 1),
+        parent_package_id TEXT REFERENCES draft_packages(id),
+        job_id TEXT NOT NULL REFERENCES workflow_jobs(id),
+        contract_version INTEGER NOT NULL,
+        input_fingerprint TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN (
+          'awaiting_generation', 'validation_failed', 'waiting_approval', 'approved', 'rejected'
+        )),
+        request_json TEXT NOT NULL,
+        submission_json TEXT,
+        validation_json TEXT NOT NULL DEFAULT '{"ok":false,"errors":[]}',
+        artifact_dir TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        decided_at TEXT,
+        UNIQUE(card_id, input_fingerprint),
+        UNIQUE(card_id, revision)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_draft_packages_status
+        ON draft_packages(status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_draft_packages_card
+        ON draft_packages(card_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS draft_artifacts (
+        id TEXT PRIMARY KEY,
+        package_id TEXT NOT NULL REFERENCES draft_packages(id) ON DELETE CASCADE,
+        platform TEXT NOT NULL,
+        format TEXT NOT NULL,
+        relative_path TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        bytes INTEGER NOT NULL CHECK (bytes >= 0),
+        created_at TEXT NOT NULL,
+        UNIQUE(package_id, relative_path)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_draft_artifacts_package
+        ON draft_artifacts(package_id, platform);
     `,
   },
 ]

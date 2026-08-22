@@ -28,7 +28,7 @@ export function usage(): string {
     '子命令：' + SUBCOMMANDS.join(' / '),
     '  brief    今日简报（读最新 daily_briefing + daily_data；payload.daily 时走五守卫，commit=true 入库）',
     '  topics   选题推荐；payload.editorial=midweek|weekly 生成周三/周六 5 张可审批选题卡',
-    '  draft    草稿列表（payload.get=<文件名> 读全文）',
+    '  draft    草稿中心；pending 查看待生成契约，submitPackage 提交四平台完整草稿包，packages 查看状态',
     '  distill  蒸馏审核队列（runtime+vault 合并 + 审核状态）',
     '  sources  信息源（info_sources.json + intel 健康快照）',
     '  publish  发布表现（perf/*.json 汇总，缺失降级）',
@@ -111,6 +111,53 @@ export function registerRunTool(ctx: Context): void {
         }
       }
       if (args.action === 'topics') return { text: cmdTopics(payload).join('\n') }
+      if (args.action === 'draft' && payload.pending === true) {
+        const { listPendingDraftRequests } = await import('../factory/service.ts')
+        const requests = listPendingDraftRequests(typeof payload.limit === 'number' ? payload.limit : 5)
+        if (requests.length === 0) return { text: '暂无待生成草稿任务。批准 M3 选题卡后会自动入队。' }
+        return { text: ['===== 待生成草稿契约（' + requests.length + '） =====', ...requests.map((request) => JSON.stringify(request, null, 2))].join('\n') }
+      }
+      if (args.action === 'draft' && typeof payload.request === 'string') {
+        if (dryRun) return { text: '[dryRun] 草稿任务请求参数通过，未落盘。' }
+        try {
+          const { requestDraftPackage } = await import('../factory/service.ts')
+          const result = requestDraftPackage(payload.request)
+          return { text: `草稿任务 ${result.created ? '已创建' : '已存在'}：\n` + JSON.stringify(result.package.request, null, 2) }
+        } catch (error) {
+          return { text: 'draft request FAIL: ' + (error instanceof Error ? error.message : String(error)) }
+        }
+      }
+      if (args.action === 'draft' && typeof payload.revise === 'string') {
+        if (dryRun) return { text: '[dryRun] 草稿修订请求参数通过，未落盘。' }
+        try {
+          const { requestDraftRevision } = await import('../factory/service.ts')
+          const result = requestDraftRevision(payload.revise)
+          return { text: `草稿修订版 ${result.created ? '已创建' : '已存在'}：\n` + JSON.stringify(result.package.request, null, 2) }
+        } catch (error) {
+          return { text: 'draft revise FAIL: ' + (error instanceof Error ? error.message : String(error)) }
+        }
+      }
+      if (args.action === 'draft' && payload.submitPackage !== undefined) {
+        if (dryRun) return { text: '[dryRun] submitPackage 收到；完整事实与平台校验仅在实际提交时执行，未落盘。' }
+        try {
+          const { runDraftSubmission } = await import('../factory/service.ts')
+          const result = runDraftSubmission(payload.submitPackage as never)
+          if (!result.validation.ok) return { text: ['draft submit VALIDATION FAIL:', ...result.validation.errors.map((error) => '  - ' + error), ...result.validation.warnings.map((warning) => '  WARN ' + warning)].join('\n') }
+          return { text: [
+            `draft submit OK: ${result.package.id} · ${result.package.artifacts.length} 个产物 · ${result.package.status}`,
+            `  微信 ${result.validation.stats.wechatChars} 字 / Telegram ${result.validation.stats.telegramChars} 字 / X ${result.validation.stats.xPosts} 条 / 小红书 ${result.validation.stats.xiaohongshuChars} 字 / 配图任务 ${result.validation.stats.assets} 个`,
+            ...result.package.artifacts.map((artifact) => '  - ' + artifact.relativePath),
+            '  下一步：工作台人工审核；批准前不得发布。',
+          ].join('\n') }
+        } catch (error) {
+          return { text: 'draft submit FAIL: ' + (error instanceof Error ? error.message : String(error)) }
+        }
+      }
+      if (args.action === 'draft' && payload.packages === true) {
+        const { buildFactorySnapshot } = await import('../factory/service.ts')
+        const packages = buildFactorySnapshot().drafts
+        return { text: packages.length === 0 ? '暂无工厂草稿包。' : ['===== 工厂草稿包 =====', ...packages.map((item) => `- ${item.id} v${item.revision} [${item.status}] ${item.title} · 产物 ${item.artifacts.length}`)].join('\n') }
+      }
       if (args.action === 'draft') return { text: cmdDraft(payload).join('\n') }
       if (args.action === 'distill') return { text: cmdDistill(payload).join('\n') }
       if (args.action === 'sources') return { text: cmdSources(payload).join('\n') }

@@ -24,6 +24,7 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 - **内容工厂状态底座（M1）**：Node 内置 SQLite 保存任务状态、Worker 租约/重试、情报簇与排名历史；原始情报和内容产物仍保留为 VAULT 文件
 - **情报排名（M2）**：情报簇提交后自动生成每日 Top 5、上升榜、连续霸榜和可创作候选；评分分项可解释，只有证据等级 A/B 可进入创作
 - **编辑策划（M3）**：周三看 4 日窗口、周六看 7 日窗口，识别连续霸榜/加速上升/二次升温/事实反转/结构议题，最多生成 5 张带证据、核心判断、反方与风险的选题卡；全部必须人工批准后才结束工作流
+- **多平台创作（M4）**：批准选题后自动创建结构化创作任务；agent 提交公众号、Telegram、X、小红书完整稿与配图任务清单，程序硬校验事实引用和内容完整度，并生成安全的公众号 HTML、Markdown 及统一 manifest；草稿仍须人工批准
 - **intel 信源扩展位**：`src/intel/types.ts` Provider 接口 + 注册位（实现须走蓝图确认关卡）；健康灯 pending-source 不计入 overall
 - **定时任务**：默认关闭；`SPARKOS_SCHEDULE=1` 每日 brief 提醒；`SPARKOS_INTEL_SCHEDULE=1` 每小时 intel tick + 每日 09:30 融合；`SPARKOS_EDITORIAL_SCHEDULE=1` 周三/周六 20:00 生成待审批策划（均不自动外发）
 
@@ -50,6 +51,10 @@ sparkos_run {action:"intel", payload:{rank:true}}     # 每日 Top 5 / 上升榜
 sparkos_run {action:"intel", payload:{jobs:true}}     # SQLite 可恢复任务状态
 sparkos_run {action:"topics", payload:{editorial:"midweek"}} # 周三：最近4日编辑策划
 sparkos_run {action:"topics", payload:{editorial:"weekly"}}  # 周六：最近7日编辑策划
+sparkos_run {action:"draft", payload:{pending:true}}          # 领取已批准选题的结构化创作契约
+sparkos_run {action:"draft", payload:{submitPackage:<对象>}} # 提交四平台完整草稿并生成本地产物
+sparkos_run {action:"draft", payload:{packages:true}}        # 查看草稿包状态
+sparkos_run {action:"draft", payload:{revise:"<package-id>"}} # 为已驳回草稿创建 v2/v3 修订版
 sparkos_run {action:"brief"}    # 今日简报（daily_briefing + daily_data 摘要）
 sparkos_run {action:"topics"}   # 选题推荐（评分=新鲜度×连载×深度）
 sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
@@ -80,6 +85,9 @@ sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
 - `GET /sparkos/intel` 情报指挥所数据（只读）
 - `POST /sparkos/intel/tick` 手动一轮 ingest（不自动融合）
 - `POST /sparkos/editorial/decision` `{cardId,decision:approved|rejected,note?}` 处理编辑选题卡人工闸门
+- `GET /sparkos/creation/artifact?packageId=&file=` 安全预览公众号 HTML/Markdown/JSON 产物
+- `POST /sparkos/creation/decision` `{packageId,decision:approved|rejected,note?}` 处理完整草稿包人工闸门
+- `POST /sparkos/creation/revise` `{packageId}` 为已驳回草稿创建不可覆盖的下一修订版
 - `POST /sparkos/mutate` `{kind,id,action:adopt|ignore}` 决策落 VAULT state/
 - `GET /sparkos/draft?file=` 草稿全文（防穿越）
 - `GET /sparkos/writeback` 待写回清单；`POST /sparkos/writeback/remove {file}` 逐条移除；`POST /sparkos/writeback/clear` 清空
@@ -89,6 +97,7 @@ sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
 - 星火知识库对插件**只读**；写回仅经蒸馏审核 + 待写回清单人工复制
 - 系统建议只读（守卫⑤），任何采纳动作必须人工触发
 - intel 不自动外发；发布权/所有权归原 Owner
+- 配图在 M4 中是可执行的 asset manifest；图片文件生成与回填由后续视觉 Worker 完成，不伪造“已生成”状态
 
 ## 开发
 
@@ -96,7 +105,7 @@ sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
 
 ```bash
 npm run check   # tsc（tsconfig paths 依赖本地 DSH monorepo 源码，需按环境调整）
-npm test        # 守卫/VAULT/数据/intel/daily/HTTP/SQLite/排名/编辑策划测试（52 项，env 隔离 fixture）
+npm test        # 守卫/VAULT/数据/intel/daily/HTTP/SQLite/排名/策划/多平台草稿测试（55 项，env 隔离 fixture）
 npm run test:dom# 渲染 /tmp/sparkos-wb.html 并跑 Chrome DOM 断言
 npm run build   # esbuild host 半 + client 半（模板拷贝进 lib/）
 ```

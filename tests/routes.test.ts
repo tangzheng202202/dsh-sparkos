@@ -143,6 +143,44 @@ test('POST /sparkos/editorial/decision：选题卡人工批准落 SQLite 审批�
   await handleSparkosHttp(mockReq('POST', '/sparkos/editorial/decision', { cardId: plan.cards[0].id, decision: 'approved' }), ok.res)
   assert.equal(ok.out.status, 200)
   assert.equal(JSON.parse(ok.out.body).value.decision, 'approved')
+  const { buildFactorySnapshot, runDraftSubmission } = await import('../src/factory/service.ts')
+  const draftPackage = buildFactorySnapshot().drafts[0]
+  assert.equal(draftPackage.status, 'awaiting_generation', '批准选题后自动创建草稿任务')
+  const long = '这是经过证据约束的完整平台草稿内容，明确区分事实、推断与观点，并保留人工审核。'.repeat(30)
+  runDraftSubmission({
+    packageId: draftPackage.id, editorialAngle: '路由测试角度', keyMessage: '流程必须可审计', factBoundary: '长期影响仍待观察',
+    factClaims: [
+      { text: '事实已确认', kind: 'fact', evidenceUrls: ['https://official.example/route'] },
+      { text: '官方证据可回链', kind: 'fact', evidenceUrls: ['https://official.example/route'] },
+      { text: '长期影响待观察', kind: 'inference', evidenceUrls: [] },
+    ],
+    variants: {
+      wechat: { title: '路由测试完整稿', dek: '经过校验的摘要', blocks: [
+        { type: 'heading', level: 2, text: '结论' }, { type: 'paragraph', text: long },
+        { type: 'image', assetId: 'inline-one', caption: '流程图' }, { type: 'heading', level: 2, text: '边界' },
+        { type: 'paragraph', text: long }, { type: 'paragraph', text: long },
+      ] },
+      telegram: { title: 'Telegram 完整稿', body: long },
+      x: { posts: ['内容工厂需要证据链和人工审核。'] },
+      xiaohongshu: { title: '内容工厂测试', body: long, hashtags: ['AI', '内容创作', '工作流'] },
+    },
+    assets: [
+      { id: 'cover-one', kind: 'cover', prompt: '内容工厂封面', altText: '封面', aspectRatio: '2.35:1', placement: '封面' },
+      { id: 'inline-one', kind: 'inline', prompt: '流程图', altText: '流程', aspectRatio: '16:9', placement: '正文' },
+      { id: 'carousel-one', kind: 'carousel', prompt: '卡片图', altText: '卡片', aspectRatio: '3:4', placement: '小红书' },
+    ],
+  })
+  const preview = mockRes()
+  await handleSparkosHttp(mockReq('GET', `/sparkos/creation/artifact?packageId=${draftPackage.id}&file=wechat.html`), preview.res)
+  assert.equal(preview.out.status, 200)
+  assert.match(String(preview.out.body), /<!doctype html>/)
+  const approveDraft = mockRes()
+  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', { packageId: draftPackage.id, decision: 'approved' }), approveDraft.res)
+  assert.equal(approveDraft.out.status, 200)
+  assert.equal(JSON.parse(approveDraft.out.body).value.status, 'approved')
+  const invalidRevision = mockRes()
+  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/revise', { packageId: draftPackage.id }), invalidRevision.res)
+  assert.equal(invalidRevision.out.status, 422, 'only rejected packages can create revisions')
   const bad = mockRes()
   await handleSparkosHttp(mockReq('POST', '/sparkos/editorial/decision', { cardId: 'bad', decision: 'approved' }), bad.res)
   assert.equal(bad.out.status, 400)

@@ -5,6 +5,9 @@
  * GET  /sparkos/intel       → 情报指挥所数据端点（健康 + 最近 run + archive 计数）
  * POST /sparkos/intel/tick  → 手动触发一轮 ingest（不自动融合）
  * POST /sparkos/editorial/decision → 人工批准/驳回周三或周六选题卡
+ * GET  /sparkos/creation/artifact → 预览已校验的平台草稿产物
+ * POST /sparkos/creation/decision → 人工批准/驳回完整草稿包
+ * POST /sparkos/creation/revise → 为已驳回草稿包创建不可覆盖的修订版
  * POST /sparkos/mutate → { kind, id, action: adopt|ignore } 决策落 VAULT state/（不触碰星火库）
  * @module dsh-sparkos/src/server/routes
  */
@@ -101,6 +104,76 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
         respondJson(res, 200, { ok: true, value: card })
       } catch (error) {
         respondJson(res, 404, { ok: false, error: { code: 'not-found', message: error instanceof Error ? error.message : String(error) } })
+      }
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/creation/artifact') {
+      const packageId = url.searchParams.get('packageId') ?? ''
+      const file = url.searchParams.get('file') ?? ''
+      const { openFactoryDatabase } = await import('../storage/database.ts')
+      const { readDraftArtifact } = await import('../creation/drafts.ts')
+      const db = openFactoryDatabase()
+      try {
+        const artifact = readDraftArtifact(db, packageId, file)
+        if (!artifact) {
+          respondJson(res, 404, { ok: false, error: { code: 'not-found', message: 'draft artifact' } })
+          return
+        }
+        const contentType = artifact.format === 'html' ? 'text/html; charset=utf-8'
+          : artifact.format === 'json' ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8'
+        const headers: Record<string, string> = { 'content-type': contentType, 'x-content-type-options': 'nosniff' }
+        if (artifact.format === 'html') headers['content-security-policy'] = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+        res.writeHead(200, headers)
+        res.end(artifact.content)
+      } finally {
+        db.close()
+      }
+      return
+    }
+    if (req.method === 'POST' && path === '/sparkos/creation/decision') {
+      let body: Record<string, unknown>
+      try {
+        body = await readJsonBody(req)
+      } catch (error) {
+        if (error instanceof Error && (error as Error & { code?: string }).code === 'BODY_TOO_LARGE') {
+          respondJson(res, 413, { ok: false, error: { code: 'payload-too-large', message: '请求体超过 256KB 上限' } })
+          return
+        }
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
+        return
+      }
+      const packageId = typeof body.packageId === 'string' ? body.packageId : ''
+      const decision = body.decision
+      if (!/^dp-[a-f0-9]{16}$/.test(packageId) || (decision !== 'approved' && decision !== 'rejected')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'packageId 或 decision 不合法' } })
+        return
+      }
+      try {
+        const { reviewDraftPackage } = await import('../factory/service.ts')
+        const draftPackage = reviewDraftPackage(packageId, decision, typeof body.note === 'string' ? body.note : undefined)
+        respondJson(res, 200, { ok: true, value: draftPackage })
+      } catch (error) {
+        respondJson(res, 422, { ok: false, error: { code: 'invalid-state', message: error instanceof Error ? error.message : String(error) } })
+      }
+      return
+    }
+    if (req.method === 'POST' && path === '/sparkos/creation/revise') {
+      let body: Record<string, unknown>
+      try { body = await readJsonBody(req) } catch {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
+        return
+      }
+      const packageId = typeof body.packageId === 'string' ? body.packageId : ''
+      if (!/^dp-[a-f0-9]{16}$/.test(packageId)) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'packageId 不合法' } })
+        return
+      }
+      try {
+        const { requestDraftRevision } = await import('../factory/service.ts')
+        const result = requestDraftRevision(packageId)
+        respondJson(res, 200, { ok: true, value: result.package, created: result.created })
+      } catch (error) {
+        respondJson(res, 422, { ok: false, error: { code: 'invalid-state', message: error instanceof Error ? error.message : String(error) } })
       }
       return
     }

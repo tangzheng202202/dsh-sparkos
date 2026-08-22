@@ -9,6 +9,15 @@ import { generateDailyRanking, latestDailyRanking } from '../intel/ranking.ts'
 import type { DailyRanking } from '../intel/ranking.ts'
 import { decideEditorialCard, editorialInputFingerprint, generateEditorialPlan, latestEditorialPlan } from '../editorial/planner.ts'
 import type { EditorialDecision, EditorialMode, EditorialPlan } from '../editorial/planner.ts'
+import {
+  decideDraftPackage,
+  ensureDraftRequest,
+  listDraftPackageSummaries,
+  pendingDraftRequests,
+  reviseDraftRequest,
+  submitDraftPackage,
+} from '../creation/drafts.ts'
+import type { DraftSubmission } from '../creation/drafts.ts'
 
 function dateFromStamp(stamp: string): string {
   return stamp.slice(0, 4) + '-' + stamp.slice(4, 6) + '-' + stamp.slice(6, 8)
@@ -102,6 +111,7 @@ export function reviewEditorialCard(
   const db = openFactoryDatabase()
   try {
     const card = decideEditorialCard(db, cardId, decision, note)
+    if (decision === 'approved') ensureDraftRequest(db, cardId)
     const run = db.prepare(`
       SELECT r.id, r.status FROM editorial_runs r
       JOIN editorial_cards c ON c.run_id = r.id WHERE c.id = ?
@@ -120,11 +130,37 @@ export function reviewEditorialCard(
   }
 }
 
+export function requestDraftPackage(cardId: string): ReturnType<typeof ensureDraftRequest> {
+  const db = openFactoryDatabase()
+  try { return ensureDraftRequest(db, cardId) } finally { db.close() }
+}
+
+export function requestDraftRevision(packageId: string): ReturnType<typeof reviseDraftRequest> {
+  const db = openFactoryDatabase()
+  try { return reviseDraftRequest(db, packageId) } finally { db.close() }
+}
+
+export function listPendingDraftRequests(limit = 10): ReturnType<typeof pendingDraftRequests> {
+  const db = openFactoryDatabase()
+  try { return pendingDraftRequests(db, limit) } finally { db.close() }
+}
+
+export function runDraftSubmission(submission: DraftSubmission): ReturnType<typeof submitDraftPackage> {
+  const db = openFactoryDatabase()
+  try { return submitDraftPackage(db, submission) } finally { db.close() }
+}
+
+export function reviewDraftPackage(packageId: string, decision: 'approved' | 'rejected', note?: string): ReturnType<typeof decideDraftPackage> {
+  const db = openFactoryDatabase()
+  try { return decideDraftPackage(db, packageId, decision, note) } finally { db.close() }
+}
+
 export interface FactorySnapshot {
   database: ReturnType<typeof databaseHealth>
   jobs: ReturnType<typeof listJobs>
   ranking: DailyRanking | null
   editorial: EditorialPlan | null
+  drafts: ReturnType<typeof listDraftPackageSummaries>
 }
 
 export function buildFactorySnapshot(): FactorySnapshot {
@@ -136,6 +172,7 @@ export function buildFactorySnapshot(): FactorySnapshot {
       jobs: listJobs(db, 10),
       ranking: latestDailyRanking(db),
       editorial: latestEditorialPlan(db),
+      drafts: listDraftPackageSummaries(db, 10),
     }
   } finally {
     db.close()
