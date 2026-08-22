@@ -18,6 +18,7 @@ import {
   submitDraftPackage,
 } from '../creation/drafts.ts'
 import type { DraftSubmission } from '../creation/drafts.ts'
+import { visualStatus } from '../visual/service.ts'
 
 function dateFromStamp(stamp: string): string {
   return stamp.slice(0, 4) + '-' + stamp.slice(4, 6) + '-' + stamp.slice(6, 8)
@@ -161,6 +162,7 @@ export interface FactorySnapshot {
   ranking: DailyRanking | null
   editorial: EditorialPlan | null
   drafts: ReturnType<typeof listDraftPackageSummaries>
+  visual: ReturnType<typeof visualStatus>
 }
 
 export function buildFactorySnapshot(): FactorySnapshot {
@@ -173,6 +175,7 @@ export function buildFactorySnapshot(): FactorySnapshot {
       ranking: latestDailyRanking(db),
       editorial: latestEditorialPlan(db),
       drafts: listDraftPackageSummaries(db, 10),
+      visual: visualStatus(db),
     }
   } finally {
     db.close()

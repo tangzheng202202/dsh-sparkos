@@ -8,6 +8,9 @@
  * GET  /sparkos/creation/artifact → 预览已校验的平台草稿产物
  * POST /sparkos/creation/decision → 人工批准/驳回完整草稿包
  * POST /sparkos/creation/revise → 为已驳回草稿包创建不可覆盖的修订版
+ * POST /sparkos/visual/queue → 为 approved 草稿创建幂等视觉批次
+ * GET  /sparkos/visual/status → 只读视觉任务与 attempt 状态
+ * GET  /sparkos/visual/asset → 按数据库 attemptId 预览已验证的不可变图片
  * POST /sparkos/mutate → { kind, id, action: adopt|ignore } 决策落 VAULT state/（不触碰星火库）
  * @module dsh-sparkos/src/server/routes
  */
@@ -20,6 +23,8 @@ import { buildWorkbenchData, loadWritebackQueue, recordDecision, reviewDistill }
 import { buildIntelReport } from '../intel/report.ts'
 import { runIntelTick } from '../intel/tick.ts'
 import { listRuntimeDrafts, listVaultDrafts, readDraft } from '../daily.ts'
+import { openFactoryDatabase } from '../storage/database.ts'
+import { queueVisualBatch, readVisualAsset, visualStatus, VisualPipelineError } from '../visual/service.ts'
 
 
 /** 工作台模板：运行时读取（esbuild 打包时 build.mjs 会拷贝一份到 lib/）。 */
@@ -31,6 +36,13 @@ function respondJson(res: import('node:http').ServerResponse, status: number, bo
   const payload = JSON.stringify(body)
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
   res.end(payload)
+}
+
+function respondVisualError(res: import('node:http').ServerResponse, error: unknown): void {
+  const status = error instanceof VisualPipelineError ? error.httpStatus : 500
+  const code = error instanceof VisualPipelineError ? error.code : 'internal-error'
+  const message = error instanceof Error ? error.message : String(error)
+  respondJson(res, status, { ok: false, error: { code, message } })
 }
 
 /** 请求体上限 256KB（防内存滥用）。 */
@@ -78,6 +90,71 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       // 手动触发一轮 ingest + 健康 + run 留痕（不自动融合）
       const r = runIntelTick()
       respondJson(res, 200, { ok: r.ingest.ok && r.overall !== 'red', value: r.ingest })
+      return
+    }
+    if (req.method === 'POST' && path === '/sparkos/visual/queue') {
+      let body: Record<string, unknown>
+      try {
+        body = await readJsonBody(req)
+      } catch (error) {
+        if (error instanceof Error && (error as Error & { code?: string }).code === 'BODY_TOO_LARGE') {
+          respondJson(res, 413, { ok: false, error: { code: 'payload-too-large', message: '请求体超过 256KB 上限' } })
+          return
+        }
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
+        return
+      }
+      if (typeof body.packageId !== 'string' || Object.keys(body).some((key) => key !== 'packageId')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 packageId' } })
+        return
+      }
+      const db = openFactoryDatabase()
+      try {
+        const value = queueVisualBatch(db, body.packageId)
+        respondJson(res, value.created ? 201 : 200, { ok: true, value })
+      } catch (error) {
+        respondVisualError(res, error)
+      } finally {
+        db.close()
+      }
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/visual/status') {
+      const packageId = url.searchParams.get('packageId') ?? undefined
+      const db = openFactoryDatabase()
+      try {
+        respondJson(res, 200, { ok: true, value: visualStatus(db, packageId) })
+      } catch (error) {
+        respondVisualError(res, error)
+      } finally {
+        db.close()
+      }
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/visual/asset') {
+      const attemptId = url.searchParams.get('attemptId') ?? ''
+      if ([...url.searchParams.keys()].some((key) => key !== 'attemptId') || url.searchParams.getAll('attemptId').length !== 1) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许一个 attemptId 参数' } })
+        return
+      }
+      const db = openFactoryDatabase()
+      try {
+        const asset = readVisualAsset(db, attemptId)
+        if (asset === null) {
+          respondJson(res, 404, { ok: false, error: { code: 'not-found', message: '视觉资产不存在、未到预览状态或完整性校验失败' } })
+          return
+        }
+        res.writeHead(200, {
+          'content-type': asset.mediaType,
+          'content-length': String(asset.bytes),
+          'x-content-type-options': 'nosniff',
+          'cross-origin-resource-policy': 'same-origin',
+          'cache-control': 'private, no-store',
+        })
+        res.end(asset.content)
+      } finally {
+        db.close()
+      }
       return
     }
     if (req.method === 'POST' && path === '/sparkos/editorial/decision') {

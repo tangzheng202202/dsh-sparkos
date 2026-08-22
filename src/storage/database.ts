@@ -11,7 +11,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { envPath, VAULT_ROOT } from '../vault.ts'
 
-export const FACTORY_SCHEMA_VERSION = 3
+export const FACTORY_SCHEMA_VERSION = 4
 
 export function defaultFactoryDbPath(): string {
   return envPath('SPARKOS_DB_PATH', path.join(VAULT_ROOT, 'data', 'sparkos.db'))
@@ -219,6 +219,106 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
       ) STRICT;
       CREATE INDEX IF NOT EXISTS idx_draft_artifacts_package
         ON draft_artifacts(package_id, platform);
+    `,
+  },
+  {
+    version: 4,
+    sql: `
+      CREATE TABLE IF NOT EXISTS visual_batches (
+        id TEXT PRIMARY KEY,
+        package_id TEXT NOT NULL UNIQUE REFERENCES draft_packages(id),
+        revision INTEGER NOT NULL CHECK (revision >= 1),
+        source_assets_sha256 TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN (
+          'queued', 'generating', 'waiting_visual_approval', 'approved', 'rejected', 'failed'
+        )),
+        required_count INTEGER NOT NULL CHECK (required_count >= 1),
+        approved_count INTEGER NOT NULL DEFAULT 0 CHECK (approved_count >= 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_visual_batches_status
+        ON visual_batches(status, created_at);
+
+      CREATE TABLE IF NOT EXISTS visual_asset_tasks (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL REFERENCES visual_batches(id) ON DELETE CASCADE,
+        package_id TEXT NOT NULL REFERENCES draft_packages(id),
+        asset_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('cover', 'inline', 'carousel')),
+        placement TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        alt_text TEXT NOT NULL,
+        aspect_ratio TEXT NOT NULL CHECK (aspect_ratio IN ('2.35:1', '16:9', '3:4', '1:1')),
+        target_width INTEGER NOT NULL CHECK (target_width > 0),
+        target_height INTEGER NOT NULL CHECK (target_height > 0),
+        state TEXT NOT NULL CHECK (state IN (
+          'queued', 'generating', 'generated', 'waiting_visual_approval', 'retry', 'failed'
+        )),
+        idempotency_key TEXT NOT NULL UNIQUE,
+        current_attempt INTEGER NOT NULL DEFAULT 0 CHECK (current_attempt >= 0),
+        max_attempts INTEGER NOT NULL DEFAULT 3 CHECK (max_attempts >= 1),
+        lease_token_hash TEXT,
+        lease_expires_at TEXT,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(package_id, asset_id)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_visual_asset_tasks_claim
+        ON visual_asset_tasks(state, lease_expires_at, created_at);
+      CREATE INDEX IF NOT EXISTS idx_visual_asset_tasks_batch
+        ON visual_asset_tasks(batch_id, asset_id);
+
+      CREATE TABLE IF NOT EXISTS visual_asset_attempts (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES visual_asset_tasks(id) ON DELETE CASCADE,
+        job_id TEXT NOT NULL REFERENCES workflow_jobs(id),
+        attempt_no INTEGER NOT NULL CHECK (attempt_no >= 1),
+        source_attachment_id TEXT,
+        source_media_type TEXT,
+        source_bytes INTEGER CHECK (source_bytes IS NULL OR source_bytes >= 0),
+        source_width INTEGER CHECK (source_width IS NULL OR source_width > 0),
+        source_height INTEGER CHECK (source_height IS NULL OR source_height > 0),
+        provider TEXT,
+        model TEXT,
+        source_tool TEXT,
+        source_call_id TEXT,
+        prompt_original TEXT NOT NULL,
+        prompt_effective TEXT,
+        negative_prompt TEXT,
+        seed_requested INTEGER,
+        seed_effective INTEGER CHECK (seed_effective IS NULL OR seed_effective IN (0, 1)),
+        revised_prompt TEXT,
+        content_filter TEXT,
+        imported_relative_path TEXT,
+        imported_sha256 TEXT,
+        validation_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL CHECK (status IN (
+          'generating', 'generated', 'waiting_visual_approval', 'retry', 'failed'
+        )),
+        generated_at TEXT,
+        imported_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(task_id, attempt_no)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_visual_asset_attempts_task
+        ON visual_asset_attempts(task_id, attempt_no DESC);
+      CREATE INDEX IF NOT EXISTS idx_visual_asset_attempts_attachment
+        ON visual_asset_attempts(source_attachment_id);
+
+      CREATE TABLE IF NOT EXISTS visual_asset_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL REFERENCES visual_asset_tasks(id) ON DELETE CASCADE,
+        attempt_id TEXT REFERENCES visual_asset_attempts(id) ON DELETE SET NULL,
+        from_state TEXT,
+        to_state TEXT NOT NULL,
+        reason TEXT,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_visual_asset_events_task
+        ON visual_asset_events(task_id, id);
     `,
   },
 ]
