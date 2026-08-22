@@ -147,7 +147,7 @@ function artifactFromRow(row: ArtifactRow): DraftArtifact {
 }
 
 function packageFromRow(db: DatabaseSync, row: PackageRow): DraftPackage {
-  const artifacts = (db.prepare('SELECT * FROM draft_artifacts WHERE package_id = ? ORDER BY relative_path').all(row.id) as ArtifactRow[]).map(artifactFromRow)
+  const artifacts = (db.prepare('SELECT * FROM draft_artifacts WHERE package_id = ? ORDER BY relative_path').all(row.id) as unknown as ArtifactRow[]).map(artifactFromRow)
   return {
     id: row.id, cardId: row.card_id, revision: Number(row.revision), parentPackageId: row.parent_package_id,
     jobId: row.job_id, contractVersion: Number(row.contract_version), status: row.status,
@@ -253,7 +253,7 @@ export function reviseDraftRequest(db: DatabaseSync, rejectedPackageId: string, 
 
 export function listDraftPackages(db: DatabaseSync, limit = 20): DraftPackage[] {
   const safe = Math.max(1, Math.min(100, Math.trunc(limit)))
-  return (db.prepare(`SELECT * FROM draft_packages ORDER BY created_at DESC LIMIT ${safe}`).all() as PackageRow[]).map((row) => packageFromRow(db, row))
+  return (db.prepare(`SELECT * FROM draft_packages ORDER BY created_at DESC LIMIT ${safe}`).all() as unknown as PackageRow[]).map((row) => packageFromRow(db, row))
 }
 
 export function listDraftPackageSummaries(db: DatabaseSync, limit = 20): DraftPackageSummary[] {
@@ -278,7 +278,7 @@ export function pendingDraftRequests(db: DatabaseSync, limit = 10): CreationRequ
   return (db.prepare(`
     SELECT * FROM draft_packages WHERE status IN ('awaiting_generation', 'validation_failed')
     ORDER BY created_at LIMIT ${safe}
-  `).all() as PackageRow[]).map((row) => JSON.parse(row.request_json) as CreationRequest)
+  `).all() as unknown as PackageRow[]).map((row) => JSON.parse(row.request_json) as CreationRequest)
 }
 
 function textOfBlocks(blocks: WechatBlock[]): string {

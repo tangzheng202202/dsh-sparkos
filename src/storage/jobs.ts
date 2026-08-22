@@ -110,7 +110,7 @@ export function getJob(db: DatabaseSync, id: string): WorkflowJob | null {
 
 export function listJobs(db: DatabaseSync, limit = 20): WorkflowJob[] {
   const safeLimit = Math.max(1, Math.min(200, Math.trunc(limit)))
-  return (db.prepare(`SELECT * FROM workflow_jobs ORDER BY created_at DESC LIMIT ${safeLimit}`).all() as JobRow[]).map(fromRow)
+  return (db.prepare(`SELECT * FROM workflow_jobs ORDER BY created_at DESC LIMIT ${safeLimit}`).all() as unknown as JobRow[]).map(fromRow)
 }
 
 const ALLOWED: Record<JobStatus, ReadonlySet<JobStatus>> = {
@@ -228,7 +228,7 @@ export function recoverExpiredJobs(db: DatabaseSync, now = new Date()): { requeu
   const rows = db.prepare(`
     SELECT * FROM workflow_jobs
     WHERE status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?
-  `).all(now.toISOString()) as JobRow[]
+  `).all(now.toISOString()) as unknown as JobRow[]
   let requeued = 0
   let failed = 0
   for (const row of rows) {

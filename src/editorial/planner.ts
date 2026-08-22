@@ -188,7 +188,7 @@ function loadRows(db: DatabaseSync, start: string, end: string): HistoryRow[] {
       ON c.topic_key = r.topic_key AND c.observed_date = r.snapshot_date
     WHERE r.snapshot_date BETWEEN ? AND ?
     ORDER BY r.snapshot_date, r.rank
-  `).all(start, end) as HistoryRow[]
+  `).all(start, end) as unknown as HistoryRow[]
 }
 
 export function editorialInputFingerprint(db: DatabaseSync, mode: EditorialMode, periodEnd: string): string {
@@ -211,7 +211,7 @@ function cardFromRow(row: CardRow): EditorialCard {
 }
 
 function planFromRun(db: DatabaseSync, run: RunRow): EditorialPlan {
-  const cards = (db.prepare('SELECT * FROM editorial_cards WHERE run_id = ? ORDER BY rank').all(run.id) as CardRow[]).map(cardFromRow)
+  const cards = (db.prepare('SELECT * FROM editorial_cards WHERE run_id = ? ORDER BY rank').all(run.id) as unknown as CardRow[]).map(cardFromRow)
   return {
     id: run.id, mode: run.mode, periodStart: run.period_start, periodEnd: run.period_end,
     status: run.status, generatedAt: run.generated_at,
@@ -298,7 +298,7 @@ export function generateEditorialPlan(
     db.exec('ROLLBACK')
     throw error
   }
-  return planFromRun(db, db.prepare('SELECT * FROM editorial_runs WHERE id = ?').get(runId) as RunRow)
+  return planFromRun(db, db.prepare('SELECT * FROM editorial_runs WHERE id = ?').get(runId) as unknown as RunRow)
 }
 
 export function latestEditorialPlan(db: DatabaseSync, mode?: EditorialMode): EditorialPlan | null {
@@ -346,5 +346,5 @@ export function decideEditorialCard(
     db.exec('ROLLBACK')
     throw error
   }
-  return cardFromRow(db.prepare('SELECT * FROM editorial_cards WHERE id = ?').get(cardId) as CardRow)
+  return cardFromRow(db.prepare('SELECT * FROM editorial_cards WHERE id = ?').get(cardId) as unknown as CardRow)
 }

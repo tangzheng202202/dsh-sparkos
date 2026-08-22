@@ -295,7 +295,7 @@ function rowToRanked(row: RankRow): RankedTopic {
 export function latestDailyRanking(db: DatabaseSync): DailyRanking | null {
   const latest = db.prepare('SELECT MAX(snapshot_date) AS date FROM topic_rank_snapshots').get() as { date: string | null }
   if (!latest.date) return null
-  const rows = (db.prepare('SELECT * FROM topic_rank_snapshots WHERE snapshot_date = ? ORDER BY rank').all(latest.date) as RankRow[]).map(rowToRanked)
+  const rows = (db.prepare('SELECT * FROM topic_rank_snapshots WHERE snapshot_date = ? ORDER BY rank').all(latest.date) as unknown as RankRow[]).map(rowToRanked)
   return {
     date: latest.date,
     generatedAt: rows.length > 0
