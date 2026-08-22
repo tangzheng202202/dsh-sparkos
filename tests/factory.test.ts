@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test, after } from 'node:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -25,6 +25,26 @@ writeFileSync(path.join(clustersDir, 'clusters-20260822.json'), JSON.stringify([
 
 after(() => rmSync(root, { recursive: true, force: true }))
 
+function treeSnapshot(dir: string): Array<[string, 'dir' | 'file', number, number, string]> {
+  if (!existsSync(dir)) return []
+  const rows: Array<[string, 'dir' | 'file', number, number, string]> = []
+  const walk = (current: string): void => {
+    for (const name of readdirSync(current).sort()) {
+      const absolute = path.join(current, name)
+      const relative = path.relative(dir, absolute)
+      const stat = statSync(absolute)
+      if (stat.isDirectory()) {
+        rows.push([relative, 'dir', stat.size, stat.mtimeMs, ''])
+        walk(absolute)
+      } else {
+        rows.push([relative, 'file', stat.size, stat.mtimeMs, readFileSync(absolute).toString('base64')])
+      }
+    }
+  }
+  walk(dir)
+  return rows
+}
+
 test('factory service tracks ranking and editorial approval jobs idempotently', async () => {
   const { runLatestRanking, runEditorialPlanning, reviewEditorialCard, buildFactorySnapshot } = await import('../src/factory/service.ts')
   const first = runLatestRanking()
@@ -46,4 +66,33 @@ test('factory service tracks ranking and editorial approval jobs idempotently', 
   assert.equal(snapshot.drafts[0].status, 'awaiting_generation')
   assert.equal(snapshot.database.jobs.succeeded, 2)
   assert.equal(snapshot.database.jobs.queued, 1)
+})
+
+test('intel dryRun validates submitCluster and leaves every VAULT file, content and mtime unchanged', async () => {
+  const { registerRunTool } = await import('../src/tools/run.ts')
+  let execute: ((args: { action: string; dryRun: boolean; payload: Record<string, unknown> }) => Promise<{ text: string }>) | undefined
+  registerRunTool({
+    tools: {
+      register(definition: { execute: typeof execute }) {
+        execute = definition.execute
+        return () => undefined
+      },
+    },
+  } as never)
+  assert.ok(execute)
+  const cluster = JSON.parse(readFileSync(path.join(clustersDir, 'clusters-20260822.json'), 'utf8'))[0] as Record<string, unknown>
+  const before = treeSnapshot(vault)
+  const valid = await execute!({
+    action: 'intel',
+    dryRun: true,
+    payload: { fusion: true, analyze: true, clusters: true, submitCluster: cluster, rank: true, jobs: true, dispatch: true },
+  })
+  assert.match(valid.text, /未执行 runIntelTick/)
+  assert.match(valid.text, /实际执行时将运行/)
+  assert.match(valid.text, /submit-cluster 校验通过/)
+  assert.deepEqual(treeSnapshot(vault), before, '合法 submitCluster dryRun 必须零写入')
+
+  const invalid = await execute!({ action: 'intel', dryRun: true, payload: { submitCluster: {} } })
+  assert.match(invalid.text, /submit-cluster 校验失败/)
+  assert.deepEqual(treeSnapshot(vault), before, '非法 submitCluster dryRun 也必须零写入')
 })

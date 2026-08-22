@@ -48,7 +48,19 @@ if (fixtureRoot) {
 const { buildWorkbenchData } = await import('../src/server/data.ts')
 
 const out = process.argv[2] ?? '/tmp/sparkos-wb.html'
-const data = JSON.stringify(buildWorkbenchData()).replace(/</g, '\\u003c')
+const workbenchData = buildWorkbenchData()
+if (fixtureRoot) {
+  const shared = {
+    cardId: 'ec-1111111111111111', title: '审核意见渲染测试', validation: { errors: [] },
+    assetCount: 0, artifacts: [], createdAt: '2026-08-22T10:00:00Z', updatedAt: '2026-08-22T11:00:00Z',
+  }
+  workbenchData.factory.drafts = [
+    { ...shared, id: 'dp-1111111111111111', revision: 1, parentPackageId: null, status: 'rejected', reviewNote: '需要重写开头', parentReviewNote: null, decidedAt: '2026-08-22T11:00:00Z' },
+    { ...shared, id: 'dp-2222222222222222', revision: 2, parentPackageId: 'dp-1111111111111111', status: 'approved', reviewNote: null, parentReviewNote: '需要重写开头', decidedAt: '2026-08-22T12:00:00Z' },
+    { ...shared, id: 'dp-3333333333333333', revision: 3, parentPackageId: 'dp-2222222222222222', status: 'waiting_approval', reviewNote: null, parentReviewNote: null, decidedAt: null },
+  ]
+}
+const data = JSON.stringify(workbenchData).replace(/</g, '\\u003c')
 const template = readFileSync(fileURLToPath(new URL('../src/server/page.template.html', import.meta.url)), 'utf8')
 const html = template.replace('<script>', '<script>window._embeddedDailyData = ' + data + ';</script>\n<script>')
 writeFileSync(out, html)

@@ -144,13 +144,18 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       }
       const packageId = typeof body.packageId === 'string' ? body.packageId : ''
       const decision = body.decision
+      const note = typeof body.note === 'string' ? body.note.trim() : ''
       if (!/^dp-[a-f0-9]{16}$/.test(packageId) || (decision !== 'approved' && decision !== 'rejected')) {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'packageId 或 decision 不合法' } })
         return
       }
+      if (decision === 'rejected' && note === '') {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '驳回草稿必须填写审核意见' } })
+        return
+      }
       try {
         const { reviewDraftPackage } = await import('../factory/service.ts')
-        const draftPackage = reviewDraftPackage(packageId, decision, typeof body.note === 'string' ? body.note : undefined)
+        const draftPackage = reviewDraftPackage(packageId, decision, note || undefined)
         respondJson(res, 200, { ok: true, value: draftPackage })
       } catch (error) {
         respondJson(res, 422, { ok: false, error: { code: 'invalid-state', message: error instanceof Error ? error.message : String(error) } })

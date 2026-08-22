@@ -65,6 +65,8 @@ export interface CreationRequest {
   packageId: string
   revision: number
   parentPackageId: string | null
+  /** v2+ 修订上下文：父版本的人工驳回意见。 */
+  parentReviewNote: string | null
   contractVersion: number
   createdAt: string
   sourceCard: EditorialCard
@@ -96,6 +98,8 @@ export interface DraftPackage {
   validation: DraftValidation
   artifactDir: string | null
   artifacts: DraftArtifact[]
+  reviewNote: string | null
+  parentReviewNote: string | null
   createdAt: string
   updatedAt: string
   decidedAt: string | null
@@ -111,6 +115,8 @@ export interface DraftPackageSummary {
   validation: DraftValidation
   assetCount: number
   artifacts: DraftArtifact[]
+  reviewNote: string | null
+  parentReviewNote: string | null
   createdAt: string
   updatedAt: string
   decidedAt: string | null
@@ -148,13 +154,20 @@ function artifactFromRow(row: ArtifactRow): DraftArtifact {
 
 function packageFromRow(db: DatabaseSync, row: PackageRow): DraftPackage {
   const artifacts = (db.prepare('SELECT * FROM draft_artifacts WHERE package_id = ? ORDER BY relative_path').all(row.id) as unknown as ArtifactRow[]).map(artifactFromRow)
+  const request = JSON.parse(row.request_json) as CreationRequest
+  const review = db.prepare("SELECT note FROM approvals WHERE subject_kind='draft_package' AND subject_id=?").get(row.id) as { note: string | null } | undefined
+  const parentReview = row.parent_package_id
+    ? db.prepare("SELECT note FROM approvals WHERE subject_kind='draft_package' AND subject_id=?").get(row.parent_package_id) as { note: string | null } | undefined
+    : undefined
+  const parentReviewNote = parentReview?.note ?? request.parentReviewNote ?? null
   return {
     id: row.id, cardId: row.card_id, revision: Number(row.revision), parentPackageId: row.parent_package_id,
     jobId: row.job_id, contractVersion: Number(row.contract_version), status: row.status,
-    request: JSON.parse(row.request_json) as CreationRequest,
+    request: { ...request, parentReviewNote },
     submission: row.submission_json ? JSON.parse(row.submission_json) as DraftSubmission : null,
     validation: JSON.parse(row.validation_json) as DraftValidation,
-    artifactDir: row.artifact_dir, artifacts, createdAt: row.created_at, updatedAt: row.updated_at, decidedAt: row.decided_at,
+    artifactDir: row.artifact_dir, artifacts, reviewNote: review?.note ?? null, parentReviewNote,
+    createdAt: row.created_at, updatedAt: row.updated_at, decidedAt: row.decided_at,
   }
 }
 
@@ -167,16 +180,18 @@ function emptyValidation(): DraftValidation {
   return { ok: false, errors: [], warnings: [], stats: { wechatChars: 0, telegramChars: 0, xPosts: 0, xiaohongshuChars: 0, assets: 0, facts: 0 } }
 }
 
-function creationRequest(packageId: string, revision: number, parentPackageId: string | null, card: EditorialCard, now: string): CreationRequest {
+function creationRequest(packageId: string, revision: number, parentPackageId: string | null, parentReviewNote: string | null, card: EditorialCard, now: string): CreationRequest {
   return {
     packageId,
     revision,
     parentPackageId,
+    parentReviewNote,
     contractVersion: CREATION_CONTRACT_VERSION,
     createdAt: now,
     sourceCard: card,
     requiredPlatforms: ['wechat', 'telegram', 'x', 'xiaohongshu'],
     instructions: [
+      ...(parentReviewNote ? ['这是修订版，必须逐条回应父版本驳回意见：' + parentReviewNote] : []),
       '只使用 sourceCard 中的事实与证据；不得把推断写成已确认事实。',
       '围绕 coreThesis 保持统一观点，但按四个平台的阅读习惯重新组织，不做机械截断。',
       '微信公众号必须提交结构化 blocks，由系统渲染安全 HTML；至少包含封面和两处正文配图任务。',
@@ -206,11 +221,11 @@ function creationRequest(packageId: string, revision: number, parentPackageId: s
   }
 }
 
-function createDraftRequest(db: DatabaseSync, card: EditorialCard, revision: number, parentPackageId: string | null, now: Date): DraftPackage {
+function createDraftRequest(db: DatabaseSync, card: EditorialCard, revision: number, parentPackageId: string | null, parentReviewNote: string | null, now: Date): DraftPackage {
   const fingerprint = createHash('sha256').update(JSON.stringify({ version: CREATION_CONTRACT_VERSION, revision, card })).digest('hex').slice(0, 16)
   const at = now.toISOString()
   const id = 'dp-' + createHash('sha256').update(`${card.id}:${fingerprint}`).digest('hex').slice(0, 16)
-  const request = creationRequest(id, revision, parentPackageId, card, at)
+  const request = creationRequest(id, revision, parentPackageId, parentReviewNote, card, at)
   db.exec('BEGIN IMMEDIATE')
   try {
     const job = createJob(db, {
@@ -237,7 +252,7 @@ export function ensureDraftRequest(db: DatabaseSync, cardId: string, now = new D
   if (card.decision !== 'approved') throw new Error('只有已批准选题卡可以进入创作：' + cardId)
   const existing = db.prepare('SELECT * FROM draft_packages WHERE card_id = ? ORDER BY revision DESC LIMIT 1').get(cardId) as PackageRow | undefined
   if (existing) return { package: packageFromRow(db, existing), created: false }
-  return { package: createDraftRequest(db, card, 1, null, now), created: true }
+  return { package: createDraftRequest(db, card, 1, null, null, now), created: true }
 }
 
 export function reviseDraftRequest(db: DatabaseSync, rejectedPackageId: string, now = new Date()): { package: DraftPackage; created: boolean } {
@@ -248,7 +263,7 @@ export function reviseDraftRequest(db: DatabaseSync, rejectedPackageId: string, 
   if (existing) return { package: packageFromRow(db, existing), created: false }
   const card = editorialCardById(db, rejected.cardId)
   if (!card || card.decision !== 'approved') throw new Error('来源选题卡未批准或不存在')
-  return { package: createDraftRequest(db, card, rejected.revision + 1, rejected.id, now), created: true }
+  return { package: createDraftRequest(db, card, rejected.revision + 1, rejected.id, rejected.reviewNote, now), created: true }
 }
 
 export function listDraftPackages(db: DatabaseSync, limit = 20): DraftPackage[] {
@@ -267,6 +282,8 @@ export function listDraftPackageSummaries(db: DatabaseSync, limit = 20): DraftPa
     validation: draftPackage.validation,
     assetCount: draftPackage.submission?.assets.length ?? 0,
     artifacts: draftPackage.artifacts,
+    reviewNote: draftPackage.reviewNote,
+    parentReviewNote: draftPackage.parentReviewNote,
     createdAt: draftPackage.createdAt,
     updatedAt: draftPackage.updatedAt,
     decidedAt: draftPackage.decidedAt,
@@ -490,12 +507,14 @@ export function decideDraftPackage(db: DatabaseSync, packageId: string, decision
   const current = packageById(db, packageId)
   if (!current) throw new Error('草稿包不存在：' + packageId)
   if (current.status !== 'waiting_approval') throw new Error('草稿包不在待审状态：' + current.status)
+  const normalizedNote = note?.trim() || null
+  if (decision === 'rejected' && normalizedNote === null) throw new Error('驳回草稿必须填写审核意见')
   const at = now.toISOString()
   db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare('UPDATE draft_packages SET status=?, decided_at=?, updated_at=? WHERE id=?').run(decision, at, at, packageId)
     db.prepare(`UPDATE approvals SET decision=?, note=?, decided_at=? WHERE subject_kind='draft_package' AND subject_id=?`)
-      .run(decision, note ?? null, at, packageId)
+      .run(decision, normalizedNote, at, packageId)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')

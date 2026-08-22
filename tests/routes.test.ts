@@ -123,6 +123,23 @@ test('写回清单端点：GET 列表 / POST remove 单条移除', async () => {
   assert.equal(JSON.parse(rres.out.body).value.length, 0)
 })
 
+test('POST /sparkos/creation/decision：驳回必须携带非空 note，批准不强制', async () => {
+  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const packageId = 'dp-0000000000000000'
+  for (const body of [
+    { packageId, decision: 'rejected' },
+    { packageId, decision: 'rejected', note: '   ' },
+  ]) {
+    const rejected = mockRes()
+    await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', body), rejected.res)
+    assert.equal(rejected.out.status, 400)
+    assert.match(JSON.parse(rejected.out.body).error.message, /必须填写审核意见/)
+  }
+  const approved = mockRes()
+  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', { packageId, decision: 'approved' }), approved.res)
+  assert.equal(approved.out.status, 422, '批准无 note 应通过 HTTP 参数校验并进入业务状态检查')
+})
+
 test('POST /sparkos/editorial/decision：选题卡人工批准落 SQLite 审批闸门', async () => {
   const { openFactoryDatabase } = await import('../src/storage/database.ts')
   const { generateDailyRanking } = await import('../src/intel/ranking.ts')
@@ -174,13 +191,17 @@ test('POST /sparkos/editorial/decision：选题卡人工批准落 SQLite 审批�
   await handleSparkosHttp(mockReq('GET', `/sparkos/creation/artifact?packageId=${draftPackage.id}&file=wechat.html`), preview.res)
   assert.equal(preview.out.status, 200)
   assert.match(String(preview.out.body), /<!doctype html>/)
-  const approveDraft = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', { packageId: draftPackage.id, decision: 'approved' }), approveDraft.res)
-  assert.equal(approveDraft.out.status, 200)
-  assert.equal(JSON.parse(approveDraft.out.body).value.status, 'approved')
-  const invalidRevision = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/revise', { packageId: draftPackage.id }), invalidRevision.res)
-  assert.equal(invalidRevision.out.status, 422, 'only rejected packages can create revisions')
+  const rejectDraft = mockRes()
+  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', { packageId: draftPackage.id, decision: 'rejected', note: '请重写开头' }), rejectDraft.res)
+  assert.equal(rejectDraft.out.status, 200)
+  assert.equal(JSON.parse(rejectDraft.out.body).value.status, 'rejected')
+  assert.equal(JSON.parse(rejectDraft.out.body).value.reviewNote, '请重写开头')
+  const rejectedSnapshot = buildFactorySnapshot().drafts.find((item) => item.id === draftPackage.id)!
+  assert.equal(rejectedSnapshot.reviewNote, '请重写开头')
+  const revision = mockRes()
+  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/revise', { packageId: draftPackage.id }), revision.res)
+  assert.equal(revision.out.status, 200)
+  assert.equal(JSON.parse(revision.out.body).value.parentReviewNote, '请重写开头')
   const bad = mockRes()
   await handleSparkosHttp(mockReq('POST', '/sparkos/editorial/decision', { cardId: 'bad', decision: 'approved' }), bad.res)
   assert.equal(bad.out.status, 400)

@@ -268,19 +268,23 @@ function renderCreation(){
   el.innerHTML=ps.map(function(p){
     var title=p.title||p.id;
     var artifacts=(p.artifacts||[]).map(function(a){var file=a.relativePath.split("/").pop();return "<a class=\"leg\" target=\"_blank\" rel=\"noopener\" href=\"/sparkos/creation/artifact?packageId="+encodeURIComponent(p.id)+"&file="+encodeURIComponent(file)+"\">"+esc(file)+"</a>";}).join("");
-    var acts=p.status==="waiting_approval"?"<button class=\"btn adopt\" data-draft-decision=\"approved\" data-package=\""+esc(p.id)+"\">✓ 批准草稿</button><button class=\"btn ignore\" data-draft-decision=\"rejected\" data-package=\""+esc(p.id)+"\">✗ 驳回</button>":p.status==="rejected"?"<button class=\"btn adopt\" data-draft-revise=\""+esc(p.id)+"\">↻ 创建修订版</button>":"";
+    var acts=p.status==="waiting_approval"?"<button class=\"btn adopt\" data-draft-decision=\"approved\" data-package=\""+esc(p.id)+"\">✓ 批准草稿</button><button class=\"btn ignore\" data-draft-decision=\"rejected\" data-package=\""+esc(p.id)+"\">✗ 驳回草稿</button>":p.status==="rejected"?"<button class=\"btn adopt\" data-draft-revise=\""+esc(p.id)+"\">↻ 创建修订版</button>":"";
     var errs=p.validation&&p.validation.errors&&p.validation.errors.length?"<div class=\"dim\" style=\"color:#C24B33;margin-top:5px\">校验："+esc(p.validation.errors.join("；"))+"</div>":"";
+    var notes=(p.reviewNote?"<div class=\"dim\" style=\"color:#C24B33;margin-top:5px\">"+(p.status==="rejected"?"驳回意见：":"审核意见：")+esc(p.reviewNote)+"</div>":"")+(p.parentReviewNote?"<div class=\"dim\" style=\"color:#A97B2F;margin-top:5px\">父版本驳回意见："+esc(p.parentReviewNote)+"</div>":"");
     return "<div style=\"padding:12px 0;border-bottom:1px solid var(--border)\"><div><b>"+esc(title)+"</b><span class=\"badge\">v"+esc(p.revision||1)+"</span><span class=\"badge\">"+esc(statusName[p.status]||p.status)+"</span><span class=\"dim\">"+esc(p.id)+"</span></div>"+
-      "<div class=\"dim\" style=\"margin:5px 0\">公众号 / Telegram / X / 小红书 · 产物 "+(p.artifacts||[]).length+" · 配图任务 "+(p.assetCount||0)+"</div>"+errs+
+      "<div class=\"dim\" style=\"margin:5px 0\">公众号 / Telegram / X / 小红书 · 产物 "+(p.artifacts||[]).length+" · 配图任务 "+(p.assetCount||0)+"</div>"+errs+notes+
       (artifacts?"<div class=\"legend\" style=\"margin:7px 0\">"+artifacts+"</div>":"")+acts+"</div>";
   }).join("");
-  el.querySelectorAll("[data-draft-decision]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;btn.textContent="处理中…";try{
-    var r=await fetch("/sparkos/creation/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.package,decision:btn.dataset.draftDecision})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
-    var item=ps.find(function(x){return x.id===btn.dataset.package;});if(item)item.status=j.value.status;renderCreation();
+  el.querySelectorAll("[data-draft-decision]").forEach(function(btn){btn.onclick=async function(){var note;var decision=btn.dataset.draftDecision;if(decision==="rejected"){
+    var input=window.prompt("请输入驳回草稿的审核意见（必填）");if(input===null||!input.trim())return;note=input.trim();
+  }btn.disabled=true;btn.textContent="处理中…";try{
+    var body={packageId:btn.dataset.package,decision:decision};if(note)body.note=note;
+    var r=await fetch("/sparkos/creation/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
+    var item=ps.find(function(x){return x.id===btn.dataset.package;});if(item){item.status=j.value.status;item.reviewNote=j.value.reviewNote;item.parentReviewNote=j.value.parentReviewNote;item.decidedAt=j.value.decidedAt;}renderCreation();
   }catch(e){btn.disabled=false;btn.textContent="重试";}};});
   el.querySelectorAll("[data-draft-revise]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;btn.textContent="创建中…";try{
     var r=await fetch("/sparkos/creation/revise",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.draftRevise})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
-    ps.unshift({id:j.value.id,cardId:j.value.cardId,revision:j.value.revision,parentPackageId:j.value.parentPackageId,status:j.value.status,title:j.value.request&&j.value.request.sourceCard?j.value.request.sourceCard.title:j.value.id,validation:j.value.validation,assetCount:0,artifacts:[],createdAt:j.value.createdAt,updatedAt:j.value.updatedAt,decidedAt:null});renderCreation();
+    ps.unshift({id:j.value.id,cardId:j.value.cardId,revision:j.value.revision,parentPackageId:j.value.parentPackageId,status:j.value.status,title:j.value.request&&j.value.request.sourceCard?j.value.request.sourceCard.title:j.value.id,validation:j.value.validation,assetCount:0,artifacts:[],reviewNote:j.value.reviewNote,parentReviewNote:j.value.parentReviewNote,createdAt:j.value.createdAt,updatedAt:j.value.updatedAt,decidedAt:null});renderCreation();
   }catch(e){btn.disabled=false;btn.textContent="重试";}};});
 }
 renderCreation();
@@ -380,7 +384,7 @@ renderSources();
 // ---- publish：发布表现汇总 ----
 function renderPublish(){
   var perf=D.perf||{files:0,totalPosts:0,platforms:[]};var el=document.getElementById("publishBody");
-  if(!perf.platforms.length){el.innerHTML="<div class=\"empty\">暂无发布表现数据（perf/*.json）· 格式参考 perf/example.json · 可用 sparkos_run publish 查看</div>";return;}
+  if(!perf.platforms.length){el.innerHTML="<div class=\"empty\">暂无真实发布表现数据（已排除 example/sample 示例）· 可用 sparkos_run publish 查看</div>";return;}
   el.innerHTML="<div class=\"dim\" style=\"margin-bottom:8px\">数据文件 "+perf.files+" 个 · 共 "+perf.totalPosts+" 篇</div>"+
     "<table><thead><tr><th>平台</th><th>篇数</th><th>总阅读</th><th>平均阅读</th><th>最近发布</th></tr></thead><tbody>"+
     perf.platforms.map(function(p){return "<tr><td>"+esc(p.platform)+"</td><td>"+p.posts+"</td><td>"+p.totalReads+"</td><td>"+p.avgReads+"</td><td>"+esc(p.last||"—")+"</td></tr>";}).join("")+"</tbody></table>";

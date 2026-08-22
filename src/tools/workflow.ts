@@ -167,7 +167,7 @@ export function cmdSources(payload: Record<string, unknown>): string[] {
 export function cmdPublish(payload: Record<string, unknown>): string[] {
   const perf = listPerf()
   if (perf.files === 0 || perf.totalPosts === 0) {
-    return ['暂无发布表现数据（perf/*.json 缺失或为空）——不阻塞简报，P1 自动降级。', '格式参考：perf/example.json（platform/posts[].read_count 等）。']
+    return ['暂无真实发布表现数据（perf/*.json 缺失、为空或仅含示例）——不阻塞简报，P1 自动降级。', '格式参考：perf/example.json（示例文件不会计入统计）。']
   }
   const out = ['===== 发布表现（' + perf.files + ' 个数据文件 · ' + perf.totalPosts + ' 篇） =====']
   for (const p of perf.platforms) {

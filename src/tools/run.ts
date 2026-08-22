@@ -45,6 +45,30 @@ interface RunArgs {
   dryRun?: boolean
 }
 
+async function previewIntelDryRun(payload: Record<string, unknown>): Promise<{ text: string }> {
+  const actions = ['runIntelTick（ingest / health / run 日志）']
+  if (payload.fusion === true) actions.push('生成当日 fusion JSON/Markdown')
+  if (payload.analyze === true) actions.push('生成情报簇 analyze 请求')
+  if (payload.clusters === true) actions.push('读取最新情报簇')
+  if (payload.submitCluster !== undefined) actions.push('保存情报簇并刷新排名')
+  if (payload.rank === true) actions.push('刷新每日排名与创作候选')
+  if (payload.jobs === true) actions.push('读取工厂任务快照')
+  if (payload.dispatch === true) actions.push('生成 dispatch preferences.json')
+
+  const lines = [
+    '[dryRun] intel 零写入预览；未执行 runIntelTick，未打开 SQLite，未读写 VAULT。',
+    '实际执行时将运行：',
+    ...actions.map((action) => '  - ' + action),
+  ]
+  if (payload.submitCluster !== undefined) {
+    const { validateCluster } = await import('../intel/cluster.ts')
+    const errors = validateCluster(payload.submitCluster as never)
+    if (errors.length > 0) lines.push('submit-cluster 校验失败：' + errors.join('；'))
+    else lines.push('submit-cluster 校验通过；dryRun 未保存情报簇、未刷新排名。')
+  }
+  return { text: lines.join('\n') }
+}
+
 export function registerRunTool(ctx: Context): void {
   ctx.tools.register(defineTool({
     name: 'sparkos_run',
@@ -65,8 +89,9 @@ export function registerRunTool(ctx: Context): void {
         return { text: '未知子命令：' + args.action + '\n' + usage() }
       }
       const dryRun = args.dryRun === true
-      const vault = initVault()
       const payload = args.payload ?? {}
+      if (args.action === 'intel' && dryRun) return previewIntelDryRun(payload)
+      const vault = initVault()
 
       // brief：提供整份 daily_data 时走五守卫（dryRun=只校验；payload.commit=true 才入库）
       if (args.action === 'brief' && payload.daily !== undefined) {

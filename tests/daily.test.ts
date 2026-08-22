@@ -3,7 +3,7 @@
  */
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -66,6 +66,56 @@ test('perf：平台聚合（篇数/总阅读/平均/最近）', async () => {
   assert.equal(p.platforms[0].totalReads, 1200)
   assert.equal(p.platforms[0].avgReads, 1200)
   assert.equal(p.platforms[0].last, '2026-08-19')
+})
+
+test('perf：example/sample 类文件名自动排除', async () => {
+  const daily = await import('../src/daily.ts')
+  const examples = ['example.json', 'wechat-sample.json', 'EXAMPLE-x.json', 'wechatSampleData.json']
+  try {
+    for (const file of examples) writeFileSync(join(perf, file), JSON.stringify({ platform: file, posts: [{ read_count: 999999 }] }))
+    const p = daily.listPerf()
+    assert.equal(p.files, 1)
+    assert.equal(p.totalPosts, 1)
+    assert.equal(p.platforms[0].platform, 'wechat')
+    assert.equal(p.platforms[0].totalReads, 1200)
+  } finally {
+    for (const file of examples) unlinkSync(join(perf, file))
+  }
+})
+
+test('perf：顶层 _comment 含示例/example/sample 时排除', async () => {
+  const daily = await import('../src/daily.ts')
+  const examples = [
+    ['comment-cn.json', '这是示例数据'],
+    ['comment-en.json', 'Example dataset'],
+    ['comment-sample.json', 'sample only'],
+  ] as const
+  try {
+    for (const [file, _comment] of examples) writeFileSync(join(perf, file), JSON.stringify({ _comment, platform: file, posts: [{ read_count: 888888 }] }))
+    const p = daily.listPerf()
+    assert.equal(p.files, 1)
+    assert.equal(p.totalPosts, 1)
+    assert.equal(p.platforms[0].totalReads, 1200)
+  } finally {
+    for (const [file] of examples) unlinkSync(join(perf, file))
+  }
+})
+
+test('perf：混合目录只统计真实文件', async () => {
+  const daily = await import('../src/daily.ts')
+  const extra = ['sample.json', 'fake-comment.json', 'telegram.json']
+  try {
+    writeFileSync(join(perf, extra[0]), JSON.stringify({ platform: 'sample', posts: [{ read_count: 1000000 }] }))
+    writeFileSync(join(perf, extra[1]), JSON.stringify({ _comment: 'example payload', platform: 'fake', posts: [{ read_count: 1000000 }] }))
+    writeFileSync(join(perf, extra[2]), JSON.stringify({ platform: 'telegram', posts: [{ published_at: '2026-08-20', read_count: 300 }] }))
+    const p = daily.listPerf()
+    assert.equal(p.files, 2)
+    assert.equal(p.totalPosts, 2)
+    assert.deepEqual(p.platforms.map((item) => item.platform).sort(), ['telegram', 'wechat'])
+    assert.equal(p.platforms.reduce((sum, item) => sum + item.totalReads, 0), 1500)
+  } finally {
+    for (const file of extra) unlinkSync(join(perf, file))
+  }
 })
 
 test('distill 队列：runtime+vault 合并；findDistillEntry 双目录查找', async () => {

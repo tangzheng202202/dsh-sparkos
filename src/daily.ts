@@ -103,6 +103,7 @@ export interface PerfPost {
 }
 
 export interface PerfFile {
+  _comment?: string
   platform?: string
   exported_at?: string
   posts?: PerfPost[]
@@ -227,13 +228,24 @@ export function readDraft(absPath: string): string | null {
 
 // ---- perf（发布表现） ----
 
+function isExamplePerfFilename(file: string): boolean {
+  const stem = path.basename(file, '.json')
+  return /(example|sample)/i.test(stem)
+}
+
+function isExamplePerfFile(file: PerfFile): boolean {
+  return typeof file._comment === 'string' && /(示例|example|sample)/i.test(file._comment)
+}
+
 export function listPerf(): PerfSummary {
-  const files = listBy(PERF_DIR, /\.json$/)
+  const files = listBy(PERF_DIR, /\.json$/).filter((file) => !isExamplePerfFilename(file))
+  const realFiles: string[] = []
   const byPlatform = new Map<string, { posts: number; totalReads: number; last: string }>()
   let totalPosts = 0
   for (const p of files) {
     const f = jsonIf<PerfFile>(p)
-    if (!f) continue
+    if (!f || isExamplePerfFile(f)) continue
+    realFiles.push(p)
     const posts = Array.isArray(f.posts) ? f.posts : []
     const platform = f.platform ?? path.basename(p, '.json')
     const acc = byPlatform.get(platform) ?? { posts: 0, totalReads: 0, last: '' }
@@ -246,7 +258,7 @@ export function listPerf(): PerfSummary {
     byPlatform.set(platform, acc)
   }
   return {
-    files: files.length,
+    files: realFiles.length,
     totalPosts,
     platforms: [...byPlatform.entries()]
       .map(([platform, acc]) => ({
