@@ -11,7 +11,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { envPath, VAULT_ROOT } from '../vault.ts'
 
-export const FACTORY_SCHEMA_VERSION = 1
+export const FACTORY_SCHEMA_VERSION = 2
 
 export function defaultFactoryDbPath(): string {
   return envPath('SPARKOS_DB_PATH', path.join(VAULT_ROOT, 'data', 'sparkos.db'))
@@ -127,6 +127,54 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
         decided_at TEXT,
         UNIQUE(subject_kind, subject_id)
       ) STRICT;
+    `,
+  },
+  {
+    version: 2,
+    sql: `
+      CREATE TABLE IF NOT EXISTS editorial_runs (
+        id TEXT PRIMARY KEY,
+        mode TEXT NOT NULL CHECK (mode IN ('midweek', 'weekly')),
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        input_fingerprint TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending_approval', 'approved', 'archived')),
+        generated_at TEXT NOT NULL,
+        summary_json TEXT NOT NULL DEFAULT '{}',
+        UNIQUE(mode, period_end, input_fingerprint)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_editorial_runs_latest
+        ON editorial_runs(period_end DESC, generated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS editorial_cards (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL REFERENCES editorial_runs(id) ON DELETE CASCADE,
+        rank INTEGER NOT NULL CHECK (rank >= 1),
+        topic_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        trend_pattern TEXT NOT NULL CHECK (trend_pattern IN (
+          'persistent', 'accelerating', 'resurfacing', 'reversal', 'structural', 'emerging'
+        )),
+        core_thesis TEXT NOT NULL,
+        why_now TEXT NOT NULL,
+        facts_json TEXT NOT NULL DEFAULT '[]',
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        counter_arguments_json TEXT NOT NULL DEFAULT '[]',
+        knowledge_cards_json TEXT NOT NULL DEFAULT '[]',
+        platforms_json TEXT NOT NULL DEFAULT '[]',
+        content_format TEXT NOT NULL,
+        risks_json TEXT NOT NULL DEFAULT '[]',
+        verification_grade TEXT NOT NULL CHECK (verification_grade IN ('A', 'B')),
+        expected_value REAL NOT NULL,
+        decision TEXT NOT NULL DEFAULT 'pending' CHECK (decision IN ('pending', 'approved', 'rejected')),
+        created_at TEXT NOT NULL,
+        decided_at TEXT,
+        UNIQUE(run_id, topic_key)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_editorial_cards_run
+        ON editorial_cards(run_id, rank);
+      CREATE INDEX IF NOT EXISTS idx_editorial_cards_decision
+        ON editorial_cards(decision, created_at DESC);
     `,
   },
 ]

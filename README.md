@@ -6,7 +6,7 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 
 - **sparkos_run 工具（8 子命令全部实装）**：
   - `brief` 今日简报：读最新 `daily_briefing_*.md` + `daily_data_*.json` 全文；`payload.daily` 提供整份 daily_data 时走五守卫（`payload.commit=true` 才入库）
-  - `topics` 选题推荐：当日 must_reads 按新鲜度排序 + 主线名 + 补充角度；`payload.top=N` 取 Top N
+  - `topics` 选题推荐：当日 must_reads；`payload.editorial=midweek|weekly` 基于排名历史生成周三/周六可审批选题卡
   - `draft` 草稿：列出 runtime（daily_brief/drafts）+ VAULT（drafts）草稿；`payload.get=<文件名>` 读全文
   - `distill` 蒸馏审核：runtime + vault 合并队列 + 审核状态（采纳/驳回在工作台操作）
   - `sources` 信息源：`config/info_sources.json` 注册表（只读）+ intel 健康快照
@@ -23,8 +23,9 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 - **数据与代码分离**：VAULT 默认 `~/DeepSeek harness/sparkos/`；每日产物从运行时根（默认 `contentos-x`）只读接入；首次启动幂等迁移并落 MANIFEST
 - **内容工厂状态底座（M1）**：Node 内置 SQLite 保存任务状态、Worker 租约/重试、情报簇与排名历史；原始情报和内容产物仍保留为 VAULT 文件
 - **情报排名（M2）**：情报簇提交后自动生成每日 Top 5、上升榜、连续霸榜和可创作候选；评分分项可解释，只有证据等级 A/B 可进入创作
+- **编辑策划（M3）**：周三看 4 日窗口、周六看 7 日窗口，识别连续霸榜/加速上升/二次升温/事实反转/结构议题，最多生成 5 张带证据、核心判断、反方与风险的选题卡；全部必须人工批准后才结束工作流
 - **intel 信源扩展位**：`src/intel/types.ts` Provider 接口 + 注册位（实现须走蓝图确认关卡）；健康灯 pending-source 不计入 overall
-- **定时任务**：默认关闭；`SPARKOS_SCHEDULE=1` 每日 brief 提醒；`SPARKOS_INTEL_SCHEDULE=1` 每小时 intel tick + 每日 09:30 融合（不自动外发）
+- **定时任务**：默认关闭；`SPARKOS_SCHEDULE=1` 每日 brief 提醒；`SPARKOS_INTEL_SCHEDULE=1` 每小时 intel tick + 每日 09:30 融合；`SPARKOS_EDITORIAL_SCHEDULE=1` 周三/周六 20:00 生成待审批策划（均不自动外发）
 
 ## 安装（DSH profile）
 
@@ -47,6 +48,8 @@ sparkos_run {action:"intel", payload:{analyze:true}}  # 生成情报簇骨架（
 sparkos_run {action:"intel", payload:{submitCluster:<簇>}}  # agent 分析后校验写回
 sparkos_run {action:"intel", payload:{rank:true}}     # 每日 Top 5 / 上升榜 / 连续霸榜
 sparkos_run {action:"intel", payload:{jobs:true}}     # SQLite 可恢复任务状态
+sparkos_run {action:"topics", payload:{editorial:"midweek"}} # 周三：最近4日编辑策划
+sparkos_run {action:"topics", payload:{editorial:"weekly"}}  # 周六：最近7日编辑策划
 sparkos_run {action:"brief"}    # 今日简报（daily_briefing + daily_data 摘要）
 sparkos_run {action:"topics"}   # 选题推荐（评分=新鲜度×连载×深度）
 sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
@@ -60,6 +63,7 @@ sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
 |---|---|---|
 | `SPARKOS_VAULT_ROOT` | `~/DeepSeek harness/sparkos` | 插件数据区（决策/intel/守卫账本） |
 | `SPARKOS_DB_PATH` | `$SPARKOS_VAULT_ROOT/data/sparkos.db` | 内容工厂 SQLite 状态库 |
+| `SPARKOS_EDITORIAL_SCHEDULE` | `0` | `1` 时按本地时区周三/周六 20:00 生成待人工审批选题卡 |
 | `SPARKOS_CONTENTOS_ROOT` | `~/cow/projects/contentos-x` | 每日工作流运行时根（只读） |
 | `SPARKOS_DAILY_BRIEF_DIR` | `$CONTENTOS_ROOT/daily_brief` | daily_data / daily_briefing / drafts |
 | `SPARKOS_PERF_DIR` | `$CONTENTOS_ROOT/perf` | 发布表现 JSON |
@@ -75,6 +79,7 @@ sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
 - `GET /sparkos/data` 工作台数据 JSON（含每日产物/intel/待写回）
 - `GET /sparkos/intel` 情报指挥所数据（只读）
 - `POST /sparkos/intel/tick` 手动一轮 ingest（不自动融合）
+- `POST /sparkos/editorial/decision` `{cardId,decision:approved|rejected,note?}` 处理编辑选题卡人工闸门
 - `POST /sparkos/mutate` `{kind,id,action:adopt|ignore}` 决策落 VAULT state/
 - `GET /sparkos/draft?file=` 草稿全文（防穿越）
 - `GET /sparkos/writeback` 待写回清单；`POST /sparkos/writeback/remove {file}` 逐条移除；`POST /sparkos/writeback/clear` 清空
@@ -91,7 +96,7 @@ sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
 
 ```bash
 npm run check   # tsc（tsconfig paths 依赖本地 DSH monorepo 源码，需按环境调整）
-npm test        # 守卫/VAULT/数据/intel/daily/HTTP/SQLite/排名 双向测试（46 项，env 隔离 fixture）
+npm test        # 守卫/VAULT/数据/intel/daily/HTTP/SQLite/排名/编辑策划测试（52 项，env 隔离 fixture）
 npm run test:dom# 渲染 /tmp/sparkos-wb.html 并跑 Chrome DOM 断言
 npm run build   # esbuild host 半 + client 半（模板拷贝进 lib/）
 ```

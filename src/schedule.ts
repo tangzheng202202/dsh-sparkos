@@ -3,6 +3,7 @@
  * - SPARKOS_SCHEDULE=1：每日节奏提醒（P2 原样保留）
  * - SPARKOS_INTEL_SCHEDULE=1：每小时 intel tick（快照 ingest + 健康计算 + run 留痕）
  *   并默认在每天 09:30（本地）自动做一次 fusion（可设 SPARKOS_FUSION_SCHEDULE=0 关闭）。
+ * - SPARKOS_EDITORIAL_SCHEDULE=1：周三/周六 20:00 生成编辑策划，等待人工审批。
  * 不自动外发；dispatch 仅手动触发。
  * @module dsh-sparkos/src/schedule
  */
@@ -16,6 +17,12 @@ import { fromIngest, writeRun, pruneRuns } from './intel/runs.ts'
 import { computeHealth } from './intel/health.ts'
 import { initOpsIntel } from './intel/report.ts'
 import { fuseDaily } from './intel/fusion.ts'
+import { runEditorialPlanning } from './factory/service.ts'
+
+export function editorialScheduleDue(now = new Date()): 'midweek' | 'weekly' | null {
+  if (now.getHours() !== 20) return null
+  return now.getDay() === 3 ? 'midweek' : now.getDay() === 6 ? 'weekly' : null
+}
 
 function intelTick(): void {
   const cfg = defaultIntelConfig()
@@ -118,5 +125,36 @@ export function registerSchedule(ctx: Context): void {
       ctx.effect(() => () => clearTimeout(fusionTimer))
       ctx.logger('sparkos').info(`daily fusion schedule enabled (next ${next.toISOString()})`)
     }
+  }
+
+  if (process.env.SPARKOS_EDITORIAL_SCHEDULE === '1') {
+    let lastRunKey = ''
+    const tick = () => {
+      const now = new Date()
+      const mode = editorialScheduleDue(now)
+      if (!mode) return
+      const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
+      const key = mode + ':' + date
+      if (key === lastRunKey) return
+      lastRunKey = key
+      mkdirSync(join(VAULT_ROOT, 'system'), { recursive: true })
+      try {
+        const result = runEditorialPlanning(mode, date)
+        appendFileSync(
+          join(VAULT_ROOT, 'system', 'schedule.log'),
+          `[${now.toISOString()}] editorial ${mode} ok cards=${result.plan.cards.length} job=${result.jobId}${result.reused ? ' reused' : ''} waiting-approval\n`,
+        )
+      } catch (error) {
+        appendFileSync(
+          join(VAULT_ROOT, 'system', 'schedule.log'),
+          `[${now.toISOString()}] editorial ${mode} FAIL ${error instanceof Error ? error.message : String(error)}\n`,
+        )
+      }
+    }
+    tick()
+    const timer = setInterval(tick, 30 * 60 * 1000)
+    timer.unref?.()
+    ctx.effect(() => () => clearInterval(timer))
+    ctx.logger('sparkos').info('editorial schedule enabled (Wednesday/Saturday 20:00 local, human approval required)')
   }
 }

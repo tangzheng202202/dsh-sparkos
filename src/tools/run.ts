@@ -27,7 +27,7 @@ export function usage(): string {
     'sparkos_run — SparkOS 自媒体工作台入口',
     '子命令：' + SUBCOMMANDS.join(' / '),
     '  brief    今日简报（读最新 daily_briefing + daily_data；payload.daily 时走五守卫，commit=true 入库）',
-    '  topics   选题推荐（当日 must_reads 按新鲜度排序；payload.top=N 取 Top N）',
+    '  topics   选题推荐；payload.editorial=midweek|weekly 生成周三/周六 5 张可审批选题卡',
     '  draft    草稿列表（payload.get=<文件名> 读全文）',
     '  distill  蒸馏审核队列（runtime+vault 合并 + 审核状态）',
     '  sources  信息源（info_sources.json + intel 健康快照）',
@@ -87,6 +87,29 @@ export function registerRunTool(ctx: Context): void {
       }
 
       if (args.action === 'brief') return { text: cmdBrief(payload).join('\n') }
+      if (args.action === 'topics' && (payload.editorial === 'midweek' || payload.editorial === 'weekly')) {
+        if (dryRun) return { text: `[dryRun] editorial.${payload.editorial} 参数校验通过，未生成选题卡。` }
+        const { runEditorialPlanning } = await import('../factory/service.ts')
+        try {
+          const result = runEditorialPlanning(payload.editorial, typeof payload.date === 'string' ? payload.date : undefined)
+          const p = result.plan
+          const lines = [
+            `editorial ${p.mode}: ${p.periodStart}..${p.periodEnd} · ${p.cards.length} 张选题卡 · ${p.status}（job=${result.jobId}${result.reused ? ' · 幂等复用' : ''}）`,
+            '  ' + p.summary.note,
+          ]
+          for (const card of p.cards) {
+            lines.push(`  #${card.rank} [${card.verificationGrade}/${card.trendPattern}] 价值=${card.expectedValue.toFixed(1)} ${card.title}`)
+            lines.push('    判断：' + card.coreThesis)
+            lines.push('    时机：' + card.whyNow)
+            if (card.counterArguments.length > 0) lines.push('    反方：' + card.counterArguments.join('；'))
+            if (card.risks.length > 0) lines.push('    风险：' + card.risks.join('；'))
+          }
+          lines.push('  下一步：在工作台人工批准/驳回；未批准不得进入草稿生成。')
+          return { text: lines.join('\n') }
+        } catch (error) {
+          return { text: 'editorial FAIL: ' + (error instanceof Error ? error.message : String(error)) }
+        }
+      }
       if (args.action === 'topics') return { text: cmdTopics(payload).join('\n') }
       if (args.action === 'draft') return { text: cmdDraft(payload).join('\n') }
       if (args.action === 'distill') return { text: cmdDistill(payload).join('\n') }

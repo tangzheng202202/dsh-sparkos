@@ -25,15 +25,21 @@ writeFileSync(path.join(clustersDir, 'clusters-20260822.json'), JSON.stringify([
 
 after(() => rmSync(root, { recursive: true, force: true }))
 
-test('factory service runs a tracked ranking job and reuses identical input', async () => {
-  const { runLatestRanking, buildFactorySnapshot } = await import('../src/factory/service.ts')
+test('factory service tracks ranking and editorial approval jobs idempotently', async () => {
+  const { runLatestRanking, runEditorialPlanning, reviewEditorialCard, buildFactorySnapshot } = await import('../src/factory/service.ts')
   const first = runLatestRanking()
   assert.equal(first.reused, false)
   assert.equal(first.ranking.top5[0].topic, '内容工厂集成测试')
   const second = runLatestRanking()
   assert.equal(second.reused, true)
   assert.equal(second.jobId, first.jobId)
+  const editorial = runEditorialPlanning('weekly', '2026-08-22')
+  assert.equal(editorial.plan.cards.length, 1)
+  assert.equal(editorial.plan.status, 'pending_approval')
+  assert.equal(runEditorialPlanning('weekly', '2026-08-22').reused, true)
+  reviewEditorialCard(editorial.plan.cards[0].id, 'approved')
   const snapshot = buildFactorySnapshot()
+  assert.equal(snapshot.editorial?.status, 'approved')
   assert.equal(snapshot.jobs[0].status, 'succeeded')
-  assert.equal(snapshot.database.jobs.succeeded, 1)
+  assert.equal(snapshot.database.jobs.succeeded, 2)
 })

@@ -4,6 +4,7 @@
  * GET  /sparkos/data        → 工作台数据 JSON（含 intel 报告）
  * GET  /sparkos/intel       → 情报指挥所数据端点（健康 + 最近 run + archive 计数）
  * POST /sparkos/intel/tick  → 手动触发一轮 ingest（不自动融合）
+ * POST /sparkos/editorial/decision → 人工批准/驳回周三或周六选题卡
  * POST /sparkos/mutate → { kind, id, action: adopt|ignore } 决策落 VAULT state/（不触碰星火库）
  * @module dsh-sparkos/src/server/routes
  */
@@ -74,6 +75,33 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       // 手动触发一轮 ingest + 健康 + run 留痕（不自动融合）
       const r = runIntelTick()
       respondJson(res, 200, { ok: r.ingest.ok && r.overall !== 'red', value: r.ingest })
+      return
+    }
+    if (req.method === 'POST' && path === '/sparkos/editorial/decision') {
+      let body: Record<string, unknown>
+      try {
+        body = await readJsonBody(req)
+      } catch (error) {
+        if (error instanceof Error && (error as Error & { code?: string }).code === 'BODY_TOO_LARGE') {
+          respondJson(res, 413, { ok: false, error: { code: 'payload-too-large', message: '请求体超过 256KB 上限' } })
+          return
+        }
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
+        return
+      }
+      const cardId = typeof body.cardId === 'string' ? body.cardId : ''
+      const decision = body.decision
+      if (!/^ec-[a-f0-9]{16}$/.test(cardId) || (decision !== 'approved' && decision !== 'rejected')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'cardId 或 decision 不合法' } })
+        return
+      }
+      try {
+        const { reviewEditorialCard } = await import('../factory/service.ts')
+        const card = reviewEditorialCard(cardId, decision, typeof body.note === 'string' ? body.note : undefined)
+        respondJson(res, 200, { ok: true, value: card })
+      } catch (error) {
+        respondJson(res, 404, { ok: false, error: { code: 'not-found', message: error instanceof Error ? error.message : String(error) } })
+      }
       return
     }
     if (req.method === 'GET' && path === '/sparkos/writeback') {

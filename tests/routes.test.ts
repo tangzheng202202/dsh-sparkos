@@ -123,6 +123,31 @@ test('写回清单端点：GET 列表 / POST remove 单条移除', async () => {
   assert.equal(JSON.parse(rres.out.body).value.length, 0)
 })
 
+test('POST /sparkos/editorial/decision：选题卡人工批准落 SQLite 审批闸门', async () => {
+  const { openFactoryDatabase } = await import('../src/storage/database.ts')
+  const { generateDailyRanking } = await import('../src/intel/ranking.ts')
+  const { generateEditorialPlan } = await import('../src/editorial/planner.ts')
+  const db = openFactoryDatabase()
+  generateDailyRanking(db, [{
+    clusterId: 'c-20260822-001', topicKey: 't-route-editorial', date: '20260822', topic: '路由测试选题',
+    coreFacts: ['事实已确认'], heat: 'high', novelty: 'high', sourceCount: 1,
+    evidenceUrls: ['https://official.example/route'], evidence: [{ url: 'https://official.example/route', sourceType: 'official', verified: true }],
+    knowledgeCards: ['obs://route'], credibility: 'high', risks: [], platforms: ['wechat'], angleSuggestions: ['测试角度'],
+    eventKeys: ['route-1', 'route-2'], judgment: { confirmedFacts: ['事实已确认'], inferences: [], editorialView: '测试判断', counterArguments: ['反方'], uncertainties: [] },
+  }], '2026-08-22')
+  const plan = generateEditorialPlan(db, 'weekly', '2026-08-22')
+  db.close()
+
+  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const ok = mockRes()
+  await handleSparkosHttp(mockReq('POST', '/sparkos/editorial/decision', { cardId: plan.cards[0].id, decision: 'approved' }), ok.res)
+  assert.equal(ok.out.status, 200)
+  assert.equal(JSON.parse(ok.out.body).value.decision, 'approved')
+  const bad = mockRes()
+  await handleSparkosHttp(mockReq('POST', '/sparkos/editorial/decision', { cardId: 'bad', decision: 'approved' }), bad.res)
+  assert.equal(bad.out.status, 400)
+})
+
 test('404：未知路径返回 not-found', async () => {
   const { handleSparkosHttp } = await import('../src/server/routes.ts')
   const res = mockRes()
