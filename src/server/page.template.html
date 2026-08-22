@@ -92,6 +92,7 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
 </div>
 
 <div id="tab-intel" class="tab hidden">
+  <div class="section-card"><div class="section-title">🔥 每日 Top 5 · 上升榜 · 连续霸榜</div><div id="rankingBody"></div></div>
   <div class="section-card"><div class="section-title">🧩 情报簇（规则骨架 + 模型分析 · sparkos_run intel analyze/submitCluster）</div><div id="clustersBody"></div></div>
   <div class="section-card"><div class="section-title">🗺️ 情报源健康（只读接入 · 异常标红）</div><div id="intelHealthBody"></div></div>
   <div class="section-card"><div class="section-title">📦 archive 计数与最近 run</div><div id="intelCountsBody"></div></div>
@@ -113,7 +114,7 @@ function lineColor(id){var P=["#E8563D","#F5A95C","#7FA8C9","#7FA88A","#B58BC9",
 // ---- header / stats / nav ----
 document.getElementById("subtitle").textContent = "数据注入 " + D.generatedAt + " · VAULT " + D.vaultRoot;
 var mrCount = (D.daily && D.daily.data && D.daily.data.must_reads || []).length;
-var stats = [["主线", D.lines.length],["知识卡", D.timeline.cards.length],["事件", D.events],["今日必读", mrCount],["草稿", D.runtimeDrafts.length],["蒸馏待审", D.distillQueue.length],["待写回", D.writebackQueue.length],["情报簇", D.clusters?D.clusters.items.length:0]];
+var stats = [["主线", D.lines.length],["知识卡", D.timeline.cards.length],["事件", D.events],["今日必读", mrCount],["草稿", D.runtimeDrafts.length],["蒸馏待审", D.distillQueue.length],["情报Top5", D.factory&&D.factory.ranking?D.factory.ranking.top5.length:0],["情报簇", D.clusters?D.clusters.items.length:0]];
 document.getElementById("stats").innerHTML = stats.map(function(s){return "<div class=\"stat-card\"><div class=\"stat-label\">"+s[0]+"</div><div class=\"stat-value\">"+s[1]+"</div></div>";}).join("");
 
 var nav = document.getElementById("nav");
@@ -388,6 +389,35 @@ function renderClusters(){
   }).join("");
 }
 renderClusters();
+
+// ---- explainable daily ranking ----
+function renderRanking(){
+  var el=document.getElementById("rankingBody");
+  var factory=D.factory||{database:{schemaVersion:0,jobs:{}},jobs:[],ranking:null};
+  var r=factory.ranking;
+  if(!r){
+    el.innerHTML="<div class=\"empty\">尚无排名快照 · 情报簇分析完成后执行 sparkos_run {action:\"intel\",payload:{rank:true}}</div>"+
+      "<div class=\"dim\">SQLite schema v"+esc(factory.database.schemaVersion||0)+" · 可恢复任务 "+(factory.jobs||[]).length+" 项</div>";
+    return;
+  }
+  var gradeClass={A:"badge-green",B:"badge-green",C:"badge-amber",D:"badge-red"};
+  var rows=(r.top5||[]).map(function(t){
+    return "<tr><td>#"+t.rank+"</td><td><b>"+esc(t.topic)+"</b><div class=\"dim\">"+esc(t.topicKey)+"</div></td>"+
+      "<td>"+t.heatScore.toFixed(1)+"</td><td>"+t.velocityScore.toFixed(1)+"</td>"+
+      "<td><span class=\"badge "+gradeClass[t.verificationGrade]+"\">"+esc(t.verificationGrade)+"</span></td>"+
+      "<td>"+t.consecutiveTopDays+"天</td><td>"+(t.eligibleForCreation?"✅ 可创作":"⛔ 待核验")+"</td></tr>";
+  }).join("");
+  var persistent=(r.persistent||[]).map(function(t){return "<span class=\"leg\">🏆 "+esc(t.topic)+" · "+t.consecutiveTopDays+"天</span>";}).join("")||"<span class=\"dim\">暂无连续霸榜</span>";
+  var rising=(r.rising||[]).slice(0,5).map(function(t){return esc(t.topic)+"("+t.velocityScore.toFixed(0)+")";}).join(" · ");
+  var creation=(r.creationCandidates||[]).map(function(t){return esc(t.topic)+" ["+esc(t.verificationGrade)+"]";}).join(" · ")||"暂无（仅证据等级 A/B 可进入创作）";
+  var jobCounts=Object.keys(factory.database.jobs||{}).map(function(k){return k+"="+factory.database.jobs[k];}).join(" · ")||"暂无任务";
+  el.innerHTML="<div class=\"dim\" style=\"margin-bottom:8px\">"+esc(r.date)+" · SQLite schema v"+esc(factory.database.schemaVersion)+" · "+esc(jobCounts)+" · 评分可解释、同日幂等</div>"+
+    "<table><thead><tr><th>排名</th><th>话题</th><th>热度</th><th>增速</th><th>证据</th><th>连榜</th><th>创作闸门</th></tr></thead><tbody>"+rows+"</tbody></table>"+
+    "<div class=\"section-title\" style=\"margin-top:12px\">连续霸榜</div><div class=\"legend\">"+persistent+"</div>"+
+    "<div class=\"dim\" style=\"margin-top:10px\">上升最快："+rising+"</div>"+
+    "<div class=\"dim\" style=\"margin-top:6px\">可进入创作："+creation+"</div>";
+}
+renderRanking();
 </script>
 </body>
 </html>

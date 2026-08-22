@@ -16,7 +16,7 @@ async function run() {
     bundle: true,
     platform: 'node',
     format: 'esm',
-    target: 'node20',
+    target: 'node22',
     packages: 'external',
     loader: { '.html': 'text' },
     sourcemap: false,

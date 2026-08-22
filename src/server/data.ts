@@ -27,6 +27,8 @@ import {
   runtimeEventsCount,
 } from '../daily.ts'
 import type { DailyData, DistillEntry, DraftFile, InfoSources, PerfSummary } from '../daily.ts'
+import { buildFactorySnapshot } from '../factory/service.ts'
+import type { FactorySnapshot } from '../factory/service.ts'
 
 function readJsonIf<T>(file: string, fallback: T): T {
   try {
@@ -74,6 +76,8 @@ export interface WorkbenchData {
   dispatch: DispatchPreferences | null
   /** 最新情报簇（模型分析产物）。 */
   clusters: { date: string | null; items: IntelCluster[] }
+  /** SQLite factory state + explainable daily ranking. */
+  factory: FactorySnapshot
 }
 
 /** 蒸馏条目（合并队列）。 */
@@ -194,6 +198,7 @@ export function buildWorkbenchData(): WorkbenchData {
     fusion: latestFusion(),
     dispatch: latestDispatch(),
     clusters: (() => { const lc = latestClusters(defaultIntelConfig()); return lc ? { date: lc.date, items: lc.clusters } : { date: null, items: [] } })(),
+    factory: buildFactorySnapshot(),
     dailyCycle: buildDailyCycle(),
   }
 }

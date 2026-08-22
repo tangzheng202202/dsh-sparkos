@@ -15,8 +15,30 @@ import type { FusionItem } from './fusion.ts'
 
 export type Level = 'low' | 'medium' | 'high'
 
+export type EvidenceGrade = 'A' | 'B' | 'C' | 'D'
+
+export interface ClusterEvidence {
+  url: string
+  claim?: string
+  sourceType?: 'primary' | 'official' | 'research' | 'media' | 'social' | 'unknown'
+  /** Syndicated copies must share a group so they only count as one source. */
+  independenceGroup?: string
+  verified?: boolean
+  contradicts?: boolean
+}
+
+export interface IntelJudgment {
+  confirmedFacts: string[]
+  inferences: string[]
+  editorialView: string
+  counterArguments: string[]
+  uncertainties: string[]
+}
+
 export interface IntelCluster {
   clusterId: string
+  /** Stable cross-day topic identity. Agents may keep this key when a topic is renamed. */
+  topicKey?: string
   date: string
   /** 主题（模型填，骨架为空）。 */
   topic: string
@@ -25,11 +47,16 @@ export interface IntelCluster {
   novelty: Level
   sourceCount: number
   evidenceUrls: string[]
+  evidence?: ClusterEvidence[]
   knowledgeCards: string[]
   credibility: Level
   risks: string[]
   platforms: string[]
   angleSuggestions: string[]
+  judgment?: IntelJudgment
+  /** Optional agent overrides (0-100); deterministic fallbacks are used when absent. */
+  sourceAuthorityScore?: number
+  audienceFitScore?: number
   /** 回链 fusion eventKey。 */
   eventKeys: string[]
   /** 分析模型/来源标记（agent 提交时可带）。 */
@@ -99,6 +126,20 @@ export function validateCluster(c: Partial<IntelCluster>): string[] {
   for (const k of ['coreFacts', 'evidenceUrls', 'knowledgeCards', 'risks', 'platforms', 'angleSuggestions'] as const) {
     if (c[k] !== undefined && !Array.isArray(c[k])) errs.push(k + ' 必须是数组')
   }
+  if (c.topicKey !== undefined && !/^t-[a-z0-9][a-z0-9._-]{2,80}$/i.test(c.topicKey)) errs.push('topicKey 必须形如 t-<稳定主题键>')
+  if (c.evidence !== undefined && !Array.isArray(c.evidence)) errs.push('evidence 必须是数组')
+  for (const k of ['sourceAuthorityScore', 'audienceFitScore'] as const) {
+    if (c[k] !== undefined && (typeof c[k] !== 'number' || c[k]! < 0 || c[k]! > 100)) errs.push(k + ' 必须是 0-100')
+  }
+  if (c.judgment !== undefined) {
+    if (typeof c.judgment !== 'object' || c.judgment === null) errs.push('judgment 必须是对象')
+    else {
+      for (const k of ['confirmedFacts', 'inferences', 'counterArguments', 'uncertainties'] as const) {
+        if (!Array.isArray(c.judgment[k])) errs.push('judgment.' + k + ' 必须是数组')
+      }
+      if (typeof c.judgment.editorialView !== 'string') errs.push('judgment.editorialView 必须是字符串')
+    }
+  }
   return errs
 }
 
@@ -152,6 +193,16 @@ export function writeAnalyzeRequest(cfg: IntelConfig, skeletons: IntelCluster[],
   const existing = new Map(loadClusters(cfg, date).map((c) => [c.clusterId, c]))
   const pending = skeletons.filter((s) => !existing.has(s.clusterId))
   const f = path.join(dir, 'analyze-' + stamp + '.json')
-  writeFileSync(f, JSON.stringify({ date: stamp, generatedAt: new Date().toISOString(), pending }, null, 2) + '\n')
+  writeFileSync(f, JSON.stringify({
+    date: stamp,
+    generatedAt: new Date().toISOString(),
+    instructions: {
+      topicKey: '跨日同一话题必须复用稳定 topicKey（t-...），即使标题变化',
+      evidence: '逐条填写 claim/url/sourceType/independenceGroup/verified/contradicts；转载同稿共用 independenceGroup',
+      judgment: '严格分开 confirmedFacts、inferences、editorialView、counterArguments、uncertainties',
+      creationGate: '只有证据等级 A（官方/第一方）或 B（至少两个独立可靠来源）可进入创作',
+    },
+    pending,
+  }, null, 2) + '\n')
   return { file: f, pending: pending.length }
 }

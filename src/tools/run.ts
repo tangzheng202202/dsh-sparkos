@@ -33,7 +33,7 @@ export function usage(): string {
     '  sources  信息源（info_sources.json + intel 健康快照）',
     '  publish  发布表现（perf/*.json 汇总，缺失降级）',
     '  advise   系统建议（只读，守卫⑤）',
-    '  intel    情报指挥所（ingest/health；payload.fusion=true 融合；payload.analyze=true 生成情报簇待分析骨架；payload.clusters=true 列出；payload.submitCluster=<簇对象> 校验写回；payload.dispatch=true 生成选题建议）',
+    '  intel    情报指挥所（ingest/health；fusion 融合；analyze/submitCluster 情报簇；rank 每日Top5/连续榜；jobs 任务状态；dispatch 生成建议）',
     '参数：action(string, 可选) 子命令；payload(object, 可选)；dryRun(bool) 只校验不落盘',
     'VAULT：' + VAULT_ROOT,
   ].join('\n')
@@ -116,7 +116,7 @@ export function registerRunTool(ctx: Context): void {
           const skeletons = buildClusterSkeletons(f2.items, f2.dupGroups)
           const r = writeAnalyzeRequest(cfg, skeletons)
           lines.push('analyze: 生成 ' + skeletons.length + ' 个情报簇骨架（' + r.pending + ' 待模型分析 → analyze-' + f2.date + '.json）')
-          if (r.pending > 0) lines.push('  待补字段：topic/coreFacts/novelty/knowledgeCards/credibility/risks/platforms/angleSuggestions')
+          if (r.pending > 0) lines.push('  待补字段：topic/topicKey/coreFacts/evidence/judgment/novelty/knowledgeCards/credibility/risks/platforms/angleSuggestions')
         }
         if (payload.clusters === true) {
           const { latestClusters } = await import('../intel/cluster.ts')
@@ -137,7 +137,34 @@ export function registerRunTool(ctx: Context): void {
           else {
             const r = saveClusters(cfg, [c as never], new Date())
             lines.push('submit-cluster OK: ' + c.clusterId + ' → ' + r.file.split('/').pop() + '（共 ' + r.total + ' 簇）')
+            try {
+              const { runLatestRanking } = await import('../factory/service.ts')
+              const ranked = runLatestRanking()
+              lines.push('  自动刷新排名：Top ' + ranked.ranking.top5.length + ' · 连续霸榜 ' + ranked.ranking.persistent.length + ' · 可创作 ' + ranked.ranking.creationCandidates.length)
+            } catch (error) {
+              lines.push('  排名刷新待后续重试：' + (error instanceof Error ? error.message : String(error)))
+            }
           }
+        }
+        if (payload.rank === true) {
+          const { runLatestRanking } = await import('../factory/service.ts')
+          try {
+            const result = runLatestRanking()
+            lines.push('rank: ' + result.ranking.date + ' Top ' + result.ranking.top5.length + '（job=' + result.jobId + (result.reused ? ' · 幂等复用' : '') + '）')
+            for (const item of result.ranking.top5) {
+              lines.push('  #' + item.rank + ' [' + item.verificationGrade + '] 热度=' + item.heatScore.toFixed(1) + ' 连榜=' + item.consecutiveTopDays + '天 ' + item.topic)
+            }
+            if (result.ranking.persistent.length > 0) lines.push('  连续霸榜：' + result.ranking.persistent.map((item) => item.topic).join(' / '))
+            lines.push('  可进入创作（仅A/B证据）：' + result.ranking.creationCandidates.length + ' 个')
+          } catch (error) {
+            lines.push('rank FAIL: ' + (error instanceof Error ? error.message : String(error)))
+          }
+        }
+        if (payload.jobs === true) {
+          const { buildFactorySnapshot } = await import('../factory/service.ts')
+          const snapshot = buildFactorySnapshot()
+          lines.push('jobs: schema=' + snapshot.database.schemaVersion + ' 最近 ' + snapshot.jobs.length + ' 项')
+          for (const job of snapshot.jobs) lines.push('  - ' + job.kind + ' [' + job.status + '] attempts=' + job.attempts + '/' + job.maxAttempts + ' id=' + job.id)
         }
         if (payload.dispatch === true) {
           const { generateDispatch } = await import('../intel/dispatch.ts')

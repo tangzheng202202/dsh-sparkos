@@ -21,6 +21,8 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
   - 情报指挥所 tab 展示融合事实清单（疑似重复主题 🔁 标记）与下发建议（只读，发布权归原 Owner）
   - **内容循环提醒**：每日 09:30 融合完成后写 `system/daily_cycle.json`，工作台简报 tab 显示「📣 内容循环待跑」；今日 daily_data 产出后自动变「✅ 已产出」
 - **数据与代码分离**：VAULT 默认 `~/DeepSeek harness/sparkos/`；每日产物从运行时根（默认 `contentos-x`）只读接入；首次启动幂等迁移并落 MANIFEST
+- **内容工厂状态底座（M1）**：Node 内置 SQLite 保存任务状态、Worker 租约/重试、情报簇与排名历史；原始情报和内容产物仍保留为 VAULT 文件
+- **情报排名（M2）**：情报簇提交后自动生成每日 Top 5、上升榜、连续霸榜和可创作候选；评分分项可解释，只有证据等级 A/B 可进入创作
 - **intel 信源扩展位**：`src/intel/types.ts` Provider 接口 + 注册位（实现须走蓝图确认关卡）；健康灯 pending-source 不计入 overall
 - **定时任务**：默认关闭；`SPARKOS_SCHEDULE=1` 每日 brief 提醒；`SPARKOS_INTEL_SCHEDULE=1` 每小时 intel tick + 每日 09:30 融合（不自动外发）
 
@@ -43,6 +45,8 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 sparkos_run {action:"intel", payload:{fusion:true}}   # 09:30 自动：融合当日情报（30 条 + 疑似重复提示）
 sparkos_run {action:"intel", payload:{analyze:true}}  # 生成情报簇骨架（规则预填）
 sparkos_run {action:"intel", payload:{submitCluster:<簇>}}  # agent 分析后校验写回
+sparkos_run {action:"intel", payload:{rank:true}}     # 每日 Top 5 / 上升榜 / 连续霸榜
+sparkos_run {action:"intel", payload:{jobs:true}}     # SQLite 可恢复任务状态
 sparkos_run {action:"brief"}    # 今日简报（daily_briefing + daily_data 摘要）
 sparkos_run {action:"topics"}   # 选题推荐（评分=新鲜度×连载×深度）
 sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
@@ -55,6 +59,7 @@ sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
 | env | 默认 | 说明 |
 |---|---|---|
 | `SPARKOS_VAULT_ROOT` | `~/DeepSeek harness/sparkos` | 插件数据区（决策/intel/守卫账本） |
+| `SPARKOS_DB_PATH` | `$SPARKOS_VAULT_ROOT/data/sparkos.db` | 内容工厂 SQLite 状态库 |
 | `SPARKOS_CONTENTOS_ROOT` | `~/cow/projects/contentos-x` | 每日工作流运行时根（只读） |
 | `SPARKOS_DAILY_BRIEF_DIR` | `$CONTENTOS_ROOT/daily_brief` | daily_data / daily_briefing / drafts |
 | `SPARKOS_PERF_DIR` | `$CONTENTOS_ROOT/perf` | 发布表现 JSON |
@@ -82,9 +87,11 @@ sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
 
 ## 开发
 
+运行要求：Node.js `>=22.13.0`（M1 使用内置 `node:sqlite`）。
+
 ```bash
 npm run check   # tsc（tsconfig paths 依赖本地 DSH monorepo 源码，需按环境调整）
-npm test        # 守卫/VAULT/数据/intel/daily/HTTP 路由 双向测试（39 项，env 隔离 fixture）
+npm test        # 守卫/VAULT/数据/intel/daily/HTTP/SQLite/排名 双向测试（46 项，env 隔离 fixture）
 npm run test:dom# 渲染 /tmp/sparkos-wb.html 并跑 Chrome DOM 断言
 npm run build   # esbuild host 半 + client 半（模板拷贝进 lib/）
 ```

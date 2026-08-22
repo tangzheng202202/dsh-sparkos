@@ -1,0 +1,75 @@
+/** Factory orchestration façade used by tools and the workbench. */
+
+import { createHash } from 'node:crypto'
+import { databaseHealth, defaultFactoryDbPath, openFactoryDatabase } from '../storage/database.ts'
+import { createJob, listJobs, recoverExpiredJobs, startJob, transitionJob } from '../storage/jobs.ts'
+import { latestClusters } from '../intel/cluster.ts'
+import { defaultIntelConfig } from '../intel/ingest.ts'
+import { generateDailyRanking, latestDailyRanking } from '../intel/ranking.ts'
+import type { DailyRanking } from '../intel/ranking.ts'
+
+function dateFromStamp(stamp: string): string {
+  return stamp.slice(0, 4) + '-' + stamp.slice(4, 6) + '-' + stamp.slice(6, 8)
+}
+
+export function runLatestRanking(): { ranking: DailyRanking; jobId: string; reused: boolean } {
+  const latest = latestClusters(defaultIntelConfig())
+  if (!latest || latest.clusters.length === 0) throw new Error('暂无已分析情报簇：先执行 intel analyze 并 submitCluster')
+  const date = dateFromStamp(latest.date)
+  const fingerprint = createHash('sha256').update(JSON.stringify(latest.clusters)).digest('hex').slice(0, 12)
+  const db = openFactoryDatabase()
+  try {
+    recoverExpiredJobs(db)
+    const created = createJob(db, {
+      kind: 'intel.daily-ranking',
+      input: { date, clusters: latest.clusters.length },
+      idempotencyKey: `intel.daily-ranking:${date}:${fingerprint}`,
+      priority: 50,
+    })
+    if (!created.created && created.job.status === 'succeeded') {
+      const ranking = latestDailyRanking(db)
+      if (!ranking) throw new Error('排名任务已完成但数据库无排名快照')
+      return { ranking, jobId: created.job.id, reused: true }
+    }
+    if (!created.created && created.job.status === 'failed') {
+      transitionJob(db, created.job.id, 'queued', { note: 'manual retry' })
+    }
+    const started = startJob(db, created.job.id, 'sparkos-inline')
+    try {
+      const ranking = generateDailyRanking(db, latest.clusters, date)
+      transitionJob(db, started.id, 'succeeded', {
+        output: {
+          top5: ranking.top5.length,
+          persistent: ranking.persistent.length,
+          creationCandidates: ranking.creationCandidates.length,
+        },
+      })
+      return { ranking, jobId: started.id, reused: false }
+    } catch (error) {
+      transitionJob(db, started.id, 'failed', { error: error instanceof Error ? error.message : String(error) })
+      throw error
+    }
+  } finally {
+    db.close()
+  }
+}
+
+export interface FactorySnapshot {
+  database: ReturnType<typeof databaseHealth>
+  jobs: ReturnType<typeof listJobs>
+  ranking: DailyRanking | null
+}
+
+export function buildFactorySnapshot(): FactorySnapshot {
+  const dbPath = defaultFactoryDbPath()
+  const db = openFactoryDatabase({ path: dbPath })
+  try {
+    return {
+      database: databaseHealth(db, dbPath),
+      jobs: listJobs(db, 10),
+      ranking: latestDailyRanking(db),
+    }
+  } finally {
+    db.close()
+  }
+}

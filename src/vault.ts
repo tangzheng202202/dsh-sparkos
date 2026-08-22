@@ -55,12 +55,12 @@ export interface MigrationResult {
 }
 
 /** 幂等初始化：已有文件不覆盖，迁移清单落 vault/MANIFEST。 */
-export function initVault(): MigrationResult {
-  mkdirSync(VAULT_ROOT, { recursive: true })
+export function initVault(vaultRoot = VAULT_ROOT): MigrationResult {
+  mkdirSync(vaultRoot, { recursive: true })
   const migrated: Array<{ dest: string; note: string }> = []
   const alreadyPresent: string[] = []
   for (const item of MIGRATION) {
-    const destAbs = path.join(VAULT_ROOT, item.dest)
+    const destAbs = path.join(vaultRoot, item.dest)
     mkdirSync(path.dirname(destAbs), { recursive: true })
     if (existsSync(destAbs)) {
       alreadyPresent.push(item.dest)
@@ -71,9 +71,9 @@ export function initVault(): MigrationResult {
   }
   // 保证工作流状态目录存在
   for (const dir of ['state', 'distill_queue', 'drafts']) {
-    mkdirSync(path.join(VAULT_ROOT, dir), { recursive: true })
+    mkdirSync(path.join(vaultRoot, dir), { recursive: true })
   }
-  const manifestPath = path.join(VAULT_ROOT, 'MANIFEST')
+  const manifestPath = path.join(vaultRoot, 'MANIFEST')
   const stamp = new Date().toISOString()
   const lines = readManifest(manifestPath)
   for (const m of migrated) {
@@ -81,7 +81,7 @@ export function initVault(): MigrationResult {
     lines.push(`${stamp}\t${m.dest}\t${m.note}\tsrc=${source ? migrationSource(source) : '?'}`)
   }
   if (migrated.length > 0) writeFileSync(manifestPath, `${lines.join('\n')}\n`)
-  return { migrated, alreadyPresent, vaultRoot: VAULT_ROOT }
+  return { migrated, alreadyPresent, vaultRoot }
 }
 
 function readManifest(p: string): string[] {
