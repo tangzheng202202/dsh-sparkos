@@ -37,6 +37,19 @@ DeepSeek Harness（DSH）自媒体工作台插件：把内容生产 10 步工作
 首次初始化在运行时资产缺失时自动回退 `seeds/`（`SPARKOS_CONTENTOS_ROOT` 指向真实工作流区时优先用之）。
 安装后 `prepare` 脚本自动执行 `npm run build` 生成 `lib/`。
 
+## 运行示例（每日闭环）
+
+```
+sparkos_run {action:"intel", payload:{fusion:true}}   # 09:30 自动：融合当日情报（30 条 + 疑似重复提示）
+sparkos_run {action:"intel", payload:{analyze:true}}  # 生成情报簇骨架（规则预填）
+sparkos_run {action:"intel", payload:{submitCluster:<簇>}}  # agent 分析后校验写回
+sparkos_run {action:"brief"}    # 今日简报（daily_briefing + daily_data 摘要）
+sparkos_run {action:"topics"}   # 选题推荐（评分=新鲜度×连载×深度）
+sparkos_run {action:"draft"}    # 草稿列表 / payload.get 读全文
+```
+
+每日自动：launchd `com.sparkos.daily` 07:30 触发 headless 跑 sparkos-daily skill（无外部凭证自动降级知识库驱动）。
+
 ## 路径配置（env，均有默认值，默认指向本机运行时）
 
 | env | 默认 | 说明 |

@@ -54,7 +54,17 @@ function localDateOf(iso: string): string {
 function evidenceUrlOf(raw: Record<string, unknown>): string {
   const sh = raw.source_hint as Record<string, unknown> | undefined
   const u = sh?.url ?? raw.url ?? raw.link
-  return typeof u === 'string' && u !== '' ? u : ''
+  if (typeof u === 'string' && u !== '') return u
+  // 兜底：hermes 类快照 URL 在 channel_text/text 正文「▎来源：… https://…」里
+  const item = raw.item as Record<string, unknown> | undefined
+  const draft = raw.draft as Record<string, unknown> | undefined
+  for (const t of [raw.channel_text, raw.text, item?.text, draft?.text, item?.url]) {
+    if (typeof t === 'string') {
+      const m = /https?:\/\/[^\s)]+/.exec(t)
+      if (m) return m[0]
+    }
+  }
+  return ''
 }
 
 function titleOf(raw: Record<string, unknown>): string {

@@ -65,17 +65,26 @@ export function cmdBrief(payload: Record<string, unknown>): string[] {
 export function cmdTopics(payload: Record<string, unknown>): string[] {
   const data = latestDailyData()
   if (!data || !data.must_reads?.length) return ['今日无必读选题（daily_data 为空或缺失）。']
-  const out = ['===== 选题推荐 ' + data.date + '（' + data.must_reads.length + ' 条） =====']
-  const sorted = [...data.must_reads].sort((a, b) => (a.fresh_hours ?? 99) - (b.fresh_hours ?? 99))
-  for (const mr of sorted) {
+  const out = ['===== 选题推荐 ' + data.date + '（' + data.must_reads.length + ' 条，评分=新鲜度×连载×深度） =====']
+  // 评分三因子：fresh(时效) + line_updates 连载(heating=2/stable=1/cooling=0) + 知识卡深度(citations 引用数)
+  const lineHeat = new Map((data.line_updates ?? []).map((l) => [l.line, l.status === 'heating' ? 2 : l.status === 'stable' ? 1 : 0]))
+  const cardCount = new Map<string, number>()
+  for (const c of data.citations ?? []) for (const card of c.cards ?? []) cardCount.set(card, (cardCount.get(card) ?? 0) + 1)
+  const scored = (data.must_reads ?? []).map((mr) => {
+    const fresh = Math.max(0, 1 - ((mr.fresh_hours ?? 48) - 24) / 48)
+    const serial = lineHeat.get(mr.primary_line ?? '') ?? 1
+    const depth = Math.min(2, (mr.supporting?.length ?? 0) + Math.min(2, cardCount.size > 0 ? 1 : 0))
+    return { mr, score: Math.round((fresh * 0.4 + serial * 0.4 + depth * 0.2) * 100) / 100 }
+  }).sort((a, b) => b.score - a.score)
+  for (const { mr, score } of scored) {
     const line = lineName(mr.primary_line)
     const supporting = mr.supporting?.length ? ' · 补充角度 ' + mr.supporting.length + ' 个' : ''
-    out.push('- [' + freshLabel(mr.fresh_hours) + '] ' + (mr.title ?? mr.event_id) + '（' + line + '）' + supporting)
+    out.push('- [评分 ' + score.toFixed(2) + ' · ' + freshLabel(mr.fresh_hours) + '] ' + (mr.title ?? mr.event_id) + '（' + line + '）' + supporting)
   }
   if (payload.top !== undefined) {
     const n = Math.max(1, Number(payload.top) || 5)
     out.push('')
-    out.push('Top ' + n + '：' + sorted.slice(0, n).map((m) => m.event_id).join(' / '))
+    out.push('Top ' + n + '：' + scored.slice(0, n).map((s) => s.mr.event_id).join(' / '))
   }
   return out
 }
