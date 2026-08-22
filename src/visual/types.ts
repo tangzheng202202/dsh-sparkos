@@ -7,6 +7,8 @@ export type VisualTaskState =
   | 'waiting_visual_approval'
   | 'retry'
   | 'failed'
+  | 'approved'
+  | 'rejected'
 
 export type VisualBatchStatus =
   | 'queued'
@@ -15,6 +17,9 @@ export type VisualBatchStatus =
   | 'approved'
   | 'rejected'
   | 'failed'
+  | 'partially_approved'
+  | 'visual_approved_test'
+  | 'visual_approved'
 
 export type VisualAspectRatio = '2.35:1' | '16:9' | '3:4' | '1:1'
 
@@ -43,11 +48,16 @@ export interface VisualAssetTask {
   targetWidth: number
   targetHeight: number
   state: VisualTaskState
+  /** Physical M5A generation state; review decisions are overlaid from approvals. */
+  pipelineState?: Exclude<VisualTaskState, 'approved' | 'rejected'>
   idempotencyKey: string
   currentAttempt: number
   maxAttempts: number
   leaseExpiresAt: string | null
   lastError: string | null
+  failureCount?: number
+  retryCount?: number
+  reviewNote?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -81,6 +91,29 @@ export interface VisualAssetAttempt {
   importedAt: string | null
   createdAt: string
   updatedAt: string
+  approval?: VisualAttemptApproval
+}
+
+export interface VisualAttemptApproval {
+  decision: 'pending' | 'approved' | 'rejected'
+  note: string | null
+  decidedAt: string | null
+}
+
+export interface PlatformReadiness {
+  wechat: boolean
+  telegram: boolean
+  x: boolean
+  xiaohongshu: boolean
+}
+
+export interface PublicationReadiness {
+  visualApproved: boolean
+  testOnly: boolean
+  deliveryReady: boolean
+  readyByPlatform: PlatformReadiness
+  readyForPublication: boolean
+  blockers: string[]
 }
 
 export interface VisualStatusSnapshot {
@@ -93,9 +126,23 @@ export interface VisualStatusSnapshot {
       waitingVisualApproval: number
       failed: number
       readyForVisualApproval: boolean
-      readyForPublication: false
-    }
+    } & PublicationReadiness
   }>
+}
+
+export interface VisualDeliveryArtifact {
+  id: string
+  packageId: string
+  batchId: string
+  version: number
+  mode: 'preview' | 'production'
+  platform: string
+  format: string
+  relativePath: string
+  sha256: string
+  bytes: number
+  manifest: Record<string, unknown>
+  createdAt: string
 }
 
 export interface SubmittedAttachmentRef {

@@ -13,7 +13,7 @@ import type { EditorialCard } from '../editorial/planner.ts'
 import { VAULT_ROOT } from '../vault.ts'
 import { createJob, getJob, startJob, transitionJob } from '../storage/jobs.ts'
 
-export const CREATION_CONTRACT_VERSION = 1
+export const CREATION_CONTRACT_VERSION = 2
 export type DraftPackageStatus = 'awaiting_generation' | 'validation_failed' | 'waiting_approval' | 'approved' | 'rejected'
 export type ClaimKind = 'fact' | 'inference' | 'opinion'
 
@@ -30,6 +30,9 @@ export type WechatBlock =
   | { type: 'list'; items: string[] }
   | { type: 'image'; assetId: string; caption: string }
 
+export type DraftPlatform = 'wechat' | 'telegram' | 'x' | 'xiaohongshu'
+export type DraftAssetRole = 'wechat-cover' | 'wechat-inline' | 'xhs-cover' | 'xhs-carousel' | 'telegram-asset' | 'x-asset'
+
 export interface DraftAssetPlan {
   id: string
   kind: 'cover' | 'inline' | 'carousel'
@@ -37,6 +40,11 @@ export interface DraftAssetPlan {
   altText: string
   aspectRatio: '2.35:1' | '16:9' | '3:4' | '1:1'
   placement: string
+  /** Required for creation contract v2; absent on legacy contract v1 packages. */
+  platforms?: DraftPlatform[]
+  order?: number
+  required?: boolean
+  role?: DraftAssetRole
 }
 
 export interface DraftSubmission {
@@ -213,9 +221,10 @@ function creationRequest(packageId: string, revision: number, parentPackageId: s
         xiaohongshu: { title: '不超过30字', body: '完整正文', hashtags: ['标签1', '标签2', '标签3'] },
       },
       assets: [
-        { id: 'cover-main', kind: 'cover', prompt: '无小字的画面提示词', altText: '替代文本', aspectRatio: '2.35:1', placement: '公众号封面' },
-        { id: 'inline-one', kind: 'inline', prompt: '正文配图提示词', altText: '替代文本', aspectRatio: '16:9', placement: '正文位置' },
-        { id: 'carousel-one', kind: 'carousel', prompt: '小红书轮播提示词', altText: '替代文本', aspectRatio: '3:4', placement: '小红书第2张' },
+        { id: 'cover-main', kind: 'cover', prompt: '无小字的画面提示词', altText: '替代文本', aspectRatio: '2.35:1', placement: '公众号封面', platforms: ['wechat'], order: 1, required: true, role: 'wechat-cover' },
+        { id: 'inline-one', kind: 'inline', prompt: '正文配图提示词', altText: '替代文本', aspectRatio: '16:9', placement: '微信正文位置', platforms: ['wechat'], order: 2, required: true, role: 'wechat-inline' },
+        { id: 'xhs-cover', kind: 'cover', prompt: '小红书首图提示词', altText: '小红书首图', aspectRatio: '3:4', placement: '小红书第1张', platforms: ['xiaohongshu'], order: 1, required: true, role: 'xhs-cover' },
+        { id: 'carousel-one', kind: 'carousel', prompt: '小红书轮播提示词', altText: '替代文本', aspectRatio: '3:4', placement: '小红书第2张', platforms: ['xiaohongshu'], order: 2, required: true, role: 'xhs-carousel' },
       ],
     },
   }
@@ -304,7 +313,7 @@ function textOfBlocks(blocks: WechatBlock[]): string {
     : block.type === 'image' ? [] : [typeof block.text === 'string' ? block.text : '']).join('\n')
 }
 
-export function validateDraftSubmission(submission: DraftSubmission, card: EditorialCard): DraftValidation {
+export function validateDraftSubmission(submission: DraftSubmission, card: EditorialCard, contractVersion = CREATION_CONTRACT_VERSION): DraftValidation {
   const errors: string[] = []
   const warnings: string[] = []
   const knownEvidence = new Set(card.evidence.map((item) => item.url))
@@ -354,6 +363,7 @@ export function validateDraftSubmission(submission: DraftSubmission, card: Edito
   const assets = rawAssets.filter((asset): asset is DraftAssetPlan => typeof asset === 'object' && asset !== null)
   if (assets.length !== rawAssets.length) errors.push('assets 含非对象条目')
   const assetIds = new Set<string>()
+  const platformOrders = new Set<string>()
   for (const [index, asset] of assets.entries()) {
     if (!/^[a-z0-9][a-z0-9._-]{2,48}$/i.test(asset.id ?? '')) errors.push(`assets[${index}].id 不合法`)
     if (assetIds.has(asset.id)) errors.push(`assets[${index}].id 重复`)
@@ -361,10 +371,45 @@ export function validateDraftSubmission(submission: DraftSubmission, card: Edito
     if (!asset.prompt?.trim() || !asset.altText?.trim() || !asset.placement?.trim()) errors.push(`assets[${index}] prompt/altText/placement 必填`)
     if (!['cover', 'inline', 'carousel'].includes(asset.kind)) errors.push(`assets[${index}].kind 不合法`)
     if (!['2.35:1', '16:9', '3:4', '1:1'].includes(asset.aspectRatio)) errors.push(`assets[${index}].aspectRatio 不合法`)
+    if (contractVersion >= 2) {
+      const platforms = Array.isArray(asset.platforms) ? asset.platforms : []
+      if (platforms.length === 0 || platforms.some((platform) => !['wechat', 'telegram', 'x', 'xiaohongshu'].includes(platform))) {
+        errors.push(`assets[${index}].platforms 必须是非空合法平台数组`)
+      }
+      if (!Number.isSafeInteger(asset.order) || Number(asset.order) < 1) errors.push(`assets[${index}].order 必须是正整数`)
+      if (typeof asset.required !== 'boolean') errors.push(`assets[${index}].required 必须明确为 boolean`)
+      if (!['wechat-cover', 'wechat-inline', 'xhs-cover', 'xhs-carousel', 'telegram-asset', 'x-asset'].includes(asset.role ?? '')) {
+        errors.push(`assets[${index}].role 不合法`)
+      }
+      for (const platform of platforms) {
+        const key = `${platform}:${asset.order}`
+        if (platformOrders.has(key)) errors.push(`assets[${index}] 平台/order 重复：${key}`)
+        platformOrders.add(key)
+      }
+      const allowedRatios: Partial<Record<NonNullable<DraftAssetPlan['role']>, DraftAssetPlan['aspectRatio'][]>> = {
+        'wechat-cover': ['2.35:1'], 'wechat-inline': ['16:9'],
+        'xhs-cover': ['3:4'], 'xhs-carousel': ['3:4', '1:1'],
+        'telegram-asset': ['16:9', '1:1'], 'x-asset': ['16:9', '1:1'],
+      }
+      if (asset.role && !allowedRatios[asset.role]?.includes(asset.aspectRatio)) errors.push(`assets[${index}] 比例与 role 不匹配`)
+      const expectedPlatform = asset.role?.startsWith('wechat-') ? 'wechat'
+        : asset.role?.startsWith('xhs-') ? 'xiaohongshu'
+          : asset.role === 'telegram-asset' ? 'telegram' : asset.role === 'x-asset' ? 'x' : null
+      if (expectedPlatform && !platforms.includes(expectedPlatform)) errors.push(`assets[${index}] role 必须声明平台 ${expectedPlatform}`)
+    }
   }
   if (!assets.some((asset) => asset.kind === 'cover')) errors.push('assets 至少包含 1 张封面图')
   if (assets.filter((asset) => asset.kind === 'inline' || asset.kind === 'carousel').length < 2) errors.push('assets 至少包含 2 张正文/轮播配图')
   for (const block of wechatBlocks) if (block.type === 'image' && !assetIds.has(block.assetId)) errors.push(`wechat image 引用了未知 assetId：${block.assetId}`)
+  if (contractVersion >= 2) {
+    const required = (role: DraftAssetRole, predicate: (asset: DraftAssetPlan) => boolean = () => true): boolean => assets.some((asset) => asset.role === role && asset.required === true && predicate(asset))
+    if (!required('wechat-cover')) errors.push('contract v2 微信至少需要 required wechat-cover')
+    if (!required('wechat-inline')) errors.push('contract v2 微信至少需要 required wechat-inline')
+    if (!required('xhs-cover', (asset) => asset.order === 1)) errors.push('contract v2 小红书需要 required xhs-cover(order=1)')
+    if (!required('xhs-carousel', (asset) => Number(asset.order) >= 2)) errors.push('contract v2 小红书需要 required xhs-carousel(order≥2)')
+    const references = [...(variants?.xiaohongshu?.body ?? '').matchAll(/(?:asset:\/\/|\{\{asset:)([a-z0-9][a-z0-9._-]{2,48})/gi)].map((match) => match[1])
+    for (const assetId of references) if (!assetIds.has(assetId)) errors.push(`xiaohongshu 正文引用了未知 assetId：${assetId}`)
+  }
   if (!wechatBlocks.some((block) => block.type === 'image')) warnings.push('微信公众号正文没有图片占位块')
   const allText = JSON.stringify(submission)
   if (/自动发布|无需人工审核|绕过审核/.test(allText)) errors.push('草稿触发人工发布红线')
@@ -457,7 +502,7 @@ export function submitDraftPackage(db: DatabaseSync, submission: DraftSubmission
   if (current.status !== 'awaiting_generation' && current.status !== 'validation_failed') throw new Error('草稿包当前状态不可提交：' + current.status)
   const card = editorialCardById(db, current.cardId)
   if (!card || card.decision !== 'approved') throw new Error('来源选题卡未批准或不存在')
-  const validation = validateDraftSubmission(submission, card)
+  const validation = validateDraftSubmission(submission, card, current.contractVersion)
   const at = now.toISOString()
   if (!validation.ok) {
     db.prepare(`UPDATE draft_packages SET status='validation_failed', submission_json=?, validation_json=?, updated_at=? WHERE id=?`)

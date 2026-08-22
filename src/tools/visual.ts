@@ -14,6 +14,7 @@ import {
   VisualPipelineError,
 } from '../visual/service.ts'
 import type { SubmitVisualInput } from '../visual/service.ts'
+import { retryVisualTask } from '../visual/review.ts'
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
@@ -172,8 +173,24 @@ export function registerVisualTools(ctx: Context): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'sparkos_visual_retry',
+    description: '仅将已被人工驳回且带审核意见的视觉任务转入 retry。不能批准图片；旧图片、attempt 和 approval 全部保留。',
+    parameters: {
+      taskId: { type: 'string', required: true, description: '已被人工驳回的视觉任务 ID（vt-...）' },
+    },
+    output,
+    isConcurrencySafe: () => false,
+    async execute(args: { taskId: string }) {
+      try {
+        const result = withDb((db) => retryVisualTask(db, args.taskId))
+        return ok(`视觉任务已按人工意见转入 retry；前次意见：${result.previousNote}`, result as unknown as Record<string, JsonValue>)
+      } catch (error) { return failed(error) }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'sparkos_visual_status',
-    description: '只读查询 SparkOS 视觉批次、任务、attempt、验证结果和准备度；M5A 的 readyForPublication 始终为 false。',
+    description: '只读查询 SparkOS 视觉批次、任务、attempt、审核、交付与各平台发布准备度；不会执行发布。',
     parameters: {
       packageId: { type: 'string', description: '可选：筛选草稿包' },
     },
@@ -182,7 +199,7 @@ export function registerVisualTools(ctx: Context): void {
     async execute(args: { packageId?: string }) {
       try {
         const snapshot = withDb((db) => visualStatus(db, args.packageId))
-        return ok(`视觉批次 ${snapshot.batches.length} 个；M5A 不执行视觉批准或发布。`, snapshot as unknown as Record<string, JsonValue>)
+        return ok(`视觉批次 ${snapshot.batches.length} 个；这里只读报告准备度，不执行批准或发布。`, snapshot as unknown as Record<string, JsonValue>)
       } catch (error) { return failed(error) }
     },
   }))

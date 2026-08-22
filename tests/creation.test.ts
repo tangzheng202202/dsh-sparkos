@@ -50,9 +50,10 @@ function validSubmission(packageId: string): DraftSubmission {
       xiaohongshu: { title: 'AI内容工厂避坑指南', body: paragraph + paragraph, hashtags: ['AI工具', '内容创作', '自媒体'] },
     },
     assets: [
-      { id: 'cover-main', kind: 'cover', prompt: '暖色编辑工作台，信息流汇入内容生产线，无文字', altText: 'AI 内容工厂封面', aspectRatio: '2.35:1', placement: '微信公众号封面' },
-      { id: 'inline-flow', kind: 'inline', prompt: '情报到审核的四阶段流程信息图，无小字', altText: '内容生产流程', aspectRatio: '16:9', placement: '微信正文第一节后' },
-      { id: 'carousel-proof', kind: 'carousel', prompt: '事实、推断、观点三层卡片', altText: '事实边界卡片', aspectRatio: '3:4', placement: '小红书第二张' },
+      { id: 'cover-main', kind: 'cover', prompt: '暖色编辑工作台，信息流汇入内容生产线，无文字', altText: 'AI 内容工厂封面', aspectRatio: '2.35:1', placement: '微信公众号封面', platforms: ['wechat'], order: 1, required: true, role: 'wechat-cover' },
+      { id: 'inline-flow', kind: 'inline', prompt: '情报到审核的四阶段流程信息图，无小字', altText: '内容生产流程', aspectRatio: '16:9', placement: '微信正文第一节后', platforms: ['wechat'], order: 2, required: true, role: 'wechat-inline' },
+      { id: 'xhs-cover', kind: 'cover', prompt: '事实边界小红书首图', altText: '小红书首图', aspectRatio: '3:4', placement: '小红书第一张', platforms: ['xiaohongshu'], order: 1, required: true, role: 'xhs-cover' },
+      { id: 'carousel-proof', kind: 'carousel', prompt: '事实、推断、观点三层卡片', altText: '事实边界卡片', aspectRatio: '3:4', placement: '小红书第二张', platforms: ['xiaohongshu'], order: 2, required: true, role: 'xhs-carousel' },
     ],
   }
 }

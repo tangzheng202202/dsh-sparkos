@@ -44,6 +44,14 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
 .brief-md hr{border:none;border-top:1px dashed var(--border);margin:8px 0}.brief-md .md-gap{height:6px}
 .topic-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
 .topic-row .t-main{flex:1}.topic-row .t-title{font-size:13.5px;font-weight:600}.topic-row .t-meta{color:var(--dim);font-size:12px;margin-top:2px}
+.visual-panel{margin:12px 0 2px;padding:12px;border:1px solid var(--border);border-radius:10px;background:#FFFDF8}
+.visual-progress{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.visual-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.visual-asset{border:1px solid var(--border);border-radius:9px;background:#fff;padding:10px;overflow:hidden}
+.visual-asset img{display:block;width:100%;height:150px;object-fit:contain;background:#F5EFE3;border-radius:7px;margin-bottom:8px}
+.visual-meta{font-size:11.5px;color:var(--dim);line-height:1.65;overflow-wrap:anywhere}
+.test-only{display:inline-block;background:#8B1E1E;color:#fff;border-radius:5px;padding:3px 7px;font-size:11px;font-weight:800;margin:4px 0}
+.review-note{margin:6px 0;padding:7px;border-left:3px solid var(--accent);background:#FBE4DF;color:#8B3323;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -107,7 +115,7 @@ const D = window._embeddedDailyData;
 const CENTERS = [["today","今日中心",["brief"]],["intel","情报中心",["lines","intel"]],["create","创作中心",["topics","draft"]],["review","审核中心",["cards"]],["growth","增长中心",["publish","advise","sources"]]];
 
 // ---- helpers ----
-function esc(s){return String(s==null?"":s).split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;");}
+function esc(s){return String(s==null?"":s).split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;").split('"').join("&quot;").split("'").join("&#39;");}
 function lineName(id){if(!id)return "—";var l=D.lines.find(function(x){return x.id===id;});return l?l.name:id;}
 function freshClass(h){if(h==null)return "badge-gray";if(h<=24)return "badge-green";if(h<=48)return "badge-amber";return "badge-red";}
 function freshLabel(h){if(h==null)return "fresh=?";return h+"h";}
@@ -260,7 +268,25 @@ function renderEditorial(){
 }
 renderEditorial();
 
-// ---- factory draft packages: preview + human approval ----
+// ---- factory draft packages: preview + human approval + M5B visual review ----
+function visualBatchFor(packageId){var bs=D.factory&&D.factory.visual&&D.factory.visual.batches||[];return bs.find(function(b){return b.packageId===packageId;});}
+function currentAttempt(task){return (task.attempts||[]).find(function(a){return Number(a.attemptNo)===Number(task.currentAttempt);})||null;}
+function renderVisual(p){
+  var batch=visualBatchFor(p.id);
+  if(!batch)return p.status==="approved"?"<div class=\"visual-panel\"><b>视觉生产</b><div class=\"dim\" style=\"margin:5px 0\">尚未创建视觉批次</div><button class=\"btn adopt\" data-visual-queue=\""+esc(p.id)+"\">创建视觉任务</button></div>":"";
+  var rd=batch.readiness||{},statusName={partially_approved:"部分批准",visual_approved_test:"视觉已批准（测试）",visual_approved:"视觉已批准",waiting_visual_approval:"等待视觉审核",rejected:"有图片被驳回",queued:"排队中",generating:"生成中",failed:"失败"};
+  var cards=(batch.tasks||[]).map(function(t){var a=currentAttempt(t);var stub=a&&a.provider==="stub";var preview=a&&a.importedRelativePath?"<img loading=\"lazy\" alt=\""+esc(t.altText)+"\" src=\"/sparkos/visual/asset?attemptId="+encodeURIComponent(a.id)+"\">":"<div class=\"empty\" style=\"padding:28px 4px\">尚无图片</div>";
+    var dims=a&&a.sourceWidth?esc(a.sourceWidth)+"×"+esc(a.sourceHeight):"—";var sha=a&&a.importedSha256?esc(a.importedSha256.slice(0,12)):"—";
+    var actions=t.state==="waiting_visual_approval"?"<button class=\"btn adopt\" data-visual-decision=\"approved\" data-attempt=\""+esc(a&&a.id)+"\">批准图片</button><button class=\"btn ignore\" data-visual-decision=\"rejected\" data-attempt=\""+esc(a&&a.id)+"\">驳回图片</button>":t.state==="rejected"?"<button class=\"btn adopt\" data-visual-retry=\""+esc(t.id)+"\">按意见重试</button>":t.state==="approved"?"<span class=\"decided\">图片已批准 ✓</span>":"";
+    return "<div class=\"visual-asset\">"+preview+"<div><b>"+esc(t.assetId)+"</b><span class=\"badge\">"+esc(t.kind)+"</span><span class=\"badge\">attempt "+esc(t.currentAttempt)+"</span></div>"+(stub?"<div class=\"test-only\">测试图片，不可发布</div>":"")+"<div class=\"visual-meta\"><b>位置：</b>"+esc(t.placement)+"<br><b>Prompt：</b>"+esc(t.prompt)+"<br><b>Alt：</b>"+esc(t.altText)+"<br><b>来源：</b>"+esc(a&&a.provider||"—")+" / "+esc(a&&a.model||"—")+"<br><b>文件：</b>"+dims+" · "+esc(a&&a.sourceMediaType||"—")+" · "+esc(a&&a.sourceBytes||0)+" B · SHA "+sha+"<br><b>历史：</b>失败 "+esc(t.failureCount||0)+" · retry "+esc(t.retryCount||0)+"</div>"+(t.reviewNote?"<div class=\"review-note\">驳回/失败意见："+esc(t.reviewNote)+"</div>":"")+"<div style=\"margin-top:7px\">"+actions+"</div></div>";
+  }).join("");
+  var test=rd.testOnly?"<span class=\"test-only\">TEST ONLY · 不可发布</span>":"";
+  var publish=rd.readyForPublication?"<span class=\"badge badge-green\">生产可发布</span>":"<span class=\"badge badge-red\">readyForPublication=false</span>";
+  var blockers=(rd.blockers||[]).length?"<div class=\"dim\" style=\"margin:5px 0;color:#A97B2F\">阻塞："+esc(rd.blockers.join("；"))+"</div>":"";
+  var delivery=rd.visualApproved?"<button class=\"btn ignore\" data-visual-delivery=\"preview\" data-package=\""+esc(p.id)+"\">生成预览交付包</button><button class=\"btn adopt\" data-visual-delivery=\"production\" data-package=\""+esc(p.id)+"\" "+(rd.deliveryReady?"":"disabled")+">生成生产交付包</button>"+(batch.deliveryLink?"<a class=\"leg\" href=\""+esc(batch.deliveryLink)+"\">下载最新交付 ZIP</a>":""):"";
+  return "<div class=\"visual-panel\"><div class=\"visual-progress\"><b>视觉审核 · "+esc(statusName[batch.status]||batch.status)+"</b><span>"+esc(batch.approvedCount)+" / "+esc(batch.requiredCount)+" 已批准</span>"+test+publish+"</div>"+blockers+"<div class=\"visual-grid\">"+cards+"</div><div style=\"margin-top:9px\">"+delivery+"</div></div>";
+}
+async function refreshVisual(packageId){var r=await fetch("/sparkos/visual/status?packageId="+encodeURIComponent(packageId));var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"视觉状态读取失败");D.factory.visual=D.factory.visual||{batches:[]};D.factory.visual.batches=(D.factory.visual.batches||[]).filter(function(b){return b.packageId!==packageId;}).concat(j.value.batches||[]);}
 function renderCreation(){
   var el=document.getElementById("creationBody");var ps=D.factory&&D.factory.drafts||[];
   if(!ps.length){el.innerHTML="<div class=\"empty\">暂无工厂草稿包 · 批准编辑选题后自动创建任务；agent 用 sparkos_run draft payload.pending=true 领取契约</div>";return;}
@@ -273,7 +299,7 @@ function renderCreation(){
     var notes=(p.reviewNote?"<div class=\"dim\" style=\"color:#C24B33;margin-top:5px\">"+(p.status==="rejected"?"驳回意见：":"审核意见：")+esc(p.reviewNote)+"</div>":"")+(p.parentReviewNote?"<div class=\"dim\" style=\"color:#A97B2F;margin-top:5px\">父版本驳回意见："+esc(p.parentReviewNote)+"</div>":"");
     return "<div style=\"padding:12px 0;border-bottom:1px solid var(--border)\"><div><b>"+esc(title)+"</b><span class=\"badge\">v"+esc(p.revision||1)+"</span><span class=\"badge\">"+esc(statusName[p.status]||p.status)+"</span><span class=\"dim\">"+esc(p.id)+"</span></div>"+
       "<div class=\"dim\" style=\"margin:5px 0\">公众号 / Telegram / X / 小红书 · 产物 "+(p.artifacts||[]).length+" · 配图任务 "+(p.assetCount||0)+"</div>"+errs+notes+
-      (artifacts?"<div class=\"legend\" style=\"margin:7px 0\">"+artifacts+"</div>":"")+acts+"</div>";
+      (artifacts?"<div class=\"legend\" style=\"margin:7px 0\">"+artifacts+"</div>":"")+acts+renderVisual(p)+"</div>";
   }).join("");
   el.querySelectorAll("[data-draft-decision]").forEach(function(btn){btn.onclick=async function(){var note;var decision=btn.dataset.draftDecision;if(decision==="rejected"){
     var input=window.prompt("请输入驳回草稿的审核意见（必填）");if(input===null||!input.trim())return;note=input.trim();
@@ -286,6 +312,10 @@ function renderCreation(){
     var r=await fetch("/sparkos/creation/revise",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.draftRevise})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
     ps.unshift({id:j.value.id,cardId:j.value.cardId,revision:j.value.revision,parentPackageId:j.value.parentPackageId,status:j.value.status,title:j.value.request&&j.value.request.sourceCard?j.value.request.sourceCard.title:j.value.id,validation:j.value.validation,assetCount:0,artifacts:[],reviewNote:j.value.reviewNote,parentReviewNote:j.value.parentReviewNote,createdAt:j.value.createdAt,updatedAt:j.value.updatedAt,decidedAt:null});renderCreation();
   }catch(e){btn.disabled=false;btn.textContent="重试";}};});
+  el.querySelectorAll("[data-visual-queue]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var r=await fetch("/sparkos/visual/queue",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.visualQueue})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(btn.dataset.visualQueue);renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
+  el.querySelectorAll("[data-visual-decision]").forEach(function(btn){btn.onclick=async function(){var note;var decision=btn.dataset.visualDecision;if(decision==="rejected"){var input=window.prompt("请输入驳回图片的审核意见（必填）");if(input===null||!input.trim())return;note=input.trim();}btn.disabled=true;try{var body={attemptId:btn.dataset.attempt,decision:decision};if(note)body.note=note;var r=await fetch("/sparkos/visual/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");var batch=visualBatchFor(j.value.taskId);var task;(D.factory.visual.batches||[]).forEach(function(b){var found=(b.tasks||[]).find(function(t){return t.id===j.value.taskId;});if(found){batch=b;task=found;}});await refreshVisual(batch&&batch.packageId||"");renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
+  el.querySelectorAll("[data-visual-retry]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var batch; (D.factory.visual.batches||[]).forEach(function(b){if((b.tasks||[]).some(function(t){return t.id===btn.dataset.visualRetry;}))batch=b;});var r=await fetch("/sparkos/visual/retry",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({taskId:btn.dataset.visualRetry})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(batch.packageId);renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
+  el.querySelectorAll("[data-visual-delivery]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var r=await fetch("/sparkos/visual/delivery",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.package,mode:btn.dataset.visualDelivery})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(btn.dataset.package);var batch=visualBatchFor(btn.dataset.package);batch.deliveryLink="/sparkos/visual/download?deliveryId="+encodeURIComponent(j.value.delivery.id);renderCreation();window.alert("交付包已生成，可通过下载端点获取："+j.value.delivery.id);}catch(e){btn.disabled=false;btn.textContent="重试";}};});
 }
 renderCreation();
 

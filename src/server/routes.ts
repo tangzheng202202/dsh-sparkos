@@ -11,6 +11,8 @@
  * POST /sparkos/visual/queue → 为 approved 草稿创建幂等视觉批次
  * GET  /sparkos/visual/status → 只读视觉任务与 attempt 状态
  * GET  /sparkos/visual/asset → 按数据库 attemptId 预览已验证的不可变图片
+ * POST /sparkos/visual/decision|retry → 人工视觉审核与显式重试
+ * POST/GET /sparkos/visual/delivery|deliveries|download → 派生交付包
  * POST /sparkos/mutate → { kind, id, action: adopt|ignore } 决策落 VAULT state/（不触碰星火库）
  * @module dsh-sparkos/src/server/routes
  */
@@ -18,6 +20,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { readFileSync } from 'node:fs'
+import nodePath from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildWorkbenchData, loadWritebackQueue, recordDecision, reviewDistill } from './data.ts'
 import { buildIntelReport } from '../intel/report.ts'
@@ -25,6 +28,8 @@ import { runIntelTick } from '../intel/tick.ts'
 import { listRuntimeDrafts, listVaultDrafts, readDraft } from '../daily.ts'
 import { openFactoryDatabase } from '../storage/database.ts'
 import { queueVisualBatch, readVisualAsset, visualStatus, VisualPipelineError } from '../visual/service.ts'
+import { decideVisualAttempt, retryVisualTask } from '../visual/review.ts'
+import { createVisualDelivery, listVisualDeliveries, readVisualDeliveryFile, readVisualDeliveryZip } from '../visual/delivery.ts'
 
 
 /** 工作台模板：运行时读取（esbuild 打包时 build.mjs 会拷贝一份到 lib/）。 */
@@ -155,6 +160,107 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       } finally {
         db.close()
       }
+      return
+    }
+    if (req.method === 'POST' && path === '/sparkos/visual/decision') {
+      let body: Record<string, unknown>
+      try { body = await readJsonBody(req) } catch {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
+        return
+      }
+      if (typeof body.attemptId !== 'string' || (body.decision !== 'approved' && body.decision !== 'rejected')
+        || (body.note !== undefined && typeof body.note !== 'string')
+        || Object.keys(body).some((key) => !['attemptId', 'decision', 'note'].includes(key))) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 attemptId、decision 和可选 note' } })
+        return
+      }
+      const db = openFactoryDatabase()
+      try {
+        respondJson(res, 200, { ok: true, value: decideVisualAttempt(db, { attemptId: body.attemptId, decision: body.decision, note: body.note as string | undefined }) })
+      } catch (error) { respondVisualError(res, error) } finally { db.close() }
+      return
+    }
+    if (req.method === 'POST' && path === '/sparkos/visual/retry') {
+      let body: Record<string, unknown>
+      try { body = await readJsonBody(req) } catch {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
+        return
+      }
+      if (typeof body.taskId !== 'string' || Object.keys(body).some((key) => key !== 'taskId')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 taskId' } })
+        return
+      }
+      const db = openFactoryDatabase()
+      try { respondJson(res, 200, { ok: true, value: retryVisualTask(db, body.taskId) }) }
+      catch (error) { respondVisualError(res, error) } finally { db.close() }
+      return
+    }
+    if (req.method === 'POST' && path === '/sparkos/visual/delivery') {
+      let body: Record<string, unknown>
+      try { body = await readJsonBody(req) } catch {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
+        return
+      }
+      if (typeof body.packageId !== 'string' || (body.mode !== 'preview' && body.mode !== 'production')
+        || Object.keys(body).some((key) => key !== 'packageId' && key !== 'mode')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 packageId 和 mode' } })
+        return
+      }
+      const db = openFactoryDatabase()
+      try {
+        const value = createVisualDelivery(db, { packageId: body.packageId, mode: body.mode })
+        respondJson(res, value.created ? 201 : 200, { ok: true, value })
+      } catch (error) { respondVisualError(res, error) } finally { db.close() }
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/visual/deliveries') {
+      const packageId = url.searchParams.get('packageId') ?? ''
+      if (url.searchParams.getAll('packageId').length !== 1 || [...url.searchParams.keys()].some((key) => key !== 'packageId')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许一个 packageId 参数' } })
+        return
+      }
+      const db = openFactoryDatabase()
+      try { respondJson(res, 200, { ok: true, value: listVisualDeliveries(db, packageId) }) }
+      catch (error) { respondVisualError(res, error) } finally { db.close() }
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/visual/delivery') {
+      const deliveryId = url.searchParams.get('deliveryId') ?? ''
+      const file = url.searchParams.get('file') ?? ''
+      if (url.searchParams.getAll('deliveryId').length !== 1 || url.searchParams.getAll('file').length !== 1
+        || [...url.searchParams.keys()].some((key) => key !== 'deliveryId' && key !== 'file')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 deliveryId 和 file' } })
+        return
+      }
+      const db = openFactoryDatabase()
+      try {
+        const item = readVisualDeliveryFile(db, deliveryId, file)
+        const extension = nodePath.extname(file).toLowerCase()
+        const contentType = extension === '.html' ? 'text/html; charset=utf-8' : extension === '.json' ? 'application/json; charset=utf-8'
+          : extension === '.md' ? 'text/plain; charset=utf-8' : extension === '.png' ? 'image/png'
+            : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : extension === '.webp' ? 'image/webp' : 'application/octet-stream'
+        const headers: Record<string, string> = { 'content-type': contentType, 'content-length': String(item.content.byteLength), 'x-content-type-options': 'nosniff', 'cache-control': 'private, no-store' }
+        if (extension === '.html') headers['content-security-policy'] = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'"
+        res.writeHead(200, headers)
+        res.end(item.content)
+      } catch (error) { respondVisualError(res, error) } finally { db.close() }
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/visual/download') {
+      const deliveryId = url.searchParams.get('deliveryId') ?? ''
+      if (url.searchParams.getAll('deliveryId').length !== 1 || [...url.searchParams.keys()].some((key) => key !== 'deliveryId')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许一个 deliveryId 参数' } })
+        return
+      }
+      const db = openFactoryDatabase()
+      try {
+        const item = readVisualDeliveryZip(db, deliveryId)
+        res.writeHead(200, {
+          'content-type': 'application/zip', 'content-length': String(item.content.byteLength),
+          'content-disposition': `attachment; filename="${item.filename}"`, 'x-content-type-options': 'nosniff', 'cache-control': 'private, no-store',
+        })
+        res.end(item.content)
+      } catch (error) { respondVisualError(res, error) } finally { db.close() }
       return
     }
     if (req.method === 'POST' && path === '/sparkos/editorial/decision') {

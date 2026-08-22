@@ -30,6 +30,8 @@ import type {
   VisualStatusSnapshot,
   VisualTaskState,
 } from './types.ts'
+import { VisualPipelineError } from './errors.ts'
+import { attemptApproval, logicalTaskState, publicationReadiness, visualReviewAggregate } from './review.ts'
 
 const PACKAGE_ID = /^dp-[a-f0-9]{16}$/
 const TASK_ID = /^vt-[a-f0-9]{20}$/
@@ -48,22 +50,7 @@ const TARGETS = {
 
 type VisualAspect = keyof typeof TARGETS
 
-export class VisualPipelineError extends Error {
-  readonly code: string
-  readonly httpStatus: number
-
-  constructor(
-    code: string,
-    message: string,
-    httpStatus = 422,
-    options?: ErrorOptions,
-  ) {
-    super(message, options)
-    this.name = 'VisualPipelineError'
-    this.code = code
-    this.httpStatus = httpStatus
-  }
-}
+export { VisualPipelineError } from './errors.ts'
 
 interface BatchRow {
   id: string
@@ -248,7 +235,7 @@ interface VerifiedPackage {
   assetsSha256: string
 }
 
-function validateAssets(value: unknown): DraftAssetPlan[] {
+function validateAssets(value: unknown, contractVersion: number): DraftAssetPlan[] {
   if (!Array.isArray(value) || value.length === 0) throw new VisualPipelineError('invalid-assets', 'assets.json 必须是非空数组')
   const seen = new Set<string>()
   return value.map((raw, index) => {
@@ -261,7 +248,7 @@ function validateAssets(value: unknown): DraftAssetPlan[] {
     if (typeof asset.altText !== 'string' || asset.altText.trim() === '') throw new VisualPipelineError('invalid-assets', `assets[${index}].altText 必填`)
     if (typeof asset.placement !== 'string' || asset.placement.trim() === '') throw new VisualPipelineError('invalid-assets', `assets[${index}].placement 必填`)
     if (typeof asset.aspectRatio !== 'string' || !(asset.aspectRatio in TARGETS)) throw new VisualPipelineError('invalid-assets', `assets[${index}].aspectRatio 不合法`)
-    return {
+    const base: DraftAssetPlan = {
       id: asset.id,
       kind: asset.kind,
       prompt: asset.prompt.trim(),
@@ -269,13 +256,26 @@ function validateAssets(value: unknown): DraftAssetPlan[] {
       aspectRatio: asset.aspectRatio as VisualAspect,
       placement: asset.placement.trim(),
     }
+    if (contractVersion >= 2) {
+      if (!Array.isArray(asset.platforms) || asset.platforms.some((platform) => !['wechat', 'telegram', 'x', 'xiaohongshu'].includes(platform))) {
+        throw new VisualPipelineError('invalid-assets', `assets[${index}].platforms 不合法`)
+      }
+      if (!Number.isSafeInteger(asset.order) || Number(asset.order) < 1 || typeof asset.required !== 'boolean' || typeof asset.role !== 'string') {
+        throw new VisualPipelineError('invalid-assets', `assets[${index}] contract v2 字段不合法`)
+      }
+      base.platforms = [...asset.platforms]
+      base.order = Number(asset.order)
+      base.required = asset.required
+      base.role = asset.role
+    }
+    return base
   })
 }
 
 function verifyApprovedPackage(db: DatabaseSync, packageId: string): VerifiedPackage {
   if (!PACKAGE_ID.test(packageId)) throw new VisualPipelineError('bad-request', 'packageId 不合法', 400)
-  const draft = db.prepare('SELECT id, revision, status, artifact_dir, created_at FROM draft_packages WHERE id = ?').get(packageId) as {
-    id: string; revision: number; status: string; artifact_dir: string | null; created_at: string
+  const draft = db.prepare('SELECT id, revision, status, contract_version, artifact_dir, created_at FROM draft_packages WHERE id = ?').get(packageId) as {
+    id: string; revision: number; status: string; contract_version: number; artifact_dir: string | null; created_at: string
   } | undefined
   if (!draft) throw new VisualPipelineError('not-found', '草稿包不存在：' + packageId, 404)
   if (draft.status !== 'approved') throw new VisualPipelineError('package-not-approved', '只有已批准草稿包可以创建视觉任务')
@@ -337,7 +337,7 @@ function verifyApprovedPackage(db: DatabaseSync, packageId: string): VerifiedPac
   } catch (error) {
     throw new VisualPipelineError('artifact-integrity-failed', 'package/assets JSON 无法解析', 422, { cause: error })
   }
-  const assets = validateAssets(assetsRaw)
+  const assets = validateAssets(assetsRaw, Number(draft.contract_version))
   const packageAssets = packageRaw !== null && typeof packageRaw === 'object' && !Array.isArray(packageRaw)
     ? (packageRaw as { assets?: unknown }).assets : undefined
   if (!isDeepStrictEqual(packageAssets, assetsRaw)) throw new VisualPipelineError('artifact-integrity-failed', 'package.json 与 assets.json 的视觉计划不一致')
@@ -378,7 +378,7 @@ export function queueVisualBatch(db: DatabaseSync, packageId: string, now = new 
     db.prepare(`
       INSERT INTO visual_batches(id, package_id, revision, source_assets_sha256, status, required_count, approved_count, created_at, updated_at)
       VALUES (?, ?, ?, ?, 'queued', ?, 0, ?, ?)
-    `).run(batchId, packageId, verified.revision, verified.assetsSha256, verified.assets.length, at, at)
+    `).run(batchId, packageId, verified.revision, verified.assetsSha256, verified.assets.filter((asset) => asset.required !== false).length, at, at)
     for (const asset of verified.assets) {
       const target = TARGETS[asset.aspectRatio as VisualAspect]
       const idempotencyKey = `visual-task:${packageId}:${asset.id}:${verified.assetsSha256}`
@@ -867,6 +867,11 @@ export async function submitVisualAttachment(
     db.prepare(`UPDATE visual_asset_attempts SET status='waiting_visual_approval', updated_at=? WHERE id=? AND status='generated'`).run(at, attempt.id)
     db.prepare(`UPDATE visual_asset_tasks SET state='waiting_visual_approval', updated_at=? WHERE id=? AND state='generated'`).run(at, task.id)
     visualEvent(db, task.id, attempt.id, 'generated', 'waiting_visual_approval', 'M5A stops at human visual review gate', at)
+    db.prepare(`
+      INSERT INTO approvals(id, subject_kind, subject_id, decision, created_at)
+      VALUES (?, 'visual_attempt', ?, 'pending', ?)
+      ON CONFLICT(subject_kind, subject_id) DO NOTHING
+    `).run(randomUUID(), attempt.id, at)
     finishWorkflowJob(db, attempt.job_id, 'waiting_approval', at, 'visual attachment waiting for human approval', {
       taskId: task.id, attemptId: attempt.id, attachmentId: stored.ref.attachmentId, sha256: image.sha,
     })
@@ -890,22 +895,35 @@ export function visualStatus(db: DatabaseSync, packageId?: string): VisualStatus
   return {
     batches: rows.map((row) => {
       const tasks = (db.prepare('SELECT * FROM visual_asset_tasks WHERE batch_id=? ORDER BY asset_id').all(row.id) as unknown as TaskRow[]).map((taskRow) => {
-        const attempts = (db.prepare('SELECT * FROM visual_asset_attempts WHERE task_id=? ORDER BY attempt_no').all(taskRow.id) as unknown as AttemptRow[]).map(attemptFromRow)
-        return { ...taskFromRow(taskRow), attempts }
+        const attempts = (db.prepare('SELECT * FROM visual_asset_attempts WHERE task_id=? ORDER BY attempt_no').all(taskRow.id) as unknown as AttemptRow[])
+          .map((attemptRow) => ({ ...attemptFromRow(attemptRow), approval: attemptApproval(db, attemptRow.id) }))
+        const current = attempts.find((attempt) => attempt.attemptNo === Number(taskRow.current_attempt)) ?? null
+        const reviewNote = current?.approval?.note ?? taskRow.last_error
+        return {
+          ...taskFromRow(taskRow),
+          state: logicalTaskState(db, taskRow.id, current?.id ?? null, taskRow.state),
+          pipelineState: taskRow.state as Exclude<VisualTaskState, 'approved' | 'rejected'>,
+          failureCount: attempts.filter((attempt) => attempt.status === 'failed' || attempt.status === 'retry').length,
+          retryCount: attempts.filter((attempt) => attempt.status === 'retry').length,
+          reviewNote,
+          attempts,
+        }
       })
-      const count = (state: VisualTaskState): number => tasks.filter((task) => task.state === state).length
-      const waiting = count('waiting_visual_approval')
+      const pipelineCount = (state: Exclude<VisualTaskState, 'approved' | 'rejected'>): number => tasks.filter((task) => task.pipelineState === state).length
+      const waiting = pipelineCount('waiting_visual_approval')
+      const aggregate = visualReviewAggregate(db, row.id)
+      const publication = publicationReadiness(db, row.id)
       return {
-        ...batchFromRow(row),
+        ...batchFromRow(row), status: aggregate.status, approvedCount: aggregate.approvedCount, requiredCount: aggregate.requiredCount,
         tasks,
         readiness: {
-          required: tasks.length,
-          queued: count('queued') + count('retry'),
-          generating: count('generating') + count('generated'),
+          required: aggregate.requiredCount,
+          queued: pipelineCount('queued') + pipelineCount('retry'),
+          generating: pipelineCount('generating') + pipelineCount('generated'),
           waitingVisualApproval: waiting,
-          failed: count('failed'),
+          failed: pipelineCount('failed'),
           readyForVisualApproval: tasks.length > 0 && waiting === tasks.length,
-          readyForPublication: false as const,
+          ...publication,
         },
       }
     }),

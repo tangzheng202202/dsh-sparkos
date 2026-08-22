@@ -11,7 +11,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { envPath, VAULT_ROOT } from '../vault.ts'
 
-export const FACTORY_SCHEMA_VERSION = 4
+export const FACTORY_SCHEMA_VERSION = 5
 
 export function defaultFactoryDbPath(): string {
   return envPath('SPARKOS_DB_PATH', path.join(VAULT_ROOT, 'data', 'sparkos.db'))
@@ -319,6 +319,30 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
       ) STRICT;
       CREATE INDEX IF NOT EXISTS idx_visual_asset_events_task
         ON visual_asset_events(task_id, id);
+    `,
+  },
+  {
+    version: 5,
+    sql: `
+      CREATE TABLE IF NOT EXISTS visual_delivery_artifacts (
+        id TEXT PRIMARY KEY,
+        package_id TEXT NOT NULL REFERENCES draft_packages(id),
+        batch_id TEXT NOT NULL REFERENCES visual_batches(id),
+        version INTEGER NOT NULL CHECK (version >= 1),
+        mode TEXT NOT NULL CHECK (mode IN ('preview', 'production')),
+        platform TEXT NOT NULL,
+        format TEXT NOT NULL,
+        relative_path TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        bytes INTEGER NOT NULL CHECK (bytes >= 0),
+        manifest_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(package_id, version, platform, format)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_visual_delivery_package
+        ON visual_delivery_artifacts(package_id, version DESC);
+      CREATE INDEX IF NOT EXISTS idx_visual_delivery_batch
+        ON visual_delivery_artifacts(batch_id, version DESC);
     `,
   },
 ]

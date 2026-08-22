@@ -40,10 +40,10 @@ const evidenceUrl = 'https://official.example/visual'
 let fixtureNo = 0
 
 const DEFAULT_ASSETS: DraftAssetPlan[] = [
-  { id: 'cover-main', kind: 'cover', prompt: '可靠内容工厂的编辑工作台，无文字', altText: '内容工厂封面', aspectRatio: '2.35:1', placement: '微信公众号封面' },
-  { id: 'inline-flow', kind: 'inline', prompt: '从证据到审核的流程图，无小字', altText: '内容流程图', aspectRatio: '16:9', placement: '微信正文第一节后' },
-  { id: 'carousel-proof', kind: 'carousel', prompt: '事实、推断、观点三层卡片', altText: '事实边界卡片', aspectRatio: '3:4', placement: '小红书第二张' },
-  { id: 'square-detail', kind: 'carousel', prompt: '安全附件回交流程方形图', altText: '附件回交流程', aspectRatio: '1:1', placement: '小红书第三张' },
+  { id: 'cover-main', kind: 'cover', prompt: '可靠内容工厂的编辑工作台，无文字', altText: '内容工厂封面', aspectRatio: '2.35:1', placement: '微信公众号封面', platforms: ['wechat'], order: 1, required: true, role: 'wechat-cover' },
+  { id: 'inline-flow', kind: 'inline', prompt: '从证据到审核的流程图，无小字', altText: '内容流程图', aspectRatio: '16:9', placement: '微信正文第一节后', platforms: ['wechat'], order: 2, required: true, role: 'wechat-inline' },
+  { id: 'carousel-proof', kind: 'carousel', prompt: '事实、推断、观点三层卡片', altText: '事实边界卡片', aspectRatio: '3:4', placement: '小红书第一张', platforms: ['xiaohongshu'], order: 1, required: true, role: 'xhs-cover' },
+  { id: 'square-detail', kind: 'carousel', prompt: '安全附件回交流程方形图', altText: '附件回交流程', aspectRatio: '1:1', placement: '小红书第二张', platforms: ['xiaohongshu'], order: 2, required: true, role: 'xhs-carousel' },
 ]
 
 function sha256(data: string | Uint8Array): string {
@@ -164,7 +164,7 @@ function expectVisualCode(error: unknown, code: string): boolean {
   return error instanceof VisualPipelineError && error.code === code
 }
 
-test('schema v3 to v4 migration is additive, idempotent, and preserves v1/v2 states', () => {
+test('schema v3 through v5 migration is additive, idempotent, and preserves v1/v2 states', () => {
   const file = path.join(root, 'legacy-v3.db')
   const legacy = new DatabaseSync(file)
   legacy.exec(`
@@ -177,7 +177,7 @@ test('schema v3 to v4 migration is additive, idempotent, and preserves v1/v2 sta
   legacy.close()
   for (let pass = 0; pass < 2; pass += 1) {
     const db = openFactoryDatabase({ path: file })
-    assert.equal(databaseHealth(db, file).schemaVersion, 4)
+    assert.equal(databaseHealth(db, file).schemaVersion, 5)
     assert.deepEqual((db.prepare('SELECT id, status FROM draft_packages ORDER BY id').all() as Array<{ id: string; status: string }>).map((row) => ({ ...row })), [
       { id: 'dp-1111111111111111', status: 'rejected' },
       { id: 'dp-2222222222222222', status: 'approved' },
@@ -433,12 +433,12 @@ test('HTTP queue/status/asset and factory snapshot expose controlled visual stat
   assert.equal(buildFactorySnapshot().visual.batches[0].packageId, fixture.package.id)
 })
 
-test('all six visual tools register even when attachments service is absent', () => {
+test('all seven visual tools register even when attachments service is absent', () => {
   const definitions: Array<{ name: string; description: string }> = []
   registerVisualTools({ tools: { register(definition: { name: string; description: string }) { definitions.push(definition) } } } as unknown as Context)
   assert.deepEqual(definitions.map((item) => item.name), [
     'sparkos_visual_queue', 'sparkos_visual_claim', 'sparkos_visual_heartbeat',
-    'sparkos_visual_fail', 'sparkos_visual_submit', 'sparkos_visual_status',
+    'sparkos_visual_fail', 'sparkos_visual_submit', 'sparkos_visual_retry', 'sparkos_visual_status',
   ])
   assert.match(definitions.find((item) => item.name === 'sparkos_visual_submit')!.description, /images\[0\].*完整 attachment ref/)
 })

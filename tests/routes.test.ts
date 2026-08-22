@@ -182,9 +182,10 @@ test('POST /sparkos/editorial/decision：选题卡人工批准落 SQLite 审批�
       xiaohongshu: { title: '内容工厂测试', body: long, hashtags: ['AI', '内容创作', '工作流'] },
     },
     assets: [
-      { id: 'cover-one', kind: 'cover', prompt: '内容工厂封面', altText: '封面', aspectRatio: '2.35:1', placement: '封面' },
-      { id: 'inline-one', kind: 'inline', prompt: '流程图', altText: '流程', aspectRatio: '16:9', placement: '正文' },
-      { id: 'carousel-one', kind: 'carousel', prompt: '卡片图', altText: '卡片', aspectRatio: '3:4', placement: '小红书' },
+      { id: 'cover-one', kind: 'cover', prompt: '内容工厂封面', altText: '封面', aspectRatio: '2.35:1', placement: '封面', platforms: ['wechat'], order: 1, required: true, role: 'wechat-cover' },
+      { id: 'inline-one', kind: 'inline', prompt: '流程图', altText: '流程', aspectRatio: '16:9', placement: '正文', platforms: ['wechat'], order: 2, required: true, role: 'wechat-inline' },
+      { id: 'xhs-cover', kind: 'cover', prompt: '小红书首图', altText: '首图', aspectRatio: '3:4', placement: '小红书第一张', platforms: ['xiaohongshu'], order: 1, required: true, role: 'xhs-cover' },
+      { id: 'carousel-one', kind: 'carousel', prompt: '卡片图', altText: '卡片', aspectRatio: '3:4', placement: '小红书第二张', platforms: ['xiaohongshu'], order: 2, required: true, role: 'xhs-carousel' },
     ],
   })
   const preview = mockRes()
