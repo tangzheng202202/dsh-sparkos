@@ -57,7 +57,12 @@ const workbenchData = buildWorkbenchData()
 if (fixtureRoot) {
   const shared = {
     cardId: 'ec-1111111111111111', title: '审核意见渲染测试', validation: { errors: [] },
-    assetCount: 0, artifacts: [], createdAt: '2026-08-22T10:00:00Z', updatedAt: '2026-08-22T11:00:00Z',
+    assetCount: 2,
+    artifacts: [
+      { id: 'a1', platform: 'wechat', format: 'html', relativePath: 'drafts/factory/2026-08-22/dp-2222222222222222/wechat.html', sha256: 'a'.repeat(64), bytes: 512 },
+      { id: 'a2', platform: 'x', format: 'md', relativePath: 'drafts/factory/2026-08-22/dp-2222222222222222/x-thread.md', sha256: 'b'.repeat(64), bytes: 256 },
+    ],
+    createdAt: '2026-08-22T10:00:00Z', updatedAt: '2026-08-22T11:00:00Z',
   }
   workbenchData.factory.drafts = [
     { ...shared, id: 'dp-1111111111111111', revision: 1, parentPackageId: null, status: 'rejected', reviewNote: '需要重写开头', parentReviewNote: null, decidedAt: '2026-08-22T11:00:00Z' },
@@ -85,7 +90,7 @@ if (fixtureRoot) {
     id: 'vb-11111111111111111111', packageId: 'dp-2222222222222222', revision: 2, sourceAssetsSha256: 'b'.repeat(64), status: 'partially_approved',
     requiredCount: 4, approvedCount: 0, createdAt: '2026-08-22T10:00:00Z', updatedAt: '2026-08-22T11:00:00Z',
     tasks: [task('vt-11111111111111111111', 'cover-main', 'waiting_visual_approval', null), task('vt-22222222222222222222', 'inline-one', 'waiting_visual_approval', null), task('vt-44444444444444444444', 'failure-one', 'waiting_visual_approval', null), task('vt-33333333333333333333', 'carousel-one', 'rejected', '<img src=x onerror=reviewAttack()>'), xssTask],
-    readiness: { required: 4, queued: 0, generating: 0, waitingVisualApproval: 3, failed: 0, readyForVisualApproval: true, visualApproved: false, testOnly: true, deliveryReady: false, readyByPlatform: { wechat: false, telegram: true, x: true, xiaohongshu: false }, readyForPublication: false, blockers: ['stub-visual-assets-test-only'] },
+    readiness: { required: 4, queued: 0, generating: 0, waitingVisualApproval: 3, failed: 0, readyForVisualApproval: true, visualApproved: false, testOnly: true, deliveryReady: false, readyByPlatform: { wechat: false, telegram: true, x: true, xiaohongshu: false }, readyForPublication: false, blockers: ['required-visual-assets-not-approved','wechat-production-delivery-missing','legacy-contract-v1-cannot-prove-xiaohongshu-complete','xiaohongshu-production-delivery-missing'] },
   }, {
     id: 'vb-22222222222222222222', packageId: 'dp-3333333333333333', revision: 3, sourceAssetsSha256: 'c'.repeat(64), status: 'waiting_visual_approval',
     requiredCount: 1, approvedCount: 0, createdAt: '2026-08-22T12:00:00Z', updatedAt: '2026-08-22T12:00:00Z',

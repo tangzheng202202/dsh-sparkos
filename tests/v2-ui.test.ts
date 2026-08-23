@@ -40,6 +40,22 @@ interface InteractionResult {
   growthEmpty: boolean
   publishManual: boolean
   zeroFetches: boolean
+  titleW: number
+  titleH: number
+  reviewIconW: number
+  reviewIconH: number
+  pagesNoHScroll: boolean
+  creationUrlPkg: string
+  creationSel: string | null
+  creationPreviewSame: boolean
+  creationSwitched: boolean
+  creationNormalized: boolean
+  globalBlockerOnce: boolean
+  tgXClean: boolean
+  wechatOwnBlocker: boolean
+  xhsOwnBlocker: boolean
+  attemptTableOk: boolean
+  consoleErrors: number
 }
 
 interface ResponsiveResult {
@@ -51,6 +67,8 @@ interface ResponsiveResult {
   menuVisible: boolean
   todoVisible: boolean
   navItems: number
+  viewWidth: number
+  pagesNoHScroll: boolean
 }
 
 const interactionResult = runV2InteractionFixture()
@@ -110,6 +128,69 @@ test('v2 growth shows honest empty state and publish requires manual action', as
   const r = await interactionResult
   assert.equal(r.growthEmpty, true)
   assert.equal(r.publishManual, true)
+})
+
+// ---------- 布局与数据呈现稳定性回归（P0/P1 修复） ----------
+test('v2 page title stays horizontal (width>120, height<48, no vertical stacking)', async () => {
+  const r = await interactionResult
+  assert.ok(r.titleW > 120, 'title width ' + r.titleW + ' should exceed 120px')
+  assert.ok(r.titleH < 48, 'title height ' + r.titleH + ' should stay under 48px')
+})
+
+test('v2 review warning icon stays small (max 64px)', async () => {
+  const r = await interactionResult
+  assert.ok(r.reviewIconW > 0 && r.reviewIconW <= 64, 'review icon width ' + r.reviewIconW)
+  assert.ok(r.reviewIconH > 0 && r.reviewIconH <= 64, 'review icon height ' + r.reviewIconH)
+})
+
+test('v2 main content uses wide desktop width at 1920px (not ~900px)', async () => {
+  const r = await responsiveResult
+  const wide = r.find((i) => i.width === 1920)
+  assert.ok(wide, '1920 result missing')
+  assert.ok(wide.viewWidth >= 1200, 'main content width ' + wide.viewWidth + ' at 1920 should be >= 1200px')
+})
+
+test('v2 all pages have no unexpected horizontal scrollbars', async () => {
+  const r = await interactionResult
+  assert.equal(r.pagesNoHScroll, true)
+  const rs = await responsiveResult
+  for (const i of rs) assert.equal(i.pagesNoHScroll, true, 'page overflow at ' + i.width)
+})
+
+test('v2 creation URL, selection, preview and facts stay on the same package', async () => {
+  const r = await interactionResult
+  assert.ok(r.creationUrlPkg.indexOf('dp-1111111111111111') >= 0, 'url pkg: ' + r.creationUrlPkg)
+  assert.equal(r.creationSel, 'dp-1111111111111111')
+  assert.equal(r.creationPreviewSame, true)
+  assert.equal(r.creationSwitched, true)
+  assert.equal(r.creationNormalized, true)
+})
+
+test('v2 telegram/x never show wechat or xiaohongshu blockers', async () => {
+  const r = await interactionResult
+  assert.equal(r.tgXClean, true)
+})
+
+test('v2 global blocker is shown once, not repeated under every platform', async () => {
+  const r = await interactionResult
+  assert.equal(r.globalBlockerOnce, true)
+  assert.equal(r.wechatOwnBlocker, true)
+  assert.equal(r.xhsOwnBlocker, true)
+})
+
+test('v2 visual attempt table does not wrap normal fields character by character', async () => {
+  const r = await interactionResult
+  assert.equal(r.attemptTableOk, true)
+})
+
+test('v2 all routes produce zero console errors', async () => {
+  const r = await interactionResult
+  assert.equal(r.consoleErrors, 0)
+})
+
+test('v2 never sends POST requests', async () => {
+  const r = await interactionResult
+  assert.equal(r.zeroFetches, true)
 })
 
 // ---------- 响应式回归 ----------
@@ -176,10 +257,11 @@ function runV2InteractionFixture(): Promise<InteractionResult> {
       })
       assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)
       const source = readFileSync(base, 'utf8')
-      writeFileSync(fixture, source.replace('</body>', '<script>' + interactionHarness() + '</script></body>'))
+      const preScript = '<script>window.__v2errs=[];window.onerror=function(m){window.__v2errs.push(String(m));};var _ce=console.error.bind(console);console.error=function(){window.__v2errs.push(Array.prototype.slice.call(arguments).join(" "));_ce.apply(console,arguments);};</script>'
+      writeFileSync(fixture, source.replace('<head>', '<head>' + preScript).replace('</body>', '<script>' + interactionHarness() + '</script></body>'))
       const chrome = spawnSync(CHROME, [
         '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
-        '--virtual-time-budget=3000', '--window-size=1440,900', '--dump-dom', 'file://' + fixture,
+        '--virtual-time-budget=4000', '--window-size=1440,900', '--dump-dom', 'file://' + fixture,
       ], { encoding: 'utf8', timeout: 60_000, maxBuffer: 12 * 1024 * 1024 })
       assert.equal(chrome.status, 0, chrome.stderr)
       const value = JSON.parse(parsePre(chrome.stdout, 'v2-interaction-result')) as InteractionResult
@@ -260,6 +342,9 @@ function interactionHarness(): string {
     qa('.nav-item').forEach(function(b){if(b.getAttribute('data-nav')==='intel')b.click();});
     await wait(70);
     out.repeatNav=backToOverview&&location.hash==='#/intel'&&document.getElementById('view').textContent.indexOf('Top 5')>=0;
+    var tt=document.getElementById('topbarTitle');
+    var tr=tt.getBoundingClientRect();
+    out.titleW=Math.round(tr.width);out.titleH=Math.round(tr.height);
     var row=q('[data-intel-drawer]');if(row)row.click();
     out.intelDrawer=!q('#drawer').classList.contains('hidden');
     out.drawerHasFacts=q('#drawerBody').textContent.indexOf('已确认')>=0||q('#drawerBody').textContent.indexOf('事实')>=0;
@@ -273,6 +358,9 @@ function interactionHarness(): string {
     out.noDecisionButtons=qa('[data-visual-decision]').length===0&&qa('[data-draft-decision]').length===0&&qa('[data-visual-queue]').length===0&&qa('[data-visual-retry]').length===0;
     var sel=q('[data-rf="type"]');if(sel){sel.value='visual';sel.dispatchEvent(new Event('change',{bubbles:true}));}
     out.reviewFiltered=document.getElementById('reviewList').textContent.indexOf('共 5 项')>=0;
+    var rn=q('.review-notice');
+    out.reviewIconW=0;out.reviewIconH=0;
+    if(rn){var ri=rn.querySelector('svg');if(ri){var rr=ri.getBoundingClientRect();out.reviewIconW=Math.round(rr.width);out.reviewIconH=Math.round(rr.height);}}
     await hash('#/visual');
     out.thumbs=qa('[data-visual-thumb]').length;
     var t=q('[data-visual-thumb]');if(t)t.click();
@@ -289,10 +377,46 @@ function interactionHarness(): string {
     out.xssNoImg=qa('img[src="x"]').length===0;
     out.xssNoSvg=qa('svg[onload]').length===0;
     out.xssEscapedText=document.getElementById('view').textContent.indexOf('svgAttack')>=0;
+    out.attemptTableOk=(function(){
+      var ok=true;
+      Array.prototype.forEach.call(document.querySelectorAll('.attempt-list td'),function(c){
+        var cs=getComputedStyle(c);
+        if((cs.overflowWrap==='anywhere'||cs.wordBreak==='break-all')&&c.className.indexOf('mono')<0)ok=false;
+      });
+      return ok;
+    })();
+    await hash('#/creation?pkg=dp-1111111111111111');
+    out.creationUrlPkg=location.hash;
+    var selC=q('.cg-list .todo-row.sel');
+    out.creationSel=selC?selC.getAttribute('data-pkg'):null;
+    out.creationPreviewSame=q('.cg-preview').textContent.indexOf('dp-1111111111111111')>=0&&q('.cg-fact').textContent.indexOf('v1')>=0;
+    var row222=q('.cg-list [data-pkg="dp-2222222222222222"]');if(row222)row222.click();
+    await wait(80);
+    out.creationSwitched=(function(){var s=q('.cg-list .todo-row.sel');return !!s&&s.getAttribute('data-pkg')==='dp-2222222222222222'&&location.hash.indexOf('dp-2222222222222222')>=0&&q('.cg-preview').textContent.indexOf('dp-2222222222222222')>=0;})();
+    await hash('#/creation?pkg=bogus');
+    out.creationNormalized=(function(){var s=q('.cg-list .todo-row.sel');return !!s&&s.getAttribute('data-pkg')==='dp-1111111111111111'&&location.hash.indexOf('dp-1111111111111111')>=0;})();
     await hash('#/growth');
     out.growthEmpty=document.getElementById('view').textContent.indexOf('暂无真实发布表现数据')>=0;
     await hash('#/publish');
     out.publishManual=document.getElementById('view').textContent.indexOf('发布仍需人工操作')>=0;
+    var pvText=document.getElementById('view').textContent;
+    out.globalBlockerOnce=(pvText.split('视觉资产未全部批准').length-1)===1;
+    var prs=qa('.platform-row');
+    var tgRows=prs.filter(function(r){return r.querySelector('.platform-name').textContent.trim()==='Telegram';});
+    var xRows=prs.filter(function(r){return r.querySelector('.platform-name').textContent.trim()==='X';});
+    var wRows=prs.filter(function(r){return r.querySelector('.platform-name').textContent.trim()==='微信公众号';});
+    var hRows=prs.filter(function(r){return r.querySelector('.platform-name').textContent.trim()==='小红书';});
+    out.tgXClean=tgRows.every(function(r){return r.textContent.indexOf('微信')<0&&r.textContent.indexOf('小红书')<0;})&&xRows.every(function(r){return r.textContent.indexOf('微信')<0&&r.textContent.indexOf('小红书')<0;});
+    out.wechatOwnBlocker=wRows.some(function(r){return r.textContent.indexOf('微信公众号生产交付包缺失')>=0;});
+    out.xhsOwnBlocker=hRows.some(function(r){return r.textContent.indexOf('小红书生产交付包缺失')>=0;});
+    // 所有页面无横向溢出（六个核心页面 + 其余中心）
+    out.pagesNoHScroll=true;
+    var pages=['overview','intel','topics','creation','review','visual','publish','growth','system'];
+    for(var pi=0;pi<pages.length;pi++){
+      await hash('#/'+pages[pi]);
+      if(document.documentElement.scrollWidth>window.innerWidth+1)out.pagesNoHScroll=false;
+    }
+    out.consoleErrors=window.__v2errs?window.__v2errs.length:-1;
     out.zeroFetches=fetches.length===0;
   }catch(e){out.error=String(e&&e.stack||e).replace(/</g,'&lt;');}
   var pre=document.createElement('pre');pre.id='v2-interaction-result';pre.textContent=JSON.stringify(out);document.body.appendChild(pre);
@@ -317,6 +441,15 @@ function responsiveHarness(): string {
   if(todoCard){var r=todoCard.getBoundingClientRect();out.todoVisible=r.top<window.innerHeight;}
   else out.todoVisible=false;
   out.navItems=document.querySelectorAll('.nav-item').length;
+  var viewEl=document.querySelector('.view');
+  out.viewWidth=viewEl?Math.round(viewEl.getBoundingClientRect().width):0;
+  out.pagesNoHScroll=true;
+  var pages=['overview','intel','topics','creation','review','visual','publish','growth','system'];
+  for(var pi=0;pi<pages.length;pi++){
+    location.hash='#/'+pages[pi];
+    await new Promise(function(rs){setTimeout(rs,60);});
+    if(document.documentElement.scrollWidth>window.innerWidth+1)out.pagesNoHScroll=false;
+  }
   var pre=document.createElement('pre');pre.id='v2-rsp-result';pre.textContent=JSON.stringify(out);document.body.appendChild(pre);
 })();`
 }
