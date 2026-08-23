@@ -218,11 +218,12 @@ test('GET /sparkos/app-v2：V2 只读预览版（GET 200 · 内嵌数据 · 仅�
   assert.ok(html.includes('id="visual-lightbox"'), 'V2 复用受控 lightbox')
   assert.ok(html.includes('data-nav="intel"') || html.includes("data-nav='intel'") || html.includes('data-nav'), 'V2 侧栏导航')
   assert.ok(html.includes('V2 只读预览') || html.includes('只读预览'), 'V2 只读声明')
-  // 只读边界：页面内不得出现任何写端点或审批标记
-  for (const forbidden of ['/sparkos/visual/decision', '/sparkos/creation/decision', '/sparkos/visual/retry', '/sparkos/visual/delivery', '/sparkos/visual/queue', '/sparkos/mutate', 'data-visual-decision', 'data-draft-decision']) {
+  // 受控写边界：唯一允许的写端点是视觉审核 decision（人工确认后发送）；其余写端点一律不得出现
+  assert.ok(html.includes('/sparkos/visual/decision'), 'V2 应引用受控视觉审核端点')
+  for (const forbidden of ['/sparkos/creation/decision', '/sparkos/visual/retry', '/sparkos/visual/delivery', '/sparkos/visual/queue', '/sparkos/mutate', '/sparkos/editorial/decision', 'data-draft-decision', 'data-editorial']) {
     assert.ok(!html.includes(forbidden), 'V2 页面不得包含写端点：' + forbidden)
   }
-  assert.ok(!html.includes('"POST"') && !html.includes("'POST'"), 'V2 页面不得发起 POST')
+  assert.ok(!html.includes('"PUT"') && !html.includes('"PATCH"') && !html.includes('"DELETE"') && !html.includes("'PUT'") && !html.includes("'PATCH'") && !html.includes("'DELETE'"), 'V2 不得发起 PUT/PATCH/DELETE')
   // 与 V1 隔离：V2 不含 V1 的 nav-tab 标记；V1 不含 V2 标记
   assert.ok(!html.includes('nav-tab'), 'V2 不含 V1 导航标记')
   assert.ok(html.includes('data-nav='), 'V2 含 hash 路由导航')

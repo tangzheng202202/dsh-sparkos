@@ -85,11 +85,54 @@ interface ResponsiveResult {
   navItems: number
   viewWidth: number
   pagesNoHScroll: boolean
+  ovMetricsEqual: boolean
+  ovTop5Ratio: number
+  ovFlowRatio: number
+  ovTodoFull: boolean
+  ovRow4EqualW: boolean
+  ovRow4EqualH: boolean
+  ovRow4Stacked: boolean
+  ovRow4TwoCol: boolean
+}
+
+interface ReviewResult {
+  error?: string
+  browseZeroPosts: boolean
+  browseZeroGets: boolean
+  waitingHasActions: boolean
+  approvedNoActions: boolean
+  rejectedNoActions: boolean
+  approveDialogFields: boolean
+  approvePostsBeforeConfirm: number
+  approvePosts: number
+  approveBody: unknown
+  approveCardUpdated: boolean
+  approveCountDecreased: boolean
+  rejectBlankBlocked: boolean
+  rejectBlankPosts: number
+  rejectPosts: number
+  rejectBody: unknown
+  rejectCardUpdated: boolean
+  doubleClickPosts: number
+  conflictDialogOpen: boolean
+  conflictMessage: string
+  conflictRefresh: boolean
+  lightboxHasApprove: boolean
+  lightboxSameDialog: boolean
+  lightboxStillOpenAfterCancel: boolean
+  reviewPendingCountAfter: number
+  noForbiddenCalls: boolean
+  reviewListTail?: string
+  stateView?: string
+  hashNow?: string
+  manualApply?: string
+  manualErr?: string
 }
 
 const interactionResult = runV2InteractionFixture()
 // 串行执行：交互 fixture 完成后才启动响应式 fixture，避免多 Chrome 实例共享 profile 竞争
 const responsiveResult = interactionResult.then(() => runV2ResponsiveFixture())
+const reviewResult = interactionResult.then(() => runV2ResponsiveFixture()).then(() => runV2ReviewFixture())
 
 // ---------- 交互回归 ----------
 test('v2 app boots with 9 centers and overview answers what to do', async () => {
@@ -277,6 +320,113 @@ test('v2 flow creation stage is not blocked by rejected history', async () => {
 test('v2 metric cards navigate via hash only and never fetch', async () => {
   const r = await interactionResult
   assert.equal(r.metricCardsHashOnly, true)
+})
+
+// ---------- 总览布局验收 ----------
+test('v2 overview: five metric cards are equal width on desktop', async () => {
+  const r = await responsiveResult
+  for (const w of [1440, 1920]) {
+    const i = r.find((x) => x.width === w)
+    assert.ok(i, 'missing ' + w)
+    assert.equal(i.ovMetricsEqual, true, 'metric widths at ' + w)
+  }
+})
+
+test('v2 overview: second row is 7/12 Top5 + 5/12 flow', async () => {
+  const r = await responsiveResult
+  for (const w of [1440, 1920]) {
+    const i = r.find((x) => x.width === w)
+    assert.equal(i.ovTop5Ratio, 7, 'top5 ratio at ' + w)
+    assert.equal(i.ovFlowRatio, 5, 'flow ratio at ' + w)
+  }
+})
+
+test('v2 overview: todo card spans the full row', async () => {
+  const r = await responsiveResult
+  for (const w of [1440, 1920]) {
+    const i = r.find((x) => x.width === w)
+    assert.equal(i.ovTodoFull, true, 'todo full width at ' + w)
+  }
+})
+
+test('v2 overview: row-4 cards are equal width and height on desktop', async () => {
+  const r = await responsiveResult
+  for (const w of [1440, 1920]) {
+    const i = r.find((x) => x.width === w)
+    assert.equal(i.ovRow4EqualW, true, 'row4 width at ' + w)
+    assert.equal(i.ovRow4EqualH, true, 'row4 height at ' + w)
+  }
+})
+
+test('v2 overview: row-4 is two-column at 1024 and single-column at narrow', async () => {
+  const r = await responsiveResult
+  const w1024 = r.find((x) => x.width === 1024)
+  const narrowest = r.reduce((a, b) => (a.width < b.width ? a : b))
+  assert.ok(w1024, 'missing 1024 size')
+  assert.equal(w1024.ovRow4TwoCol, true, '1024 should be two-column')
+  assert.equal(narrowest.ovRow4Stacked, true, 'narrowest (' + narrowest.width + ') should be single-column')
+})
+
+// ---------- 视觉审核（受控开放） ----------
+test('v2 visual review: browsing and navigation emit zero requests', async () => {
+  const r = await reviewResult
+  assert.equal(r.browseZeroPosts, true)
+  assert.equal(r.browseZeroGets, true)
+})
+
+test('v2 visual review: actions only on waiting current attempts', async () => {
+  const r = await reviewResult
+  assert.equal(r.waitingHasActions, true)
+  assert.equal(r.approvedNoActions, true)
+  assert.equal(r.rejectedNoActions, true)
+})
+
+test('v2 visual review: approve dialog fields, optional note, single POST, card updates', async () => {
+  const r = await reviewResult
+  assert.equal(r.approveDialogFields, true)
+  assert.equal(r.approvePostsBeforeConfirm, 0, 'dialog open must not send POST')
+  assert.equal(r.approvePosts, 1)
+  assert.deepEqual(r.approveBody, { attemptId: 'va-11111111111111111111', decision: 'approved', note: '' })
+  assert.equal(r.approveCardUpdated, true)
+  assert.equal(r.approveCountDecreased, true)
+})
+
+test('v2 visual review: reject requires a non-blank note', async () => {
+  const r = await reviewResult
+  assert.equal(r.rejectBlankBlocked, true)
+  assert.equal(r.rejectBlankPosts, 1, 'blank reject must not add a POST')
+  assert.equal(r.rejectPosts, 2)
+  assert.deepEqual(r.rejectBody, { attemptId: 'va-22222222222222222222', decision: 'rejected', note: '重做构图' })
+  assert.equal(r.rejectCardUpdated, true)
+})
+
+test('v2 visual review: double-click produces a single request', async () => {
+  const r = await reviewResult
+  assert.equal(r.doubleClickPosts, 1)
+})
+
+test('v2 visual review: 409 keeps dialog open and refreshes state', async () => {
+  const r = await reviewResult
+  assert.equal(r.conflictDialogOpen, true)
+  assert.ok(r.conflictMessage.indexOf('该图片状态已变化') >= 0, r.conflictMessage)
+  assert.equal(r.conflictRefresh, true)
+})
+
+test('v2 visual review: card and lightbox share the same review entry', async () => {
+  const r = await reviewResult
+  assert.equal(r.lightboxHasApprove, true)
+  assert.equal(r.lightboxSameDialog, true)
+  assert.equal(r.lightboxStillOpenAfterCancel, true)
+})
+
+test('v2 visual review: review inbox pending count updates after approvals', async () => {
+  const r = await reviewResult
+  assert.equal(r.reviewPendingCountAfter, 2)
+})
+
+test('v2 visual review: no retry/delivery/generate/publish calls', async () => {
+  const r = await reviewResult
+  assert.equal(r.noForbiddenCalls, true)
 })
 
 // ---------- 响应式回归 ----------
@@ -578,9 +728,150 @@ function responsiveHarness(): string {
   var pages=['overview','intel','topics','creation','review','visual','publish','growth','system'];
   for(var pi=0;pi<pages.length;pi++){
     location.hash='#/'+pages[pi];
-    await new Promise(function(rs){setTimeout(rs,60);});
+    await new Promise(function(rs){setTimeout(rs,70);});
     if(document.documentElement.scrollWidth>window.innerWidth+1)out.pagesNoHScroll=false;
+    if(pages[pi]==='overview'){
+      var mc=document.querySelectorAll('.ov-metrics .metric-card');
+      out.ovMetricsEqual= mc.length===5&&Math.round(mc[0].getBoundingClientRect().width)===Math.round(mc[4].getBoundingClientRect().width);
+      var cont=document.querySelector('.ov-dashboard').getBoundingClientRect();
+      var top5=document.querySelector('.ov-top5').getBoundingClientRect();
+      var flow=document.querySelector('.ov-flow').getBoundingClientRect();
+      var todo=document.querySelector('.ov-todo').getBoundingClientRect();
+      out.ovTop5Ratio=Math.round(top5.width/cont.width*12);
+      out.ovFlowRatio=Math.round(flow.width/cont.width*12);
+      out.ovTodoFull=Math.abs(todo.width-cont.width)<4;
+      var src=document.querySelector('.ov-sources').getBoundingClientRect();
+      var jobs=document.querySelector('.ov-jobs').getBoundingClientRect();
+      var alr=document.querySelector('.ov-alerts').getBoundingClientRect();
+      out.ovRow4EqualW=Math.abs(src.width-jobs.width)<4&&Math.abs(jobs.width-alr.width)<4;
+      out.ovRow4EqualH=Math.abs(src.height-jobs.height)<4&&Math.abs(jobs.height-alr.height)<4;
+      out.ovRow4Stacked=alr.top>src.top+4&&jobs.top>src.top+4;
+      out.ovRow4TwoCol=Math.abs(src.top-jobs.top)<4&&Math.abs(alr.top-src.top)>4;
+    }
   }
   var pre=document.createElement('pre');pre.id='v2-rsp-result';pre.textContent=JSON.stringify(out);document.body.appendChild(pre);
 })();`
 }
+function runV2ReviewFixture(): Promise<ReviewResult> {
+  return new Promise((resolve, reject) => {
+    let root = ''
+    try {
+      root = mkdtempSync(path.join(tmpdir(), 'sparkos-v2-rev-'))
+      const base = path.join(root, 'base.html')
+      const fixture = path.join(root, 'fixture.html')
+      const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', '--v2', base], {
+        cwd: process.cwd(), encoding: 'utf8', env: withoutSparkosPaths(process.env), timeout: 60_000,
+      })
+      assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)
+      const source = readFileSync(base, 'utf8')
+      writeFileSync(fixture, source.replace('</body>', '<script>' + reviewHarness() + '</script></body>'))
+      const chrome = spawnSync(CHROME, [
+        '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
+        '--virtual-time-budget=4000', '--window-size=1440,900', '--dump-dom', 'file://' + fixture,
+      ], { encoding: 'utf8', timeout: 60_000, maxBuffer: 12 * 1024 * 1024 })
+      assert.equal(chrome.status, 0, chrome.stderr)
+      const value = JSON.parse(parsePre(chrome.stdout, 'v2-review-result')) as ReviewResult
+      assert.equal(value.error, undefined, value.error)
+      resolve(value)
+    } catch (e) {
+      reject(e)
+    } finally {
+      if (root) rmSync(root, { recursive: true, force: true })
+    }
+  })
+}
+
+function reviewHarness(): string {
+  return `
+(async function(){
+  var out={};
+  var calls=[],posts=[],gets=[],decisions={},mode='ok';
+  window.fetch=function(url,opts){
+    calls.push({url:String(url),method:(opts&&opts.method)||'GET'});
+    var u=String(url);
+    if(u.indexOf('/sparkos/visual/decision')>=0){
+      var body=JSON.parse(opts.body);
+      if(mode==='conflict')return Promise.resolve({ok:false,status:409,json:async function(){return {ok:false,error:{code:'decision-conflict',message:'该 attempt 已有不同审核决定，拒绝覆盖'}};}});
+      decisions[body.attemptId]=body.decision;
+      posts.push(body);
+      return Promise.resolve({ok:true,status:200,json:async function(){return {ok:true,value:{taskId:'t',attemptId:body.attemptId,decision:body.decision,note:body.note||null,taskState:body.decision,batchStatus:'partially_approved',approvedCount:1,requiredCount:4}};}});
+    }
+    if(u.indexOf('/sparkos/visual/status')>=0){
+      gets.push(u);
+      var pkg=decodeURIComponent(u.split('packageId=')[1]);
+      var b=D.factory.visual.batches.filter(function(x){return x.packageId===pkg;})[0];
+      var nb=JSON.parse(JSON.stringify(b));
+      nb.tasks.forEach(function(t){
+        var a=t.attempts.filter(function(x){return Number(x.attemptNo)===Number(t.currentAttempt);})[0];
+        if(a&&decisions[a.id]){t.state=decisions[a.id];t.reviewNote='test';a.approval={decision:decisions[a.id],note:'test',decidedAt:new Date().toISOString()};}
+      });
+      return Promise.resolve({ok:true,status:200,json:async function(){return {ok:true,value:{batches:[nb]}};}});
+    }
+    return Promise.resolve({ok:false,status:404,json:async function(){return {ok:false};}});
+  };
+  function q(s){return document.querySelector(s);}
+  function qa(s){return Array.prototype.slice.call(document.querySelectorAll(s));}
+  function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
+  async function hash(h){location.hash=h;await wait(70);}
+  try{
+    await hash('#/visual');
+    out.browseZeroPosts=posts.length===0;out.browseZeroGets=gets.length===0;
+    var wCard=q('[data-vis-task="vt-11111111111111111111"]');
+    out.waitingHasActions=!!wCard&&!!wCard.querySelector('[data-visual-approve]')&&!!wCard.querySelector('[data-visual-reject]')&&!!wCard.querySelector('[data-visual-open]');
+    out.approvedNoActions=(function(){var c=q('[data-vis-task="vt-77777777777777777777"]');return !!c&&!c.querySelector('[data-visual-approve]')&&!c.querySelector('[data-visual-reject]');})();
+    out.rejectedNoActions=(function(){var c=q('[data-vis-task="vt-33333333333333333333"]');return !!c&&!c.querySelector('[data-visual-approve]')&&!c.querySelector('[data-visual-reject]');})();
+    // approve flow (note optional, empty)
+    q('[data-visual-approve="va-11111111111111111111"]').click();await wait(60);
+    out.approveDialogFields=(function(){var d=q('#review-dialog');var b=q('#reviewDialogBody').textContent;return !d.classList.contains('hidden')&&q('#reviewDialogTitle').textContent==='批准图片'&&b.indexOf('cover-main')>=0&&b.indexOf('批准后将计入')>=0&&b.indexOf('审核意见（可选）')>=0;})();
+    out.approvePostsBeforeConfirm=posts.length;
+    q('[data-review-confirm]').click();await wait(220);
+    out.approvePosts=posts.length;
+    out.approveBody=posts[posts.length-1]||null;
+    out.approveCardUpdated=(function(){var c=q('[data-vis-task="vt-11111111111111111111"]');return c.textContent.indexOf('已批准')>=0;})();
+    out.approveCountDecreased=qa('[data-visual-approve]').length===4;
+    // reject: blank blocked
+    q('[data-visual-reject="va-22222222222222222222"]').click();await wait(60);
+    q('[data-review-confirm]').click();await wait(60);
+    out.rejectBlankBlocked=q('#reviewDialogErr').textContent.indexOf('驳回意见必填')>=0;
+    out.rejectBlankPosts=posts.length;
+    var n=q('#review-note');n.value=' 重做构图  ';n.dispatchEvent(new Event('input',{bubbles:true}));
+    q('[data-review-confirm]').click();await wait(220);
+    out.rejectPosts=posts.length;
+    out.rejectBody=posts[posts.length-1]||null;
+    out.rejectCardUpdated=(function(){var c=q('[data-vis-task="vt-22222222222222222222"]');return c.textContent.indexOf('已驳回')>=0;})();
+    // double click single request
+    q('[data-visual-approve="va-55555555555555555555"]').click();await wait(50);
+    var before=posts.length;
+    q('[data-review-confirm]').click();q('[data-review-confirm]').click();await wait(220);
+    out.doubleClickPosts=posts.length-before;
+    // conflict 409
+    mode='conflict';
+    q('[data-visual-approve="va-44444444444444444444"]').click();await wait(50);
+    q('[data-review-confirm]').click();await wait(220);
+    out.conflictDialogOpen=!q('#review-dialog').classList.contains('hidden');
+    out.conflictMessage=q('#reviewDialogErr').textContent;
+    out.conflictRefresh=gets.length>0;
+    q('[data-review-cancel]').click();await wait(50);
+    // lightbox shares same dialog
+    mode='ok';
+    var lt=q('[data-visual-thumb="va-66666666666666666666"]');if(lt)lt.click();await wait(60);
+    var lb=q('#visual-lightbox');
+    out.lightboxHasApprove=!!lb.querySelector('[data-visual-approve]');
+    lb.querySelector('[data-visual-approve]').click();await wait(50);
+    out.lightboxSameDialog=!q('#review-dialog').classList.contains('hidden')&&q('#reviewDialogTitle').textContent==='批准图片';
+    q('[data-review-cancel]').click();await wait(50);
+    out.lightboxStillOpenAfterCancel=!lb.classList.contains('hidden');
+    // review inbox pending count after approvals of 111,222,555（显式 renderRouter 保证同步渲染）
+    await hash('#/review?type=visual');
+    renderRouter();
+    await wait(60);
+    var rl=q('#reviewList');
+    var rt=rl?rl.textContent:'';
+    var rm=rt.match(/共 (\\d+) 项/);
+    out.reviewPendingCountAfter=rm?Number(rm[1]):-1;
+    out.noForbiddenCalls=calls.every(function(c){return c.url.indexOf('/sparkos/visual/retry')<0&&c.url.indexOf('/sparkos/visual/delivery')<0&&c.url.indexOf('image_generate')<0&&c.url.indexOf('/sparkos/visual/queue')<0&&c.url.indexOf('/sparkos/mutate')<0&&c.url.indexOf('/sparkos/creation/')<0&&c.url.indexOf('/sparkos/editorial/')<0;});
+  }catch(e){out.error=String(e&&e.stack||e).replace(/</g,'&lt;');}
+  var pre=document.createElement('pre');pre.id='v2-review-result';pre.textContent=JSON.stringify(out);document.body.appendChild(pre);
+})();`
+}
+

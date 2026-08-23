@@ -165,6 +165,38 @@ tr.row-click:hover{background:var(--surface-2)}
 .copy-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:11px;color:var(--ink-3);background:var(--surface);cursor:pointer;vertical-align:middle}
 .copy-btn:hover{background:var(--surface-2);color:var(--ink-2)}
 .copy-btn.copied{color:var(--success);border-color:var(--success)}
+.btn-approve{background:var(--success);color:#fff;border:1px solid var(--success)}
+.btn-approve:hover{background:#356E4B;border-color:#356E4B}
+.btn-approve:disabled{opacity:.55;cursor:not-allowed}
+.btn-reject{background:var(--surface);color:var(--danger);border:1px solid var(--danger)}
+.btn-reject:hover{background:var(--danger-soft)}
+.btn-reject:disabled{opacity:.55;cursor:not-allowed}
+.vis-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:10px}
+.vis-status{margin-top:auto;padding-top:10px;font-size:12px;color:var(--ink-2)}
+.vis-status .dim{display:block;margin-top:2px}
+.modal{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal.hidden{display:none}
+.modal-backdrop{position:absolute;inset:0;background:rgba(30,22,12,.5)}
+.modal-panel{position:relative;z-index:1;width:min(560px,94vw);max-height:88vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);animation:modal-in .15s ease}
+@keyframes modal-in{from{transform:translateY(10px);opacity:.4}to{transform:none;opacity:1}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.modal-title{font-size:14.5px;font-weight:700}
+.modal-close{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--surface-2)}
+.modal-body{padding:16px 18px;overflow:auto;flex:1}
+.modal-body .kv{font-size:12.5px;line-height:1.8}
+.modal-body .kv b{color:var(--ink-3);font-weight:600;display:inline-block;min-width:76px}
+.modal-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+.modal-note{width:100%;min-height:64px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:12.5px;line-height:1.5;background:var(--surface);color:var(--ink)}
+.modal-note:focus{outline:2px solid rgba(232,86,61,.2);border-color:var(--accent)}
+.modal-warn{margin:10px 0;padding:8px 10px;border-radius:8px;background:var(--warning-soft);color:var(--warning);font-size:12px;line-height:1.6}
+.modal-err{margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:12.5px;line-height:1.6;display:none}
+.modal-err.show{display:block}
+.review-thumb{width:100%;max-height:150px;object-fit:contain;background:var(--surface-2);border-radius:8px;margin-bottom:10px;display:block}
+.toast{position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:200;padding:9px 16px;border-radius:10px;font-size:13px;box-shadow:var(--shadow-lg);opacity:0;transition:opacity .18s ease;pointer-events:none;max-width:92vw}
+.toast.show{opacity:1}
+.toast.success{background:var(--success);color:#fff}
+.toast.error{background:var(--danger);color:#fff}
 .cluster-card{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:11px 13px;margin-bottom:8px}
 .cluster-card .cluster-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .cluster-card .cluster-title{font-size:13px;font-weight:600}
@@ -316,7 +348,7 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
       <div><div class="brand-name">SparkOS</div><div class="brand-sub">AI 编辑部 · V2 预览</div></div>
     </div>
     <nav class="nav" id="nav"></nav>
-    <div class="nav-status-card"><b><span class="dot dot-amber"></span>V2 只读预览</b>仅展示与导航；审批、驳回、重试、交付与发布请前往原版工作台。</div>
+    <div class="nav-status-card"><b><span class="dot dot-blue"></span>V2 受控操作 · 仅开放视觉审核</b>视觉图片可人工批准/驳回；选题、草稿、重试、交付与发布未开放，请前往原版工作台。</div>
   </aside>
   <div class="main">
     <header class="topbar">
@@ -324,7 +356,7 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
       <div class="topbar-title" id="topbarTitle"></div>
       <div class="topbar-sub" id="topbarSub"></div>
       <div class="topbar-meta">
-        <span class="pill pill-orange">V2 只读预览</span>
+        <span class="pill pill-blue">V2 受控操作 · 仅开放视觉审核</span>
         <span class="hide-sm" id="topbarTime"></span>
         <span class="pill pill-gray hide-sm" id="topbarHealth"></span>
       </div>
@@ -340,6 +372,16 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
     <div class="drawer-body" id="drawerBody"></div>
   </div>
 </div>
+
+<div id="review-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="视觉审核确认">
+  <div class="modal-backdrop" data-review-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="reviewDialogTitle"></div><button class="modal-close" data-review-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="reviewDialogBody"></div>
+    <div class="modal-foot" id="reviewDialogFoot"></div>
+  </div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <div id="visual-lightbox" class="visual-lightbox hidden" role="dialog" aria-modal="true" aria-label="视觉图片大图预览">
   <div class="visual-lightbox-backdrop" data-lightbox-backdrop></div>
@@ -911,7 +953,7 @@ function renderVisual(){
       var img=a&&a.importedRelativePath?('<button type="button" class="thumb-wrap" data-visual-thumb="'+esc(a.id)+'" aria-label="查看大图：'+esc(t.altText)+'"><img loading="lazy" alt="'+esc(t.altText)+'" src="'+visualAssetUrl(a.id)+'"></button>'):('<div class="preview-empty" style="min-height:170px">'+icon('image')+'<div>尚无图片</div></div>');
       var stub=a&&a.provider==='stub';
       var stateBadge=t.state==='waiting_visual_approval'?'<span class="badge badge-amber">待审核</span>':t.state==='approved'?'<span class="badge badge-green">已批准</span>':t.state==='rejected'?'<span class="badge badge-red">已驳回</span>':'<span class="badge badge-gray">'+esc(t.state)+'</span>';
-      h.push('<div class="vis-card" data-vis-task="'+esc(t.id)+'">'+img+'<div class="v-title">'+esc(t.assetId)+' '+stateBadge+'</div><div class="vis-meta">'+(stub?'<span class="badge badge-red">测试 stub</span>':'<span class="badge badge-blue">'+esc(a.provider)+'</span>')+' <span class="dim">'+esc(a&&a.model||'—')+'</span><br>'+dimsOf(a)+' · '+esc(t.placement)+'<br>当前 attempt #'+esc(t.currentAttempt)+' · 失败 '+(t.failureCount||0)+' · retry '+(t.retryCount||0)+'</div>'+techDetails(t,a)+'<div class="v-attempt-btn"><button type="button" class="btn btn-ghost" data-attempt-history="'+esc(t.id)+'">查看 attempt 历史</button></div></div>');
+      h.push('<div class="vis-card" data-vis-task="'+esc(t.id)+'">'+img+'<div class="v-title">'+esc(t.assetId)+' '+stateBadge+'</div><div class="vis-meta">'+(stub?'<span class="badge badge-red">测试 stub</span>':'<span class="badge badge-blue">'+esc(a.provider)+'</span>')+' <span class="dim">'+esc(a&&a.model||'—')+'</span><br>'+dimsOf(a)+' · '+esc(t.placement)+'<br>当前 attempt #'+esc(t.currentAttempt)+' · 失败 '+(t.failureCount||0)+' · retry '+(t.retryCount||0)+'</div>'+techDetails(t,a)+'<div class="v-attempt-btn"><button type="button" class="btn btn-ghost" data-attempt-history="'+esc(t.id)+'">查看 attempt 历史</button></div>'+visActions(t,a)+'</div>');
     });
     h.push('</div></div>');
   });
@@ -1141,7 +1183,8 @@ function renderVisualLightboxInfo(){
   var indexLabel='<div class="visual-lb-row"><b>图片</b><span>'+(visualLightbox.index+1)+' / '+visualLightbox.items.length+'</span></div>';
   var url=visualAssetUrl(a.id);
   var openLink=url?'<div class="visual-lb-row"><b>原图</b><a data-lightbox-anchor data-lightbox-open href="'+url+'" target="_blank" rel="noopener noreferrer">打开原图</a> <a data-lightbox-anchor data-lightbox-open-current href="'+url+'">在当前标签查看原图</a></div>':'';
-  lb.querySelector('[data-lightbox-info]').innerHTML=indexLabel+rows+openLink;
+  var reviewRow=isReviewable(item.task,item.attempt)?'<div class="visual-lb-row"><b>审核</b><button type="button" class="btn btn-approve" data-visual-approve="'+esc(item.attemptId)+'">批准图片</button> <button type="button" class="btn btn-reject" data-visual-reject="'+esc(item.attemptId)+'">驳回图片</button></div>':'';
+  lb.querySelector('[data-lightbox-info]').innerHTML=indexLabel+rows+openLink+reviewRow;
 }
 function openVisualLightbox(attemptId,trigger){
   if(!ATTEMPT_ID_RE.test(attemptId))return;
@@ -1192,6 +1235,147 @@ function stepVisualLightbox(delta){
 
 var RENDER={overview:renderOverview,intel:renderIntel,topics:renderTopics,creation:renderCreation,review:renderReview,visual:renderVisual,publish:renderPublish,growth:renderGrowth,system:renderSystem};
 
+
+/* ============ 视觉审核（V2 受控操作 · 仅开放视觉审核） ============ */
+var reviewDialog={attemptId:null,decision:null,batch:null,task:null,attempt:null,lastFocus:null,busy:false};
+var toastTimer=null;
+function isReviewable(task,attempt){
+  return !!task&&!!attempt&&task.state==='waiting_visual_approval'
+    &&Number(task.currentAttempt)===Number(attempt.attemptNo)
+    &&!!attempt.importedRelativePath
+    &&(!attempt.approval||attempt.approval.decision==='pending');
+}
+function showToast(msg,type){
+  var t=$('toast');t.textContent=msg;t.className='toast '+(type||'success');t.classList.add('show');
+  if(toastTimer)clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){t.classList.remove('show');},2600);
+}
+async function refreshVisual(packageId){
+  var resp=await fetch('/sparkos/visual/status?packageId='+encodeURIComponent(packageId));
+  var json=await resp.json();
+  if(!resp.ok||!json||!json.ok)throw new Error('刷新视觉状态失败');
+  var fresh=json.value.batches||[];
+  var kept=(D.factory&&D.factory.visual&&D.factory.visual.batches||[]).filter(function(b){return b.packageId!==packageId;});
+  D.factory=D.factory||{};D.factory.visual=D.factory.visual||{batches:[]};
+  D.factory.visual.batches=kept.concat(fresh);
+}
+function openVisualReviewDialog(attemptId,decision,trigger){
+  var found=visualTaskForAttempt(attemptId);
+  if(!found)return;
+  var t=found.task,a=found.attempt,b=found.batch;
+  if(!isReviewable(t,a)){
+    showToast('该图片当前不可审核，正在刷新最新状态','error');
+    refreshVisual(b.packageId).then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  reviewDialog.attemptId=attemptId;reviewDialog.decision=decision;
+  reviewDialog.batch=b;reviewDialog.task=t;reviewDialog.attempt=a;
+  reviewDialog.lastFocus=trigger||document.activeElement;reviewDialog.busy=false;
+  renderReviewDialog();
+  var dlg=$('review-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-review-close]');if(close)close.focus();
+}
+function renderReviewDialog(){
+  var d=reviewDialog;
+  var t=d.task,a=d.attempt,b=d.batch;
+  var approve=d.decision==='approved';
+  $('reviewDialogTitle').textContent=approve?'批准图片':'驳回图片';
+  var url=visualAssetUrl(a.id);
+  var pkgShort=b.packageId?String(b.packageId).slice(0,10):'—';
+  var h=[];
+  if(url)h.push('<img class="review-thumb" alt="'+esc(t.altText||'')+'" src="'+url+'">');
+  h.push('<div class="kv"><div><b>assetId</b>'+esc(t.assetId)+'</div><div><b>placement</b>'+esc(t.placement)+'</div><div><b>attempt</b>#'+esc(String(a.attemptNo))+'</div><div><b>provider/model</b>'+esc((a.provider||'—')+' / '+(a.model||'—'))+'</div><div><b>尺寸</b>'+esc(dimsOf(a))+'</div><div><b>packageId</b><span class="mono">'+esc(pkgShort)+'</span></div></div>');
+  if(!approve&&t.prompt)h.push('<div class="kv" style="margin-top:8px"><b>原 prompt 摘要</b><span>'+esc(String(t.prompt).slice(0,120))+(String(t.prompt).length>120?'…':'')+'</span></div>');
+  h.push('<div style="margin-top:12px"><label for="review-note" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">'+(approve?'审核意见（可选）':'驳回意见（必填）')+'</label><textarea id="review-note" class="modal-note" maxlength="2000" placeholder="'+(approve?'可填写备注，留空也可以':'请说明需要修改的内容')+'"></textarea></div>');
+  h.push('<div class="modal-warn">'+(approve?'批准后将计入视觉审核进度，但不会自动发布。':'图片已驳回，需进入后续受控重试流程（本轮未开放自动重试）。')+'</div>');
+  h.push('<div class="modal-err" id="reviewDialogErr"></div>');
+  $('reviewDialogBody').innerHTML=h.join('');
+  $('reviewDialogFoot').innerHTML='<button type="button" class="btn btn-ghost" data-review-cancel>取消</button><button type="button" class="btn '+(approve?'btn-approve':'btn-reject')+'" data-review-confirm>'+(approve?'确认批准':'确认驳回')+'</button>';
+}
+function closeReviewDialog(){
+  if(!reviewDialog.attemptId)return;
+  var dlg=$('review-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open)document.body.classList.remove('modal-open');
+  var last=reviewDialog.lastFocus;
+  reviewDialog.attemptId=null;reviewDialog.decision=null;reviewDialog.batch=null;reviewDialog.task=null;reviewDialog.attempt=null;reviewDialog.lastFocus=null;reviewDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showReviewDialogError(msg){
+  var e=$('reviewDialogErr');
+  if(e){e.textContent=msg;e.classList.add('show');}
+}
+function setReviewBusy(busy,label){
+  reviewDialog.busy=busy;
+  var dlg=$('review-dialog');
+  var btn=dlg.querySelector('[data-review-confirm]');
+  var cancel=dlg.querySelector('[data-review-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleReviewError(err){
+  var code=err&&err.code;
+  var msg='请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='not-found'){msg='任务或图片不存在，可能已变化，正在刷新最新状态';needsRefresh=true;}
+  else if(code==='not-current-attempt'||code==='decision-conflict'||code==='invalid-state'||code==='conflict'){msg='该图片状态已变化，正在刷新最新状态';needsRefresh=true;}
+  else if(code==='review-note-required'){msg='驳回图片必须填写审核意见';}
+  else if(code==='payload-too-large'){msg='意见过长（超过 2000 字）';}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  else if(String(code).indexOf('http-4')===0){msg='请求被拒绝（'+String(code).replace('http-','HTTP ')+'），请检查后重试';}
+  showReviewDialogError(msg);
+  if(needsRefresh&&reviewDialog.batch){
+    refreshVisual(reviewDialog.batch.packageId).then(function(){renderRouter();}).catch(function(){});
+  }
+  // 不关闭对话框；409 后由刷新结果决定下一步
+}
+async function submitVisualReview(){
+  if(!reviewDialog.attemptId||reviewDialog.busy)return;
+  var d=reviewDialog;
+  var noteEl=$('review-note');
+  var note=noteEl?noteEl.value.trim():'';
+  if(d.decision==='rejected'&&!note){showReviewDialogError('驳回意见必填');if(noteEl)noteEl.focus();return;}
+  if(note.length>2000){showReviewDialogError('意见不能超过 2000 字');return;}
+  var errEl=$('reviewDialogErr');if(errEl)errEl.classList.remove('show');
+  setReviewBusy(true,'提交中…');
+  try{
+    var resp=await fetch('/sparkos/visual/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({attemptId:d.attemptId,decision:d.decision,note:note})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var pkg=d.batch.packageId;
+    var approved=d.decision==='approved';
+    closeReviewDialog();
+    if(visualLightbox.index>=0)closeVisualLightbox();
+    showToast(approved?'图片已批准':'图片已驳回','success');
+    try{await refreshVisual(pkg);}catch(e2){showToast('已提交，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setReviewBusy(false);
+    handleReviewError(err);
+  }
+}
+function visActions(t,a){
+  var decAt=(a&&a.approval&&a.approval.decidedAt)?fmtISO(a.approval.decidedAt):null;
+  if(isReviewable(t,a)){
+    return '<div class="vis-actions"><button type="button" class="btn btn-ghost" data-visual-open="'+esc(a.id)+'" aria-label="查看原图">查看原图</button><button type="button" class="btn btn-approve" data-visual-approve="'+esc(a.id)+'">批准图片</button><button type="button" class="btn btn-reject" data-visual-reject="'+esc(a.id)+'">驳回图片</button></div>';
+  }
+  if(t.state==='approved'){
+    return '<div class="vis-status"><span class="badge badge-green">已批准</span>'+(decAt?'<span class="dim">'+esc(decAt)+'</span>':'')+(t.reviewNote?'<span class="dim">意见：'+esc(t.reviewNote)+'</span>':'')+'</div>';
+  }
+  if(t.state==='rejected'){
+    return '<div class="vis-status"><span class="badge badge-red">已驳回</span>'+(t.reviewNote?'<span class="dim">'+esc(t.reviewNote)+'</span>':'')+'</div>';
+  }
+  return '';
+}
+
 /* ============ bindings ============ */
 (function(){
   var lb=$('visual-lightbox');
@@ -1224,6 +1408,13 @@ var RENDER={overview:renderOverview,intel:renderIntel,topics:renderTopics,creati
     var cdr=t.closest('[data-cluster-drawer]');if(cdr){openClusterDrawer(cdr.getAttribute('data-cluster-drawer'));return;}
     var tdr=t.closest('[data-topic-drawer]');if(tdr){openTopicDrawer(tdr.getAttribute('data-topic-drawer'));return;}
     var vt=t.closest('[data-visual-thumb]');if(vt){openVisualLightbox(vt.getAttribute('data-visual-thumb'),vt);return;}
+    var vo=t.closest('[data-visual-open]');if(vo){openVisualLightbox(vo.getAttribute('data-visual-open'),vo);return;}
+    var va=t.closest('[data-visual-approve]');if(va){openVisualReviewDialog(va.getAttribute('data-visual-approve'),'approved',va);return;}
+    var vr=t.closest('[data-visual-reject]');if(vr){openVisualReviewDialog(vr.getAttribute('data-visual-reject'),'rejected',vr);return;}
+    var rc=t.closest('[data-review-close]');if(rc){closeReviewDialog();return;}
+    var rb=t.closest('[data-review-backdrop]');if(rb){closeReviewDialog();return;}
+    var rcc=t.closest('[data-review-cancel]');if(rcc){closeReviewDialog();return;}
+    var rcf=t.closest('[data-review-confirm]');if(rcf){submitVisualReview();return;}
     var ah=t.closest('[data-attempt-history]');if(ah){openVisualAttemptDrawer(ah.getAttribute('data-attempt-history'));return;}
     var cp=t.closest('[data-copy]');if(cp){copyTechId(cp);return;}
     // 审核中心精确导航：前往具体对象
