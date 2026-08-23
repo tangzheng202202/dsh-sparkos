@@ -48,7 +48,10 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
 .visual-progress{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 .visual-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
 .visual-asset{border:1px solid var(--border);border-radius:9px;background:#fff;padding:10px;overflow:hidden}
-.visual-asset img{display:block;width:100%;height:150px;object-fit:contain;background:#F5EFE3;border-radius:7px;margin-bottom:8px}
+.visual-asset > img{display:block;width:100%;height:150px;object-fit:contain;background:#F5EFE3;border-radius:7px;margin-bottom:8px}
+.visual-thumb{display:block;width:100%;padding:0;border:none;background:none;cursor:zoom-in;margin-bottom:8px;border-radius:7px}
+.visual-thumb:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.visual-thumb img{display:block;width:100%;height:150px;object-fit:contain;background:#F5EFE3;border-radius:7px;margin-bottom:0}
 .visual-meta{font-size:11.5px;color:var(--dim);line-height:1.65;overflow-wrap:anywhere}
 .test-only{display:inline-block;background:#8B1E1E;color:#fff;border-radius:5px;padding:3px 7px;font-size:11px;font-weight:800;margin:4px 0}
 .review-note{margin:6px 0;padding:7px;border-left:3px solid var(--accent);background:#FBE4DF;color:#8B3323;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -58,6 +61,25 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
 .visual-review-editor textarea:focus{outline:2px solid rgba(232,86,61,.2);border-color:var(--accent)}
 .visual-feedback{margin-top:7px;padding:7px 9px;border-radius:7px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .visual-feedback.error{background:#FBE4DF;color:#8B3323}.visual-feedback.success{background:#E4EFE6;color:#4E7A58}
+/* ---- M5A visual review lightbox（页面内大图预览）---- */
+body.lightbox-open{overflow:hidden}
+.visual-lightbox{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center}
+.visual-lightbox.hidden{display:none}
+.visual-lightbox-backdrop{position:absolute;inset:0;background:rgba(20,14,8,.88)}
+.visual-lightbox-inner{position:relative;z-index:1;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;padding:60px 72px 210px}
+.visual-lightbox-stage{pointer-events:auto;position:relative;max-width:90vw;max-height:85vh}
+.visual-lightbox-img{display:block;max-width:90vw;max-height:85vh;object-fit:contain;cursor:zoom-out;border-radius:6px;background:#1A140C;box-shadow:0 10px 50px rgba(0,0,0,.55)}
+.visual-lightbox-close{position:absolute;top:14px;right:16px;z-index:2;pointer-events:auto;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,248,239,.14);color:#fff;font-size:20px;line-height:1;cursor:pointer}
+.visual-lightbox-close:hover{background:rgba(232,86,61,.85)}
+.visual-lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;pointer-events:auto;width:44px;height:64px;border:none;border-radius:10px;background:rgba(255,248,239,.14);color:#fff;font-size:26px;cursor:pointer}
+.visual-lightbox-nav:hover{background:rgba(232,86,61,.85)}
+.visual-lightbox-prev{left:14px}.visual-lightbox-next{right:14px}
+.visual-lightbox-error{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#FFD9CE;font-size:14px;background:rgba(30,20,12,.9);border-radius:6px}
+.visual-lightbox-error a{pointer-events:auto;color:#fff}
+.visual-lightbox-info{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);pointer-events:auto;background:rgba(255,248,239,.97);color:var(--text);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:9px 14px;max-width:min(620px,92vw);max-height:150px;overflow:auto;font-size:11.5px;line-height:1.6;overflow-wrap:anywhere}
+.visual-lb-row{display:flex;gap:8px}
+.visual-lb-row b{min-width:88px;color:var(--dim);font-weight:600;flex-shrink:0}
+.visual-lb-row a{color:var(--accent);font-weight:600}
 </style>
 </head>
 <body>
@@ -114,6 +136,23 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
   <div class="section-card"><div class="section-title">📦 archive 计数与最近 run</div><div id="intelCountsBody"></div></div>
   <div class="section-card"><div class="section-title">🧭 日频融合（agent 经 sparkos_run intel 手动触发）</div><div id="intelFusionBody"></div></div>
   <div class="section-card"><div class="section-title">🎯 下发建议（preferences.json · 发布权归原 Owner）</div><div id="intelDispatchBody"></div></div>
+</div>
+
+<div id="visual-lightbox" class="visual-lightbox hidden" role="dialog" aria-modal="true" aria-label="视觉图片大图预览">
+  <div class="visual-lightbox-backdrop" data-lightbox-backdrop></div>
+  <div class="visual-lightbox-inner">
+    <button type="button" class="visual-lightbox-close" data-lightbox-close aria-label="关闭预览">✕</button>
+    <button type="button" class="visual-lightbox-nav visual-lightbox-prev" data-lightbox-prev aria-label="上一张（方向键 ←）">‹</button>
+    <div class="visual-lightbox-stage" data-lightbox-stage>
+      <img class="visual-lightbox-img" data-lightbox-img alt="">
+      <div class="visual-lightbox-error hidden" data-lightbox-error role="alert">
+        <div>图片加载失败</div>
+        <a class="btn" data-lightbox-error-link href="#" target="_blank" rel="noopener noreferrer">打开原图</a>
+      </div>
+    </div>
+    <button type="button" class="visual-lightbox-nav visual-lightbox-next" data-lightbox-next aria-label="下一张（方向键 →）">›</button>
+    <div class="visual-lightbox-info" data-lightbox-info aria-live="polite"></div>
+  </div>
 </div>
 
 <script>
@@ -294,7 +333,7 @@ function renderVisual(p){
   var batch=visualBatchFor(p.id);
   if(!batch)return p.status==="approved"?"<div class=\"visual-panel\"><b>视觉生产</b><div class=\"dim\" style=\"margin:5px 0\">尚未创建视觉批次</div><button type=\"button\" class=\"btn adopt\" data-visual-queue=\""+esc(p.id)+"\">创建视觉任务</button></div>":"";
   var rd=batch.readiness||{},statusName={partially_approved:"部分批准",visual_approved_test:"视觉已批准（测试）",visual_approved:"视觉已批准",waiting_visual_approval:"等待视觉审核",rejected:"有图片被驳回",queued:"排队中",generating:"生成中",failed:"失败"};
-  var cards=(batch.tasks||[]).map(function(t){var a=currentAttempt(t);var stub=a&&a.provider==="stub";var preview=a&&a.importedRelativePath?"<img loading=\"lazy\" alt=\""+esc(t.altText)+"\" src=\"/sparkos/visual/asset?attemptId="+encodeURIComponent(a.id)+"\">":"<div class=\"empty\" style=\"padding:28px 4px\">尚无图片</div>";
+  var cards=(batch.tasks||[]).map(function(t){var a=currentAttempt(t);var stub=a&&a.provider==="stub";var preview=a&&a.importedRelativePath?"<button type=\"button\" class=\"visual-thumb\" data-visual-thumb=\""+esc(a.id)+"\" aria-label=\"查看大图："+esc(t.altText)+"\"><img loading=\"lazy\" alt=\""+esc(t.altText)+"\" src=\"/sparkos/visual/asset?attemptId="+encodeURIComponent(a.id)+"\"></button>":"<div class=\"empty\" style=\"padding:28px 4px\">尚无图片</div>";
     var dims=a&&a.sourceWidth?esc(a.sourceWidth)+"×"+esc(a.sourceHeight):"—";var sha=a&&a.importedSha256?esc(a.importedSha256.slice(0,12)):"—";
     var ui=a?visualReviewState(a.id):null,busy=!!(ui&&ui.busy);var actions=t.state==="waiting_visual_approval"?"<button type=\"button\" class=\"btn adopt\" data-visual-decision=\"approved\" data-attempt=\""+esc(a&&a.id)+"\" "+(busy?"disabled":"")+">"+(busy&&ui.pendingDecision==="approved"?"处理中…":"批准图片")+"</button><button type=\"button\" class=\"btn ignore\" data-visual-decision=\"rejected\" data-attempt=\""+esc(a&&a.id)+"\" "+(busy?"disabled":"")+">驳回图片</button>":t.state==="rejected"?"<button type=\"button\" class=\"btn adopt\" data-visual-retry=\""+esc(t.id)+"\">按意见重试</button>":t.state==="approved"?"<span class=\"decided\">图片已批准 ✓</span>":"";
     var editor=ui&&ui.open&&t.state==="waiting_visual_approval"?"<div class=\"visual-review-editor\" data-visual-review-editor=\""+esc(a.id)+"\"><label for=\"visual-note-"+esc(a.id)+"\">驳回意见（必填）</label><textarea id=\"visual-note-"+esc(a.id)+"\" data-visual-note=\""+esc(a.id)+"\" maxlength=\"2000\" placeholder=\"请说明需要修改的内容\" "+(busy?"disabled":"")+">"+esc(ui.note)+"</textarea><div style=\"margin-top:7px\"><button type=\"button\" class=\"btn ignore\" data-visual-reject-confirm=\""+esc(a.id)+"\" "+(busy||!ui.note.trim()?"disabled":"")+">"+(busy&&ui.pendingDecision==="rejected"?"处理中…":"确认驳回")+"</button><button type=\"button\" class=\"btn\" data-visual-reject-cancel=\""+esc(a.id)+"\" "+(busy?"disabled":"")+">取消</button></div></div>":"";
@@ -341,7 +380,106 @@ function renderCreation(){
   el.querySelectorAll("[data-visual-reject-cancel]").forEach(function(btn){btn.onclick=function(){var ui=visualReviewState(btn.dataset.visualRejectCancel);if(ui.busy)return;ui.open=false;ui.note="";ui.error="";ui.message="";renderCreation();};});
   el.querySelectorAll("[data-visual-retry]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var batch; (D.factory.visual.batches||[]).forEach(function(b){if((b.tasks||[]).some(function(t){return t.id===btn.dataset.visualRetry;}))batch=b;});var r=await fetch("/sparkos/visual/retry",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({taskId:btn.dataset.visualRetry})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(batch.packageId);renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
   el.querySelectorAll("[data-visual-delivery]").forEach(function(btn){btn.onclick=async function(){var packageId=btn.dataset.package;visualDeliveryUi[packageId]={message:"处理中…",error:""};renderCreation();try{var r=await fetch("/sparkos/visual/delivery",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:packageId,mode:btn.dataset.visualDelivery})});var j;try{j=await r.json();}catch(parseError){throw new Error("服务器返回了无效 JSON");}if(!r.ok||!j||!j.ok)throw new Error(visualResponseError(r,j));await refreshVisual(packageId);var batch=visualBatchFor(packageId);batch.deliveryLink="/sparkos/visual/download?deliveryId="+encodeURIComponent(j.value.delivery.id);visualDeliveryUi[packageId]={message:"交付包已生成："+j.value.delivery.id,error:""};renderCreation();}catch(e){visualDeliveryUi[packageId]={message:"",error:e&&e.message?String(e.message):"交付包生成失败"};renderCreation();}};});
+  el.querySelectorAll("[data-visual-thumb]").forEach(function(btn){btn.onclick=function(){openVisualLightbox(btn.dataset.visualThumb,btn);};});
 }
+// ---- M5A visual lightbox（页面内大图预览 · 不触达任何审批 API）----
+var visualLightbox={items:[],index:-1,lastFocused:null};
+function visualLightboxItems(attemptId){
+  var found=visualTaskForAttempt(attemptId);
+  if(!found)return [];
+  return (found.batch.tasks||[]).map(function(t){
+    var a=currentAttempt(t);
+    if(!a||!a.importedRelativePath)return null;
+    return {task:t,attempt:a,attemptId:a.id};
+  }).filter(Boolean);
+}
+function visualLightboxCurrent(){return visualLightbox.items[visualLightbox.index];}
+function visualAssetUrl(attemptId){return "/sparkos/visual/asset?attemptId="+encodeURIComponent(attemptId);}
+function renderVisualLightboxImage(){
+  var lb=document.getElementById("visual-lightbox");
+  var item=visualLightboxCurrent();
+  if(!lb||!item)return;
+  var img=lb.querySelector("[data-lightbox-img]");
+  var error=lb.querySelector("[data-lightbox-error]");
+  var link=lb.querySelector("[data-lightbox-error-link]");
+  var url=visualAssetUrl(item.attemptId);
+  img.alt=item.task.altText||"";
+  img.src=url;
+  img.classList.remove("hidden");
+  error.classList.add("hidden");
+  link.href=url;
+  img.onerror=function(){img.classList.add("hidden");error.classList.remove("hidden");};
+}
+function renderVisualLightboxInfo(){
+  var lb=document.getElementById("visual-lightbox");
+  var item=visualLightboxCurrent();
+  if(!lb||!item)return;
+  var a=item.attempt,t=item.task;
+  var dims=(a.sourceWidth&&a.sourceHeight)?esc(a.sourceWidth)+"×"+esc(a.sourceHeight):"—";
+  var sha=a.importedSha256?esc(String(a.importedSha256).slice(0,12)):"—";
+  var rows=[
+    ["assetId",esc(t.assetId)],
+    ["attempt 编号",esc(String(a.attemptNo))],
+    ["provider/model",esc((a.provider||"—")+" / "+(a.model||"—"))],
+    ["尺寸",dims],
+    ["MIME",esc(a.sourceMediaType||"—")],
+    ["bytes",esc(String(a.sourceBytes==null?0:a.sourceBytes))],
+    ["SHA",sha],
+    ["altText",esc(t.altText)],
+    ["placement",esc(t.placement)],
+    ["prompt",esc(t.prompt)]
+  ].map(function(r){return "<div class=\"visual-lb-row\"><b>"+r[0]+"</b><span>"+r[1]+"</span></div>";}).join("");
+  var indexLabel="<div class=\"visual-lb-row\"><b>图片</b><span>"+(visualLightbox.index+1)+" / "+visualLightbox.items.length+"</span></div>";
+  var openLink="<div class=\"visual-lb-row\"><b>原图</b><a href=\""+visualAssetUrl(a.id)+"\" target=\"_blank\" rel=\"noopener noreferrer\">打开原图</a></div>";
+  lb.querySelector("[data-lightbox-info]").innerHTML=indexLabel+rows+openLink;
+}
+function openVisualLightbox(attemptId,trigger){
+  var items=visualLightboxItems(attemptId);
+  if(!items.length)return;
+  var index=-1;
+  for(var i=0;i<items.length;i++){if(items[i].attemptId===attemptId){index=i;break;}}
+  if(index<0)return;
+  visualLightbox.items=items;visualLightbox.index=index;visualLightbox.lastFocused=trigger||document.activeElement;
+  var lb=document.getElementById("visual-lightbox");
+  lb.classList.remove("hidden");
+  document.body.classList.add("lightbox-open");
+  renderVisualLightboxImage();
+  renderVisualLightboxInfo();
+  var close=lb.querySelector("[data-lightbox-close]");
+  if(close)close.focus();
+}
+function closeVisualLightbox(){
+  if(visualLightbox.index<0)return;
+  var lb=document.getElementById("visual-lightbox");
+  lb.classList.add("hidden");
+  document.body.classList.remove("lightbox-open");
+  var img=lb.querySelector("[data-lightbox-img]");
+  if(img)img.removeAttribute("src");
+  var last=visualLightbox.lastFocused;
+  visualLightbox.items=[];visualLightbox.index=-1;visualLightbox.lastFocused=null;
+  if(last&&typeof last.focus==="function")last.focus();
+}
+function stepVisualLightbox(delta){
+  var count=visualLightbox.items.length;
+  if(!count||visualLightbox.index<0)return;
+  visualLightbox.index=(visualLightbox.index+delta+count)%count;
+  renderVisualLightboxImage();
+  renderVisualLightboxInfo();
+}
+(function(){
+  var lb=document.getElementById("visual-lightbox");
+  if(!lb)return;
+  lb.querySelector("[data-lightbox-close]").addEventListener("click",function(ev){ev.stopPropagation();closeVisualLightbox();});
+  lb.querySelector("[data-lightbox-backdrop]").addEventListener("click",function(ev){ev.stopPropagation();closeVisualLightbox();});
+  lb.querySelector("[data-lightbox-prev]").addEventListener("click",function(ev){ev.stopPropagation();stepVisualLightbox(-1);});
+  lb.querySelector("[data-lightbox-next]").addEventListener("click",function(ev){ev.stopPropagation();stepVisualLightbox(1);});
+  document.addEventListener("keydown",function(ev){
+    if(visualLightbox.index<0)return;
+    if(ev.key==="Escape"){ev.preventDefault();closeVisualLightbox();return;}
+    if(ev.key==="ArrowLeft"){ev.preventDefault();stepVisualLightbox(-1);return;}
+    if(ev.key==="ArrowRight"){ev.preventDefault();stepVisualLightbox(1);}
+  });
+})();
 renderCreation();
 
 // ---- draft：草稿列表 + 查看全文 ----
