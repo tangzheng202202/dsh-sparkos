@@ -6,13 +6,35 @@
 <title>SparkOS 工作台 V2</title>
 <style>
 :root{
-  --bg:#FBF6EF;--surface:#FFFFFF;--surface-2:#F6EFE2;--ink:#2B241C;--ink-2:#52493B;--ink-3:#6E6150;
-  --line:#EADFCB;--line-strong:#DCCBAE;
-  --orange:#E8563D;--orange-strong:#C9422C;--orange-soft:#FBE9E3;
-  --green:#3E7D56;--green-soft:#E7F0EA;--amber:#A97B1F;--amber-soft:#F7EEDA;--red:#B23A26;--red-soft:#F9E4DE;
-  --blue:#2F6A94;--blue-soft:#E4EEF5;--gray:#9A8D78;--gray-soft:#EFEAE0;
-  --radius:12px;--radius-s:10px;
-  --shadow:0 1px 2px rgba(43,36,28,.05),0 2px 10px rgba(43,36,28,.05);
+  /* 语义色 */
+  --bg:#FBF6EF;--surface:#FFFFFF;--surface-2:#F7F0E3;--surface-3:#F1E8D8;
+  --ink:#2B241C;--ink-2:#52493B;--ink-3:#6E6150;
+  --line:#EADFCB;--line-strong:#D9C7A6;
+  --accent:#E8563D;--accent-strong:#C9422C;--accent-soft:#FBE9E3;
+  --success:#3E7D56;--success-soft:#E7F0EA;
+  --warning:#A97B1F;--warning-soft:#F7EEDA;
+  --danger:#B23A26;--danger-soft:#F9E4DE;
+  --info:#2F6A94;--info-soft:#E4EEF5;
+  --muted:#9A8D78;--muted-soft:#EFEAE0;
+  /* 旧别名（兼容既有组件，语义同上） */
+  --orange:var(--accent);--orange-strong:var(--accent-strong);--orange-soft:var(--accent-soft);
+  --green:var(--success);--green-soft:var(--success-soft);
+  --amber:var(--warning);--amber-soft:var(--warning-soft);
+  --red:var(--danger);--red-soft:var(--danger-soft);
+  --blue:var(--info);--blue-soft:var(--info-soft);
+  --gray:var(--muted);--gray-soft:var(--muted-soft);
+  /* 间距 */
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;
+  /* 圆角 */
+  --r-xs:6px;--r-sm:8px;--r-md:10px;--r-lg:12px;--r-xl:16px;
+  --radius:var(--r-lg);--radius-s:var(--r-md);
+  /* 阴影层级 */
+  --shadow-sm:0 1px 2px rgba(43,36,28,.05);
+  --shadow-md:0 1px 3px rgba(43,36,28,.06),0 2px 10px rgba(43,36,28,.06);
+  --shadow-lg:0 4px 16px rgba(43,36,28,.12),0 8px 32px rgba(43,36,28,.08);
+  --shadow:var(--shadow-md);
+  /* 字体层级 */
+  --fs-title:20px;--fs-section:15px;--fs-card:14px;--fs-body:14px;--fs-meta:12px;--fs-tech:11.5px;
   --font:'PingFang SC',-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
@@ -46,7 +68,8 @@ body.modal-open{overflow:hidden}
 .topbar-title{font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px;white-space:nowrap;flex:none;min-width:150px;max-height:48px;line-height:1.2}
 .topbar-title svg{width:22px;height:22px;flex:none}
 .topbar-title span{white-space:nowrap}
-.topbar-meta{margin-left:auto;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 14px;color:var(--ink-3);font-size:12px;white-space:nowrap;min-width:0;flex-shrink:1}
+.topbar-sub{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex-shrink:1;max-width:46vw}
+.topbar-meta{margin-left:auto;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 12px;color:var(--ink-3);font-size:12px;white-space:nowrap;min-width:0;flex-shrink:1}
 .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
 .pill-orange{background:var(--orange-soft);color:var(--orange-strong)}
 .pill-green{background:var(--green-soft);color:var(--green)}
@@ -64,6 +87,7 @@ body.modal-open{overflow:hidden}
 }
 @media (max-width:767px){
   .topbar{padding:0 12px}
+  .topbar-sub{display:none}
   .view{padding:14px 12px}
   .hide-sm{display:none}
   .topbar-meta{gap:8px}
@@ -78,12 +102,20 @@ body.modal-open{overflow:hidden}
 .topic-section{margin:8px 0;padding:8px 10px;border-radius:8px;background:var(--surface-2);font-size:13.5px;line-height:1.7}
 .topic-section h5{font-size:12px;color:var(--ink-3);font-weight:600;margin-bottom:3px}
 .topic-section p{margin:0}
+.topic-meta{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.topic-risk{margin:8px 0;padding:8px 10px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:12.5px;line-height:1.6}
+.topic-risk b{font-weight:600}
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px 15px}
 .stat-label{font-size:11.5px;color:var(--ink-3);font-weight:600;display:flex;align-items:center;gap:6px}
 .stat-label svg{width:13px;height:13px}
 .stat-value{font-size:23px;font-weight:700;margin-top:3px;line-height:1.2}
 .stat-sub{font-size:11px;color:var(--ink-3);margin-top:2px}
+.stat.metric-card{transition:border-color .15s ease,background .15s ease}
+.stat.metric-card:hover{border-color:var(--line-strong);background:var(--surface-2)}
+.stat-value.amber-num{color:var(--warning)}
+.stat-value.red-num{color:var(--danger)}
+.stat-value.dim-num{color:var(--ink-3)}
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;line-height:18px;padding:0 8px;border-radius:999px;font-weight:600;white-space:nowrap}
 .badge-green{background:var(--green-soft);color:var(--green)}
 .badge-amber{background:var(--amber-soft);color:var(--amber)}
@@ -110,8 +142,46 @@ tr.row-click:hover{background:var(--surface-2)}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
 .mono{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);word-break:break-all}
 .dim{color:var(--ink-3);font-size:12px}
+/* ---- 统一组件 ---- */
+.nav-group{padding:14px 12px 4px;font-size:11px;color:var(--ink-3);font-weight:600;letter-spacing:.05em}
+.nav-status-card{margin:8px 12px 12px;padding:8px 10px;border-radius:10px;background:var(--surface-2);font-size:11.5px;line-height:1.6;color:var(--ink-2)}
+.nav-status-card b{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-strong)}
+.notice{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;font-size:12.5px;line-height:1.5;margin-bottom:12px}
+.notice svg{width:18px;height:18px;flex:none}
+.notice .n-text{flex:1;min-width:0}
+.notice.warn{background:var(--warning-soft);color:var(--warning)}
+.notice.info{background:var(--info-soft);color:var(--info)}
+.notice.danger{background:var(--danger-soft);color:var(--danger)}
+.notice.success{background:var(--success-soft);color:var(--success)}
+.flowbar{display:flex;align-items:stretch;gap:4px;margin-bottom:16px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;max-width:100%}
+.flow-step{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2);white-space:nowrap;cursor:pointer;flex:none;transition:background .15s ease,border-color .15s ease}
+.flow-step:hover{background:var(--surface-2);border-color:var(--line-strong)}
+.flow-step.current{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-strong);font-weight:600}
+.flow-step .fs-count{font-size:11px;color:var(--ink-3)}
+.flow-step.current .fs-count{color:var(--accent-strong)}
+.flow-step .fs-reason{font-size:11px;color:var(--danger);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sk{display:inline-block;border-radius:6px;background:linear-gradient(90deg,var(--surface-2) 25%,var(--surface-3) 37%,var(--surface-2) 63%);background-size:400% 100%;animation:sk-shimmer 1.2s ease infinite}
+@keyframes sk-shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+.copy-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:11px;color:var(--ink-3);background:var(--surface);cursor:pointer;vertical-align:middle}
+.copy-btn:hover{background:var(--surface-2);color:var(--ink-2)}
+.copy-btn.copied{color:var(--success);border-color:var(--success)}
+.cluster-card{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:11px 13px;margin-bottom:8px}
+.cluster-card .cluster-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cluster-card .cluster-title{font-size:13px;font-weight:600}
+.cluster-card .cluster-meta{font-size:11.5px;color:var(--ink-3);margin-top:3px}
+.cluster-card .cluster-facts{font-size:12.5px;color:var(--ink-2);margin:6px 0 8px;line-height:1.6}
+.totals-strip{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.totals-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2)}
+.totals-chip b{font-size:13px}
+.table-scroll{overflow-x:auto}
+.table-scroll table{min-width:560px}
+.hint{font-size:11.5px;color:var(--ink-3);margin-top:6px;line-height:1.6}
+@media (prefers-reduced-motion:reduce){.sk{animation:none;background:var(--surface-2)}}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
 .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start}
+.grid-2>*,.grid-3>*{min-width:0}
+.grid-2 .span2{grid-column:1/-1}
+@media (max-width:900px){.grid-2 .todo-first{order:-1}}
 @media (max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
 .creation-grid{display:grid;grid-template-columns:320px minmax(480px,1fr) 320px;grid-template-areas:"list preview fact";gap:14px;align-items:start}
 .creation-grid .cg-list{grid-area:list;min-width:0}
@@ -121,7 +191,7 @@ tr.row-click:hover{background:var(--surface-2)}
 .preview-frame.mobile{max-width:375px}
 .preview-frame iframe{width:100%;height:460px;border:1px solid var(--line);border-radius:10px;background:#fff;display:block}
 .preview-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-@media (max-width:1250px){.creation-grid{grid-template-columns:320px 1fr;grid-template-areas:"list preview" "fact fact"}}
+@media (max-width:1450px){.creation-grid{grid-template-columns:320px 1fr;grid-template-areas:"list preview" "fact fact"}}
 @media (max-width:860px){.creation-grid{grid-template-columns:1fr;grid-template-areas:"list" "preview" "fact"}}
 details.tech{border:1px solid var(--line);border-radius:var(--radius-s);background:var(--surface-2);margin-top:8px}
 details.tech summary{cursor:pointer;padding:7px 11px;font-size:12px;color:var(--ink-2);font-weight:600;list-style:none;display:flex;align-items:center;gap:6px}
@@ -158,7 +228,10 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
 .attempt-list td{overflow-wrap:normal;word-break:normal}
 .attempt-list td.mono{overflow-wrap:anywhere;word-break:break-all}
 .v-attempt-btn{margin-top:8px}
-.vis-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);padding:11px;overflow:hidden}
+.vis-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);padding:11px;overflow:hidden;display:flex;flex-direction:column}
+.vis-card .thumb-wrap{flex:none}
+.vis-card .vis-meta{flex:1}
+.vis-card .v-attempt-btn{margin-top:6px}
 .vis-card .v-title{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vis-meta{font-size:11px;color:var(--ink-3);margin-top:4px;line-height:1.65}
 .attempt-list{width:100%;font-size:11.5px;border-collapse:collapse}
@@ -221,12 +294,13 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
       <div><div class="brand-name">SparkOS</div><div class="brand-sub">AI 编辑部 · V2 预览</div></div>
     </div>
     <nav class="nav" id="nav"></nav>
-    <div class="nav-preview-note">只读预览版：仅展示与导航，不执行审批、驳回、重试、交付或发布。</div>
+    <div class="nav-status-card"><b><span class="dot dot-amber"></span>V2 只读预览</b>仅展示与导航；审批、驳回、重试、交付与发布请前往原版工作台。</div>
   </aside>
   <div class="main">
     <header class="topbar">
       <button class="menu-toggle" id="menuToggle" type="button" aria-label="打开导航"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg></button>
       <div class="topbar-title" id="topbarTitle"></div>
+      <div class="topbar-sub" id="topbarSub"></div>
       <div class="topbar-meta">
         <span class="pill pill-orange">V2 只读预览</span>
         <span class="hide-sm" id="topbarTime"></span>
@@ -300,6 +374,37 @@ function icon(name){return '<svg width="20" height="20" viewBox="0 0 24 24" fill
 function badge(text,cls){return '<span class="badge '+(cls||'badge-gray')+'">'+esc(text)+'</span>';}
 function empty(title,note,ic){return '<div class="empty">'+icon(ic||'doc')+'<div>'+esc(title)+'</div>'+(note?'<div class="empty-note">'+esc(note)+'</div>':'')+'</div>';}
 function gradeBadge(g){var m={A:'badge-green',B:'badge-blue',C:'badge-amber',D:'badge-red'};return '<span class="badge '+(m[g]||'badge-gray')+'">'+esc(g)+'</span>';}
+// 只读内容工厂流程：状态与数量全部来自现有数据，点击仅 hash 跳转
+function flowStages(){
+  var fact=D.factory||{};
+  var srcs=((D.intel&&D.intel.health&&D.intel.health.sources)||[]);
+  var health=(D.intel&&D.intel.health&&D.intel.health.overall)||'pending';
+  var ed=(fact.editorial&&fact.editorial.cards)||[];
+  var drafts=(fact.drafts)||[];
+  var vis=(fact.visual&&fact.visual.batches)||[];
+  var pendingTopics=ed.filter(function(c){return !c.decision||c.decision==='pending';}).length;
+  var pendingDrafts=drafts.filter(function(p){return p.status==='waiting_approval';}).length;
+  var pendingVisual=0;vis.forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.state==='waiting_visual_approval')pendingVisual++;});});
+  var anyRejected=drafts.some(function(p){return p.status==='rejected';});
+  var anyVisualRejected=vis.some(function(b){return b.status==='rejected';});
+  var pubReady=vis.some(function(b){return b.readiness&&b.readiness.readyForPublication;});
+  return [
+    {id:'intel',name:'情报',status:srcs.length?(health==='red'?'blocked':health==='green'?'done':'running'):'empty',count:srcs.length,reason:health==='red'?'信源异常':'',title:health==='red'?'情报源异常':'情报源 '+(health==='green'?'正常':'待接入')},
+    {id:'topics',name:'选题',status:ed.length?(pendingTopics?'running':'done'):'empty',count:ed.length,reason:'',title:ed.length?(pendingTopics?'策划卡待审批':'策划已完成'):'暂无策划卡'},
+    {id:'creation',name:'创作',status:drafts.length?(pendingDrafts?'running':(anyRejected?'blocked':'done')):'empty',count:drafts.length,reason:anyRejected?'存在已驳回包':'',title:anyRejected?'草稿存在驳回':'草稿 '+(pendingDrafts?'待审批':'已完成')},
+    {id:'review',name:'审核',status:(pendingTopics||pendingDrafts)?'running':((ed.length||drafts.length)?'done':'empty'),count:pendingTopics+pendingDrafts,reason:'',title:'待审 '+(pendingTopics+pendingDrafts)+' 项'},
+    {id:'visual',name:'视觉',status:vis.length?(pendingVisual?'running':(anyVisualRejected?'blocked':'done')):'empty',count:pendingVisual,reason:anyVisualRejected?'有图片被驳回':'',title:'图片 '+(pendingVisual?'待审核':'已完成')},
+    {id:'publish',name:'发布准备',status:pubReady?'done':(vis.length?'blocked':'empty'),count:vis.length,reason:vis.length&&!pubReady?'存在发布阻塞':'',title:pubReady?'发布就绪（人工操作）':'发布存在阻塞'}
+  ];
+}
+function flowBar(current){
+  var st=flowStages();
+  var dot={done:'dot-green',running:'dot-blue',blocked:'dot-red',empty:'dot-gray'};
+  var name={done:'已完成',running:'进行中',blocked:'阻塞',empty:'未开始'};
+  return '<div class="flowbar" role="navigation" aria-label="内容生产流程">'+st.map(function(s){
+    return '<button type="button" class="flow-step'+(s.id===current?' current':'')+'" data-flow="'+s.id+'" title="'+esc(s.title||name[s.status])+'"><span class="fs-dot '+(dot[s.status]||'dot-gray')+'"></span>'+s.name+'<span class="fs-count">'+s.count+'</span>'+(s.reason?'<span class="fs-reason">'+esc(s.reason)+'</span>':'')+'</button>';
+  }).join('')+'</div>';
+}
 function lineName(id){if(!id)return '—';var l=(D.lines||[]).filter(function(x){return x.id===id;})[0];return l?l.name:id;}
 function fmtDate(v){if(!v)return '—';var s=String(v);if(/^\d{8}$/.test(s))return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);return esc(v);}
 
@@ -321,15 +426,15 @@ function renderFatal(msg){
 
 /* ============ router ============ */
 var VIEWS=[
-  {id:'overview',label:'今日总览',icon:'overview'},
-  {id:'intel',label:'情报中心',icon:'intel'},
-  {id:'topics',label:'选题策划',icon:'topics'},
-  {id:'creation',label:'创作中心',icon:'creation'},
-  {id:'review',label:'审核中心',icon:'review'},
-  {id:'visual',label:'视觉中心',icon:'visual'},
-  {id:'publish',label:'发布准备',icon:'publish'},
-  {id:'growth',label:'增长分析',icon:'growth'},
-  {id:'system',label:'系统状态',icon:'system'}
+  {id:'overview',label:'今日总览',icon:'overview',desc:'今天系统运行得怎么样，我需要处理什么',group:'content'},
+  {id:'intel',label:'情报中心',icon:'intel',desc:'每日 Top 5 与情报簇：证据等级、事实、推断与风险',group:'content'},
+  {id:'topics',label:'选题策划',icon:'topics',desc:'周三 / 周六编辑策划卡：核心判断与 A/B 证据闸门',group:'content'},
+  {id:'creation',label:'创作中心',icon:'creation',desc:'草稿包三栏工作台：版本链、平台预览与事实边界',group:'content'},
+  {id:'review',label:'审核中心',icon:'review',desc:'编辑待办箱：选题、草稿、图片与蒸馏的待审汇总',group:'content'},
+  {id:'visual',label:'视觉中心',icon:'visual',desc:'图片审核网格：当前 attempt、历史与 Provider 区分',group:'content'},
+  {id:'publish',label:'发布准备',icon:'publish',desc:'平台就绪矩阵：文稿、视觉、交付包与风险检查',group:'content'},
+  {id:'growth',label:'增长分析',icon:'growth',desc:'真实发布表现数据；未接入时显示接入说明',group:'ops'},
+  {id:'system',label:'系统状态',icon:'system',desc:'信源健康、工作流任务、数据新鲜度与降级状态',group:'ops'}
 ];
 var state={view:'overview',filters:{review:{type:'all',urgency:'all',time:'all',q:''},intel:{q:''},creation:{packageId:null,platform:'wechat',previewMode:'desktop'}}};
 function parseHash(){
@@ -364,13 +469,20 @@ function renderRouter(){
   if(r.params.pv)state.filters.creation.previewMode=r.params.pv;
   renderView(r.view);
 }
+var NAV_GROUPS={content:'内容生产',ops:'运营'};
 function renderView(view){
   state.view=view;
   var cur=VIEWS.filter(function(v){return v.id===view;})[0];
-  $('nav').innerHTML=VIEWS.map(function(v){
-    return '<button type="button" class="nav-item'+(v.id===view?' active':'')+'" data-nav="'+v.id+'">'+icon(v.icon)+'<span>'+v.label+'</span></button>';
-  }).join('');
+  var navHtml=[];
+  Object.keys(NAV_GROUPS).forEach(function(gk){
+    navHtml.push('<div class="nav-group">'+NAV_GROUPS[gk]+'</div>');
+    VIEWS.filter(function(v){return v.group===gk;}).forEach(function(v){
+      navHtml.push('<button type="button" class="nav-item'+(v.id===view?' active':'')+'" data-nav="'+v.id+'">'+icon(v.icon)+'<span>'+v.label+'</span></button>');
+    });
+  });
+  $('nav').innerHTML=navHtml.join('');
   $('topbarTitle').innerHTML=icon(cur.icon)+'<span>'+cur.label+'</span>';
+  $('topbarSub').textContent=cur.desc||'';
   $('topbarTime').textContent=D&&D.generatedAt?('数据 '+fmtISO(D.generatedAt)):'数据 —';
   var overall=(D&&D.intel&&D.intel.health&&D.intel.health.overall)||'pending';
   var overallName={green:'正常',red:'异常',pending:'待接入'}[overall]||overall;
@@ -396,64 +508,104 @@ function renderOverview(){
   var blockers=[];vis.forEach(function(b){var bl=(b.readiness&&b.readiness.blockers)||[];blockers=blockers.concat(bl);});
   var greenSrc=srcs.filter(function(s){return s.status==='green';}).length;
   var h=[];
-  // hero
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('sun')+'今日总览</div><span class="pill pill-gray">'+esc(daily.date||'日期未知')+'</span></div>');
   var healthName={green:'正常',red:'异常',pending:'待接入'}[health.overall]||health.overall;
+  var pubReady=vis.some(function(b){return b.readiness&&b.readiness.readyForPublication;});
   var todoCount=pendingVisual+pendingDrafts+pendingTopics+(d.distillQueue||[]).length+blockers.length;
-  h.push('<div style="font-size:13.5px;line-height:1.9">情报源 <b>'+healthName+'</b>（'+greenSrc+'/'+srcs.length+'） · 待审图片 <b>'+pendingVisual+'</b> · 待审草稿 <b>'+pendingDrafts+'</b> · 待审批选题 <b>'+pendingTopics+'</b> · 发布阻塞 <b>'+blockers.length+'</b>'+(todoCount?' · 今日待办 <b style="color:var(--orange-strong)">'+todoCount+'</b> 项':'')+'</div>');
-  h.push('</div>');
-  // todo
   var todos=[];
-  if(pendingVisual)todos.push({sev:0,type:'视觉',cls:'badge-orange',title:pendingVisual+' 张图片待审核',meta:'视觉中心 · 逐个放大查看后审批（V2 只读）',target:'visual'});
-  if(pendingDrafts)todos.push({sev:1,type:'创作',cls:'badge-blue',title:pendingDrafts+' 个草稿包待审批',meta:'创作中心 · 平台预览与事实边界（V2 只读）',target:'creation'});
+  if(pendingVisual)todos.push({sev:0,type:'视觉',cls:'badge-orange',title:pendingVisual+' 张图片待审核',meta:'逐个放大查看后审批（V2 只读）',target:'visual'});
+  if(pendingDrafts)todos.push({sev:1,type:'创作',cls:'badge-blue',title:pendingDrafts+' 个草稿包待审批',meta:'平台预览与事实边界（V2 只读）',target:'creation'});
   if(blockers.length)todos.push({sev:2,type:'交付',cls:'badge-red',title:'发布准备存在 '+blockers.length+' 项阻塞',meta:blockers.slice(0,3).join('；')+(blockers.length>3?' 等':''),target:'publish'});
-  if(pendingTopics)todos.push({sev:3,type:'选题',cls:'badge-amber',title:pendingTopics+' 张策划卡待审批',meta:'选题策划 · A/B 证据闸门（V2 只读）',target:'topics'});
-  if((d.distillQueue||[]).length)todos.push({sev:4,type:'蒸馏',cls:'badge-gray',title:(d.distillQueue||[]).length+' 条蒸馏候选待审',meta:'审核中心 · 四红线由人工执行',target:'review'});
-  if((d.writebackQueue||[]).length)todos.push({sev:5,type:'写回',cls:'badge-gray',title:(d.writebackQueue||[]).length+' 条待写回清单',meta:'人工核对后写回星火库（插件不自动写）',target:'review'});
+  if(pendingTopics)todos.push({sev:3,type:'选题',cls:'badge-amber',title:pendingTopics+' 张策划卡待审批',meta:'A/B 证据闸门（V2 只读）',target:'topics'});
+  if((d.distillQueue||[]).length)todos.push({sev:4,type:'蒸馏',cls:'badge-gray',title:(d.distillQueue||[]).length+' 条蒸馏候选待审',meta:'四红线由人工执行',target:'review'});
+  if((d.writebackQueue||[]).length)todos.push({sev:5,type:'写回',cls:'badge-gray',title:(d.writebackQueue||[]).length+' 条待写回清单',meta:'人工核对后写回星火库',target:'review'});
   todos.sort(function(a,b){return a.sev-b.sev;});
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('check')+'今日待办</div>'+(todos.length?'<span class="pill pill-amber">'+todos.length+' 项待处理</span>':'<span class="pill pill-green">已清空</span>')+'</div>');
-  if(!todos.length){h.push('<div class="empty">'+icon('check')+'<div>今日无待办事项</div><div class="empty-note">所有审核队列为空、无发布阻塞。</div></div>');}
+  var flow=flowStages();
+  var fsName={done:{l:'已完成',c:'dot-green'},running:{l:'进行中',c:'dot-blue'},blocked:{l:'阻塞',c:'dot-red'},empty:{l:'未开始',c:'dot-gray'}};
+
+  // 第一行：五个关键指标（今日发生了什么 / 哪些值得做 / 等什么人工处理）
+  var metrics=[
+    {label:'今日情报',value:d.events||0,sub:'runtime 事件累计',ic:'intel',target:'intel',cls:''},
+    {label:'A/B 级选题',value:abCount,sub:'策划卡证据等级',ic:'topics',target:'topics',cls:abCount?'':'dim-num'},
+    {label:'待审草稿',value:pendingDrafts,sub:'工厂草稿包',ic:'creation',target:'creation',cls:pendingDrafts?'amber-num':''},
+    {label:'待审图片',value:pendingVisual,sub:'视觉 attempt',ic:'visual',target:'visual',cls:pendingVisual?'amber-num':''},
+    {label:'发布准备',value:pubReady?'就绪':(blockers.length?('阻塞 '+blockers.length):'—'),sub:pubReady?'人工发布':'readiness blockers',ic:'publish',target:'publish',cls:blockers.length?'red-num':''}
+  ];
+  h.push('<div class="stat-grid" style="margin-bottom:14px">');
+  metrics.forEach(function(s){
+    h.push('<button type="button" class="stat metric-card" data-goto="'+s.target+'" style="text-align:left;cursor:pointer"><div class="stat-label">'+icon(s.ic)+esc(s.label)+'</div><div class="stat-value '+s.cls+'">'+esc(s.value)+'</div><div class="stat-sub">'+esc(s.sub)+'</div></button>');
+  });
+  h.push('</div>');
+
+  // 第二行：Top5 / 内容生产流程 / 待办事项
+  h.push('<div class="grid-2" style="grid-template-columns:1fr 1fr;align-items:start">');
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('intel')+'今日 Top 5</div><button type="button" class="btn btn-ghost" data-goto="intel">查看全部</button></div>');
+  if(fact.ranking&&(fact.ranking.top5||[]).length){
+    h.push('<table><tbody>');
+    (fact.ranking.top5||[]).slice(0,5).forEach(function(t){
+      h.push('<tr class="row-click" data-intel-drawer="'+esc(t.topicKey)+'" style="cursor:pointer"><td style="width:28px"><b style="color:'+(t.rank===1?'var(--accent)':'var(--ink-3)')+'">#'+t.rank+'</b></td><td>'+esc(t.topic)+'</td><td style="width:110px">'+gradeBadge(t.verificationGrade)+'</td><td style="width:64px" class="dim">热度 '+t.heatScore.toFixed(0)+'</td></tr>');
+    });
+    h.push('</tbody></table>');
+  }else{
+    h.push(empty('暂无排名数据','完成情报簇分析与 intel rank 后展示每日 Top 5；当前属于未开始阶段，属正常情况。','intel'));
+  }
+  h.push('</div>');
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'内容生产流程</div></div>'+flowBar('overview')+'<div class="hint">状态来自现有数据：'+flow.map(function(s){var m=fsName[s.status]||fsName.empty;return s.name+'（'+s.count+' · '+m.l+'）';}).join(' · ')+'</div></div>');
+  h.push('<div class="card span2 todo-first"><div class="card-head"><div class="card-title">'+icon('check')+'今日待办</div>'+(todos.length?'<span class="pill pill-amber">'+todos.length+' 项</span>':'<span class="pill pill-green">已清空</span>')+'</div>');
+  if(!todos.length){h.push('<div class="empty">'+icon('check')+'<div>今日无待办事项</div><div class="empty-note">审核队列为空、无发布阻塞——这是正常状态。</div></div>');}
   else{todos.forEach(function(t){h.push('<div class="todo-row"><span class="badge '+t.cls+'">'+t.type+'</span><div class="todo-main"><div class="todo-title">'+esc(t.title)+'</div><div class="todo-meta">'+esc(t.meta)+'</div></div><button type="button" class="btn btn-ghost" data-goto="'+t.target+'">前往</button></div>');});}
   h.push('</div>');
-  // pipeline
-  var stages=[
-    {name:'情报',detail:srcs.length+' 源',status:srcs.length?(health.overall==='red'?'blocked':health.overall==='green'?'done':'running'):'gray'},
-    {name:'核验',detail:fact.ranking?((fact.ranking.top5||[]).length+' 上榜'):'待排名',status:fact.ranking?'done':((d.clusters&&d.clusters.items&&d.clusters.items.length)?'running':'gray')},
-    {name:'选题',detail:ed.length+' 卡',status:ed.length?(pendingTopics?'running':'done'):'gray'},
-    {name:'创作',detail:drafts.length+' 包',status:drafts.length?(pendingDrafts?'running':(drafts.some(function(p){return p.status==='rejected';})?'blocked':'done')):'gray'},
-    {name:'视觉',detail:vis.length+' 批',status:vis.length?(pendingVisual?'running':(vis.some(function(b){return b.status==='rejected';})?'blocked':'done')):'gray'},
-    {name:'交付',detail:vis.some(function(b){return b.deliveryLink||(b.readiness&&b.readiness.deliveryReady);})?'就绪':'待定',status:vis.some(function(b){return b.deliveryLink||(b.readiness&&b.readiness.deliveryReady);})?'done':(vis.length?'running':'gray')}
-  ];
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'六阶段生产进度</div></div><div class="pipeline">');
-  var stName={done:{l:'已完成',c:'dot-green'},running:{l:'进行中',c:'dot-blue'},blocked:{l:'阻塞',c:'dot-red'},gray:{l:'未开始',c:'dot-gray'}};
-  stages.forEach(function(s){var m=stName[s.status]||stName.gray;h.push('<div class="pipe p-'+s.status+'"><span class="dot '+m.c+'"></span><div class="p-name">'+s.name+'</div><div class="p-count">'+esc(s.detail)+' · '+m.l+'</div></div>');});
-  h.push('</div></div>');
-  // stats
-  var stats=[
-    {label:'情报源健康',value:healthName,sub:greenSrc+' / '+srcs.length+' 源',ic:'intel'},
-    {label:'情报事件',value:d.events||0,sub:'runtime 事件累计',ic:'doc'},
-    {label:'A/B 级候选',value:abCount,sub:'编辑策划证据等级',ic:'topics'},
-    {label:'待审批选题',value:pendingTopics,sub:'周三/周六策划卡',ic:'topics'},
-    {label:'待审草稿',value:pendingDrafts,sub:'工厂草稿包',ic:'creation'},
-    {label:'待审图片',value:pendingVisual,sub:'视觉 attempt',ic:'visual'},
-    {label:'发布阻塞',value:blockers.length,sub:'视觉 readiness',ic:'publish'}
-  ];
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('growth')+'数据总览</div></div><div class="stat-grid">');
-  stats.forEach(function(s){h.push('<div class="stat"><div class="stat-label">'+icon(s.ic)+esc(s.label)+'</div><div class="stat-value">'+esc(s.value)+'</div><div class="stat-sub">'+esc(s.sub)+'</div></div>');});
-  h.push('</div></div>');
+  h.push('</div>');
+
+  // 第三行：信源健康 / 最近任务 / 系统提醒
+  h.push('<div class="grid-3" style="align-items:start">');
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('intel')+'信源健康</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
+  if(!srcs.length){h.push('<div class="dim">（无接入源）</div>');}
+  else{
+    srcs.slice(0,5).forEach(function(s){
+      var dotMap={green:'dot-green',red:'dot-red',pending:'dot-gray'};
+      var labelMap={green:'正常',red:'异常',pending:'待接入'};
+      h.push('<div class="todo-row"><span class="dot '+(dotMap[s.status]||'dot-gray')+'"></span><div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+esc(s.id)+'</div></div><span class="dim">'+(labelMap[s.status]||s.status)+'</span></div>');
+    });
+  }
+  h.push('</div>');
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'最近任务</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
+  var jobs=(fact.database&&fact.database.jobs)||{};
+  var jobKeys=Object.keys(jobs);
+  if(!jobKeys.length){h.push('<div class="dim">（暂无任务记录）</div>');}
+  else{
+    jobKeys.forEach(function(k){
+      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+esc(k)+'</div></div><span class="badge '+(k==='failed'?'badge-red':k==='waiting_approval'?'badge-amber':k==='succeeded'?'badge-green':'badge-gray')+'">'+jobs[k]+'</span></div>');
+    });
+  }
+  h.push('</div>');
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('alert')+'系统提醒</div></div>');
+  var alerts=[];
+  if(health.overall==='red')alerts.push({cls:'badge-red',text:'情报源整体异常',target:'system'});
+  if(blockers.length)alerts.push({cls:'badge-red',text:'发布准备存在 '+blockers.length+' 项阻塞',target:'publish'});
+  if(anyVisualRejected())alerts.push({cls:'badge-red',text:'视觉批次存在已驳回图片',target:'visual'});
+  if(anyDraftRejected())alerts.push({cls:'badge-amber',text:'存在已驳回草稿包（可创建修订版，V2 只读）',target:'creation'});
+  if(!alerts.length)alerts.push({cls:'badge-green',text:'无异常：系统运行正常',target:null});
+  alerts.forEach(function(a){
+    h.push('<div class="todo-row">'+(a.target?'<button type="button" class="btn btn-ghost" data-goto="'+a.target+'">查看</button>':'<span class="badge badge-green">正常</span>')+'<div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+a.text+'</div></div></div>');
+  });
+  h.push('</div>');
+  h.push('</div>');
   return h.join('');
 }
+function anyVisualRejected(){var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];return vis.some(function(b){return b.status==='rejected';});}
+function anyDraftRejected(){var drafts=(D.factory&&D.factory.drafts)||[];return drafts.some(function(p){return p.status==='rejected';});}
 
 /* ============ intel ============ */
 function renderIntel(){
   var fact=D.factory||{};var r=fact.ranking;
-  var h=[];
+  var h=[flowBar('intel')];
   h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('intel')+'每日 Top 5 · 上升榜 · 连续霸榜</div>'+(r?'<span class="pill pill-gray">'+esc(r.date)+'</span>':'')+'</div>');
   if(!r){h.push(empty('暂无排名快照','执行情报簇分析并完成 intel rank 后，此处展示可解释的每日排名。','intel'));}
   else{
     h.push('<table><thead><tr><th>#</th><th>主题</th><th>热度</th><th>增速</th><th>证据</th><th>连榜</th><th>创作闸门</th></tr></thead><tbody>');
     (r.top5||[]).forEach(function(t){
-      h.push('<tr class="row-click" data-intel-drawer="'+esc(t.topicKey)+'"><td>'+t.rank+'</td><td><b>'+esc(t.topic)+'</b></td><td>'+t.heatScore.toFixed(1)+'</td><td>'+t.velocityScore.toFixed(1)+'</td><td>'+gradeBadge(t.verificationGrade)+'</td><td>'+t.consecutiveTopDays+' 天</td><td>'+(t.eligibleForCreation?'<span class="badge badge-green">可创作</span>':'<span class="badge badge-gray">待核验</span>')+'</td></tr>');
+      var first=t.rank===1?' style="background:var(--surface-2)"':'';
+      h.push('<tr class="row-click" data-intel-drawer="'+esc(t.topicKey)+'"'+first+'><td>'+(t.rank===1?'<span class="badge badge-orange">#1</span>':t.rank)+'</td><td><b>'+esc(t.topic)+'</b></td><td>'+t.heatScore.toFixed(1)+'</td><td>'+t.velocityScore.toFixed(1)+'</td><td>'+gradeBadge(t.verificationGrade)+'</td><td>'+t.consecutiveTopDays+' 天</td><td>'+(t.eligibleForCreation?'<span class="badge badge-green">可创作</span>':'<span class="badge badge-gray">待核验</span>')+'</td></tr>');
     });
     h.push('</tbody></table>');
     h.push('<div class="dim" style="margin-top:6px">已展示 '+(r.top5||[]).length+' / 5 个主题 · 点击行查看详情与技术 ID</div>');
@@ -466,7 +618,8 @@ function renderIntel(){
   if(!cl.items.length){h.push(empty('暂无情报簇','执行 sparkos_run intel analyze 生成骨架，模型分析后 submitCluster 写回。','db'));}
   else{
     cl.items.forEach(function(c){
-      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title">'+esc(c.topic||'(待分析)')+'</div><div class="todo-meta">'+fmtDate(c.date)+' · 来源 '+c.sourceCount+' · 事件 '+(c.eventKeys||[]).length+' · 热度 '+esc(c.heat||'-')+'</div></div><button type="button" class="btn btn-ghost" data-cluster-drawer="'+esc(c.clusterId)+'">详情</button></div>');
+      var heatCls={high:'badge-red',medium:'badge-amber',low:'badge-gray'}[c.heat]||'badge-gray';
+      h.push('<div class="cluster-card"><div class="cluster-head"><div class="cluster-title">'+esc(c.topic||'(待分析)')+'</div><span class="badge '+heatCls+'">热度 '+esc(c.heat||'-')+'</span></div><div class="cluster-meta">'+fmtDate(c.date)+' · 来源 '+c.sourceCount+' · 事件 '+(c.eventKeys||[]).length+'</div>'+(c.coreFacts&&c.coreFacts.length?'<div class="cluster-facts">'+esc(c.coreFacts.slice(0,2).join('；'))+(c.coreFacts.length>2?' 等': '')+'</div>':'')+'<button type="button" class="btn btn-ghost" data-cluster-drawer="'+esc(c.clusterId)+'">详情</button></div>');
     });
   }
   h.push('</div>');
@@ -521,27 +674,31 @@ function intelClusterBody(c){
   if(c.risks&&c.risks.length){h.push('<h4 style="color:var(--red)">风险</h4><ul>'+c.risks.map(function(x){return '<li style="color:var(--red)">'+esc(x)+'</li>';}).join('')+'</ul>');}
   if(c.evidenceUrls&&c.evidenceUrls.length){h.push('<h4>来源</h4><div class="evidence-list">'+c.evidenceUrls.map(function(u){return '<div>'+icon('ext')+' <a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(u)+'</a></div>';}).join('')+'</div>');}
   if(c.angleSuggestions&&c.angleSuggestions.length){h.push('<h4>选题角度</h4><div class="kv">'+esc(c.angleSuggestions.join('；'))+'</div>');}
-  h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body"><div>clusterId：<span class="mono">'+esc(c.clusterId)+'</span></div><div>topicKey：<span class="mono">'+esc(c.topicKey||'—')+'</span></div><div>日期：'+esc(c.date)+' · 模型：'+esc(c.model||'—')+'</div></div></details>');
+  h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body"><div>clusterId：<span class="mono">'+esc(c.clusterId)+'</span> <button type="button" class="copy-btn" data-copy="'+esc(c.clusterId)+'">复制</button></div><div>topicKey：<span class="mono">'+esc(c.topicKey||'—')+'</span></div><div>日期：'+esc(c.date)+' · 模型：'+esc(c.model||'—')+'</div></div></details>');
   return h.join('');
 }
 
 /* ============ topics ============ */
 function renderTopics(){
   var ed=(D.factory&&D.factory.editorial)||null;
-  var h=[];
+  var h=[flowBar('topics')];
   h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('topics')+'周三 / 周六编辑策划</div>'+(ed?'<span class="pill pill-gray">'+esc(ed.mode)+' · '+esc(ed.periodStart)+' .. '+esc(ed.periodEnd)+'</span>':'')+'</div>');
   if(!ed||!(ed.cards||[]).length){h.push(empty('暂无编辑策划','运行 sparkos_run topics（payload.editorial=midweek 或 weekly）生成 A/B 证据闸门策划卡。','topics'));}
   else{
     (ed.cards||[]).forEach(function(c){
       var decision=c.decision==='approved'?'<span class="badge badge-green">已批准 ✓</span>':c.decision==='rejected'?'<span class="badge badge-red">已驳回 ✗</span>':'<span class="badge badge-amber">待审批 · V2 预览模式（不可审批）</span>';
       var pat={persistent:'连续霸榜',accelerating:'加速上升',resurfacing:'二次升温',reversal:'事实反转',structural:'结构议题',emerging:'新兴话题'}[c.trendPattern]||c.trendPattern;
-      h.push('<div class="card" style="cursor:pointer" data-topic-drawer="'+esc(c.id)+'"><div class="card-head"><div class="card-title">#'+c.rank+' '+esc(c.title)+' <span class="badge '+(c.verificationGrade==='A'?'badge-green':'badge-blue')+'">证据 '+esc(c.verificationGrade)+'</span> <span class="badge badge-amber">'+esc(pat)+'</span></div><div>'+decision+'</div></div>');
+      h.push('<div class="card topic-card" data-topic-drawer="'+esc(c.id)+'" style="cursor:pointer"><div class="card-head"><div class="card-title">#'+c.rank+' '+esc(c.title)+' <span class="badge '+(c.verificationGrade==='A'?'badge-green':'badge-blue')+'">证据 '+esc(c.verificationGrade)+'</span> <span class="badge badge-amber">'+esc(pat)+'</span></div><div>'+decision+'</div></div>');
       h.push('<div class="topic-section"><h5>核心判断</h5><p>'+esc(c.coreThesis)+'</p></div>');
-      h.push('<div class="topic-section"><h5>为什么现在</h5><p>'+esc(c.whyNow)+'</p></div>');
-      if(c.facts&&c.facts.length)h.push('<div class="topic-section"><h5>事实</h5><p>'+esc(c.facts.join('；'))+'</p></div>');
-      if(c.counterArguments&&c.counterArguments.length)h.push('<div class="topic-section"><h5>反方</h5><p>'+esc(c.counterArguments.join('；'))+'</p></div>');
-      if(c.risks&&c.risks.length)h.push('<div class="topic-section"><h5 style="color:var(--red)">风险</h5><p style="color:var(--red)">'+esc(c.risks.join('；'))+'</p></div>');
-      h.push('<div class="dim" style="margin-top:5px">形式：'+esc(c.contentFormat)+' · 平台：'+esc((c.platforms||[]).join(', ')||'待定')+' · 证据 '+(c.evidence||[]).length+' 条 · 价值 '+Number(c.expectedValue).toFixed(1)+'</div>');
+      h.push('<div class="topic-section"><h5>为什么现在值得写</h5><p>'+esc(c.whyNow)+'</p></div>');
+      var srcCount=0;(c.evidence||[]).forEach(function(e){if(e.url)srcCount++;});
+      h.push('<div class="topic-meta"><span class="badge badge-gray">证据 '+(c.evidence||[]).length+' 条 / 来源 '+srcCount+'</span> <span class="badge badge-gray">价值 '+Number(c.expectedValue).toFixed(1)+'</span> <span class="badge badge-gray">'+esc(c.contentFormat)+'</span> <span class="badge badge-gray">平台 '+esc((c.platforms||[]).join('、')||'待定')+'</span></div>');
+      if(c.risks&&c.risks.length)h.push('<div class="topic-risk"><b>风险摘要：</b>'+esc(c.risks.slice(0,2).join('；'))+(c.risks.length>2?' 等': '')+'</div>');
+      var extra='';
+      if(c.facts&&c.facts.length)extra+='<div class="topic-section"><h5>事实</h5><p>'+esc(c.facts.join('；'))+'</p></div>';
+      if(c.counterArguments&&c.counterArguments.length)extra+='<div class="topic-section"><h5>反方</h5><p>'+esc(c.counterArguments.join('；'))+'</p></div>';
+      if(c.risks&&c.risks.length)extra+='<div class="topic-section"><h5 style="color:var(--red)">风险明细</h5><p style="color:var(--red)">'+esc(c.risks.join('；'))+'</p></div>';
+      h.push(extra?'<details class="tech"><summary>事实 / 反方 / 风险明细</summary><div class="tech-body">'+extra+'</div></details>':'');
       h.push('</div>');
     });
   }
@@ -562,14 +719,14 @@ function openTopicDrawer(cardId){
   if(card.risks&&card.risks.length){h.push('<h4 style="color:var(--red)">风险</h4><ul>'+card.risks.map(function(x){return '<li style="color:var(--red)">'+esc(x)+'</li>';}).join('')+'</ul>');}
   if(card.knowledgeCards&&card.knowledgeCards.length){h.push('<h4>知识卡</h4><div class="kv">'+esc(card.knowledgeCards.join('、'))+'</div>');}
   if((card.evidence||[]).length){h.push('<h4>证据明细</h4><ul>'+card.evidence.map(function(e){return '<li>'+esc(e.claim||'')+' <span class="mono">'+esc(e.url)+'</span> <span class="badge '+(e.verified?'badge-green':'badge-gray')+'">'+(e.verified?'已核实':'未核实')+'</span>'+(e.contradicts?' <span class="badge badge-red">矛盾</span>':'')+'</li>';}).join('')+'</ul>');}
-  h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body"><div>cardId：<span class="mono">'+esc(card.id)+'</span></div><div>topicKey：<span class="mono">'+esc(card.topicKey||'—')+'</span></div><div>状态：'+esc(card.decision||'pending')+(card.decidedAt?' · '+fmtISO(card.decidedAt):'')+'</div></div></details>');
+  h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body"><div>cardId：<span class="mono">'+esc(card.id)+'</span> <button type="button" class="copy-btn" data-copy="'+esc(card.id)+'">复制</button></div><div>topicKey：<span class="mono">'+esc(card.topicKey||'—')+'</span></div><div>状态：'+esc(card.decision||'pending')+(card.decidedAt?' · '+fmtISO(card.decidedAt):'')+'</div></div></details>');
   openDrawer('策划卡 #'+card.rank+' '+card.title,h.join(''));
 }
 
 /* ============ creation ============ */
 function renderCreation(){
   var drafts=(D.factory&&D.factory.drafts)||[];
-  var h=[];
+  var h=[flowBar('creation')];
   if(!drafts.length){h.push(empty('暂无草稿包','批准编辑选题后由 agent 创建草稿包；V2 只读预览，不执行审批。','creation'));return h.join('');}
   var requestedId=state.filters.creation.packageId;
   var curId=requestedId;
@@ -583,9 +740,12 @@ function renderCreation(){
   if(curId!==requestedId)setHashParams({pkg:curId});
   h.push('<div class="creation-grid">');
   h.push('<div class="card cg-list"><div class="card-title" style="margin-bottom:10px">'+icon('creation')+'草稿包</div>');
+  var chainMap={};
+  drafts.forEach(function(p){chainMap[p.id]=p;});
   drafts.forEach(function(p){
     var st=p.status==='approved'?'<span class="badge badge-green">已批准</span>':p.status==='rejected'?'<span class="badge badge-red">已驳回</span>':p.status==='waiting_approval'?'<span class="badge badge-amber">待审核</span>':'<span class="badge badge-gray">'+esc(p.status)+'</span>';
-    h.push('<div class="todo-row'+(p.id===cur.id?' sel':'')+'" data-pkg="'+esc(p.id)+'" style="cursor:pointer" aria-current="'+(p.id===cur.id?'true':'false')+'"><div class="todo-main"><div class="todo-title">'+esc(p.title||p.id)+'</div><div class="todo-meta">v'+esc(p.revision)+' · '+esc(p.id)+'</div></div>'+st+'</div>');
+    var rel=p.parentPackageId&&chainMap[p.parentPackageId]?(' · ← v'+chainMap[p.parentPackageId].revision):(p.revision>1?' · 首版':'');
+    h.push('<div class="todo-row'+(p.id===cur.id?' sel':'')+'" data-pkg="'+esc(p.id)+'" style="cursor:pointer" aria-current="'+(p.id===cur.id?'true':'false')+'"><div class="todo-main"><div class="todo-title">'+esc(p.title||p.id)+'</div><div class="todo-meta">v'+esc(p.revision)+rel+' · '+esc(p.id)+'</div></div>'+st+'</div>');
   });
   h.push('</div>');
   h.push('<div class="card cg-preview"><div class="card-title" style="margin-bottom:10px">'+icon('doc')+'平台预览 · '+esc(platformNames[plat])+' <span class="mono" style="font-size:11px">'+esc(cur.id)+'</span></div>');
@@ -601,6 +761,8 @@ function renderCreation(){
   }else{
     h.push('<div class="preview-empty">'+icon('doc')+'<div>该包（'+esc(cur.id)+'）暂无 '+esc(platformNames[plat])+' 产物预览</div><div class="dim">产物在草稿生成后写入；V2 只读展示。</div></div>');
   }
+  var pHint={wechat:'微信预览：桌面阅读（约 720px）与手机预览（375px）可切换；正文按行宽排版。',telegram:'Telegram：频道短段落风格，以 md 原文渲染。',x:'X Thread：按编号分段预览（1–N），原文以 md 渲染。',xiaohongshu:'小红书：标题、正文、标签与轮播图占位在原文中标注，配图见视觉中心。'};
+  h.push('<div class="hint">'+pHint[plat]+'</div>');
   h.push('</div>');
   h.push('<div class="card cg-fact"><div class="card-title" style="margin-bottom:10px">'+icon('check')+'事实边界与产物信息</div>');
   h.push('<div class="kv">');
@@ -625,13 +787,20 @@ function renderCreation(){
 function reviewItems(){
   var items=[];
   var ed=(D.factory&&D.factory.editorial&&D.factory.editorial.cards)||[];
-  ed.forEach(function(c){if(c.decision==='approved'||c.decision==='rejected')return;items.push({key:'topic',type:'选题',sev:1,time:null,title:c.title,id:c.id,target:'topics',note:'策划卡 #'+c.rank+' · 证据 '+c.verificationGrade});});
+  ed.forEach(function(c){if(c.decision==='approved'||c.decision==='rejected')return;items.push({key:'topic',type:'选题',sev:1,time:null,title:c.title,id:c.id,target:'topics',note:'策划卡 #'+c.rank+' · 证据 '+c.verificationGrade,risk:c.risks&&c.risks.length?c.risks.slice(0,2).join('；'):''});});
   var drafts=(D.factory&&D.factory.drafts)||[];
-  drafts.forEach(function(p){if(p.status!=='waiting_approval')return;items.push({key:'draft',type:'草稿',sev:1,time:p.createdAt,title:p.title||p.id,id:p.id,target:'creation',note:'v'+p.revision+' · '+p.id});});
+  drafts.forEach(function(p){if(p.status!=='waiting_approval')return;items.push({key:'draft',type:'草稿',sev:1,time:p.createdAt,title:p.title||p.id,id:p.id,target:'creation',note:'v'+p.revision+' · '+p.id,risk:(p.reviewNote||(p.validation&&p.validation.errors&&p.validation.errors.join('；'))||'')});});
   var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
-  vis.forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.state!=='waiting_visual_approval')return;items.push({key:'visual',type:'图片',sev:0,time:null,title:t.assetId,id:t.id,target:'visual',note:b.packageId+' · '+t.placement});});});
-  (D.distillQueue||[]).forEach(function(e){items.push({key:'distill',type:'蒸馏',sev:2,time:null,title:e.file,id:e.file,target:'review',note:e.summary});});
+  vis.forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.state!=='waiting_visual_approval')return;var curA=null;(t.attempts||[]).forEach(function(a){if(Number(a.attemptNo)===Number(t.currentAttempt))curA=a;});items.push({key:'visual',type:'图片',sev:0,time:curA?curA.createdAt:null,title:t.assetId,id:t.id,target:'visual',note:b.packageId+' · '+t.placement,risk:t.reviewNote||t.lastError||''});});});
+  (D.distillQueue||[]).forEach(function(e){items.push({key:'distill',type:'蒸馏',sev:2,time:null,title:e.file,id:e.file,target:'review',note:e.summary,risk:''});});
   return items;
+}
+function waitLabel(iso){
+  if(!iso)return '—';
+  var t=new Date(iso);if(isNaN(t.getTime()))return '—';
+  var ms=Date.now()-t.getTime();if(ms<0)return '刚刚';
+  var h=Math.floor(ms/3600000);var d=Math.floor(h/24);
+  if(d>=1)return d+' 天前';if(h>=1)return h+' 小时前';return Math.max(1,Math.floor(ms/60000))+' 分钟前';
 }
 function applyReviewFilters(){
   var f=state.filters.review;
@@ -654,14 +823,22 @@ function applyReviewFilters(){
   list.innerHTML='<div class="dim" style="margin-bottom:8px">共 '+filtered.length+' 项待处理 · 决策按钮已禁用（V2 只读）</div>'+filtered.map(function(it){
     var sevDot=it.sev===0?'<span class="dot dot-red"></span>':it.sev===1?'<span class="dot dot-amber"></span>':'<span class="dot dot-gray"></span>';
     var gotoAttr=it.key==='visual'?' data-goto-visual="'+esc(it.id)+'"':it.key==='draft'?' data-goto-creation="'+esc(it.id)+'"':it.key==='topic'?' data-goto-topic="'+esc(it.id)+'"':' data-goto="'+it.target+'"';
-    return '<div class="todo-row"><span class="badge '+cls[it.key]+'">'+it.type+'</span>'+sevDot+'<div class="todo-main"><div class="todo-title">'+esc(it.title)+'</div><div class="todo-meta">'+esc(it.note)+'</div></div><button type="button" class="btn btn-ghost"'+gotoAttr+'>前往</button></div>';
+    var riskHtml=it.risk?'<div class="todo-meta" style="color:var(--danger)">风险：'+esc(it.risk)+'</div>':'';
+    return '<div class="todo-row"><span class="badge '+cls[it.key]+'">'+it.type+'</span>'+sevDot+'<div class="todo-main"><div class="todo-title">'+esc(it.title)+'</div><div class="todo-meta">'+esc(it.note)+' · 等待 '+waitLabel(it.time)+'</div>'+riskHtml+'</div><button type="button" class="btn btn-ghost"'+gotoAttr+'>前往</button></div>';
   }).join('');
 }
 function renderReview(){
   var f=state.filters.review;
-  var h=[];
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('review')+'审核中心 · 待审汇总</div><span class="pill pill-orange">V2 预览模式</span></div>');
-  h.push('<div class="review-notice">'+icon('alert')+'<span class="rn-text">本页为只读预览：审批、驳回、重试、交付与发布操作均未启用，请前往原版工作台 /sparkos/app 执行。</span></div>');
+  var h=[flowBar('review')];
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('review')+'审核中心 · 编辑待办箱</div><span class="pill pill-orange">V2 预览模式</span></div>');
+  h.push('<div class="notice warn">'+icon('alert')+'<span class="n-text">本页为只读预览：审批、驳回、重试、交付与发布操作均未启用，请前往原版工作台 /sparkos/app 执行。</span></div>');
+  var all=reviewItems();
+  var totalC=all.length;
+  var cTopic=all.filter(function(x){return x.key==='topic';}).length;
+  var cDraft=all.filter(function(x){return x.key==='draft';}).length;
+  var cVisual=all.filter(function(x){return x.key==='visual';}).length;
+  var cDistill=all.filter(function(x){return x.key==='distill';}).length;
+  h.push('<div class="totals-strip"><span class="totals-chip">待处理 <b>'+totalC+'</b></span><span class="totals-chip"><span class="dot dot-amber"></span>选题 <b>'+cTopic+'</b></span><span class="totals-chip"><span class="dot dot-blue"></span>草稿 <b>'+cDraft+'</b></span><span class="totals-chip"><span class="dot dot-red"></span>图片 <b>'+cVisual+'</b></span><span class="totals-chip"><span class="dot dot-gray"></span>蒸馏 <b>'+cDistill+'</b></span></div>');
   h.push('<div class="filter-bar">');
   h.push('<select class="filter" data-rf="type" aria-label="按类型筛选"><option value="all"'+(f.type==='all'?' selected':'')+'>全部类型</option><option value="topic"'+(f.type==='topic'?' selected':'')+'>选题</option><option value="draft"'+(f.type==='draft'?' selected':'')+'>草稿</option><option value="visual"'+(f.type==='visual'?' selected':'')+'>图片</option><option value="distill"'+(f.type==='distill'?' selected':'')+'>蒸馏</option></select>');
   h.push('<select class="filter" data-rf="urgency" aria-label="按紧急程度筛选"><option value="all"'+(f.urgency==='all'?' selected':'')+'>全部紧急度</option><option value="high"'+(f.urgency==='high'?' selected':'')+'>紧急（图片）</option><option value="medium"'+(f.urgency==='medium'?' selected':'')+'>一般（选题/草稿）</option><option value="low"'+(f.urgency==='low'?' selected':'')+'>低（蒸馏）</option></select>');
@@ -676,7 +853,7 @@ function currentAttempt(task){return (task.attempts||[]).filter(function(a){retu
 function dimsOf(a){return (a&&a.sourceWidth&&a.sourceHeight)?a.sourceWidth+'×'+a.sourceHeight:'—';}
 function techDetails(t,a){
   // 卡片内只保留当前 attempt 的技术信息（折叠）；完整 attempt 历史在抽屉
-  return '<details class="tech"><summary>技术信息（当前 attempt）</summary><div class="tech-body"><div>attemptId：<span class="mono">'+esc(a?a.id:'—')+'</span></div><div>SHA：<span class="mono">'+esc(a&&a.importedSha256?a.importedSha256.slice(0,12):'—')+'</span> · '+esc(a&&a.sourceMediaType||'—')+' · '+(a&&a.sourceBytes||0)+' B</div><div>provider/model：'+esc((a&&a.provider||'—')+' / '+(a&&a.model||'—'))+'</div></div></details>';
+  return '<details class="tech"><summary>技术信息（当前 attempt）</summary><div class="tech-body"><div>attemptId：<span class="mono">'+esc(a?a.id:'—')+'</span> <button type="button" class="copy-btn" data-copy="'+esc(a?a.id:'')+'">复制</button></div><div>SHA：<span class="mono">'+esc(a&&a.importedSha256?a.importedSha256.slice(0,12):'—')+'</span> · '+esc(a&&a.sourceMediaType||'—')+' · '+(a&&a.sourceBytes||0)+' B</div><div>provider/model：'+esc((a&&a.provider||'—')+' / '+(a&&a.model||'—'))+'</div></div></details>';
 }
 function openVisualAttemptDrawer(taskId){
   var found=null;
@@ -684,15 +861,16 @@ function openVisualAttemptDrawer(taskId){
   if(!found)return;
   var t=found.task;
   var h=[];
-  h.push('<div class="kv"><div><b>资产</b>'+esc(t.assetId)+'</div><div><b>放置</b>'+esc(t.placement)+'</div><div><b>包</b><span class="mono">'+esc(found.batch.packageId)+'</span></div></div>');
+  h.push('<div class="kv"><div><b>资产</b>'+esc(t.assetId)+'</div><div><b>放置</b>'+esc(t.placement)+'</div><div><b>包</b><span class="mono">'+esc(found.batch.packageId)+'</span> <button type="button" class="copy-btn" data-copy="'+esc(found.batch.packageId)+'">复制</button></div></div>');
   h.push('<h4>attempt 历史（共 '+(t.attempts||[]).length+' 次）</h4>');
   if(!(t.attempts||[]).length){h.push(empty('暂无 attempt 记录','','doc'));}
   else{
-    h.push('<table class="attempt-list"><thead><tr><th>attempt</th><th>状态</th><th>provider</th><th>尺寸</th><th>id</th></tr></thead><tbody>');
+    h.push('<table class="attempt-list"><thead><tr><th>attempt</th><th>状态</th><th>provider</th><th>尺寸</th><th>id</th><th></th></tr></thead><tbody>');
     (t.attempts||[]).forEach(function(x){
       var isCurrent=Number(x.attemptNo)===Number(t.currentAttempt);
+      var dimmed=(x.status==='failed'||x.status==='retry');
       var st=x.status==='waiting_visual_approval'?'<span class="badge badge-amber">待审核</span>':x.status==='approved'?'<span class="badge badge-green">已批准</span>':x.status==='rejected'?'<span class="badge badge-red">已驳回</span>':'<span class="badge badge-gray">'+esc(x.status)+'</span>';
-      h.push('<tr><td>#'+x.attemptNo+(isCurrent?' <span class="badge badge-blue">当前 attempt</span>':'')+'</td><td>'+st+'</td><td>'+esc(x.provider||'—')+'</td><td>'+dimsOf(x)+'</td><td class="mono">'+esc(x.id)+'</td></tr>');
+      h.push('<tr'+(dimmed?' style="opacity:.55"':'')+'><td>#'+x.attemptNo+(isCurrent?' <span class="badge badge-blue">当前 attempt</span>':'')+(dimmed?' <span class="badge badge-gray">历史</span>':'')+'</td><td>'+st+'</td><td>'+esc(x.provider||'—')+'</td><td>'+dimsOf(x)+'</td><td class="mono">'+esc(x.id)+'</td><td><button type="button" class="copy-btn" data-copy="'+esc(x.id)+'" aria-label="复制 attempt ID">复制</button></td></tr>');
     });
     h.push('</tbody></table>');
   }
@@ -700,7 +878,7 @@ function openVisualAttemptDrawer(taskId){
 }
 function renderVisual(){
   var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
-  var h=[];
+  var h=[flowBar('visual')];
   if(!vis.length){h.push(empty('暂无视觉批次','批准草稿包后创建视觉任务；V2 只读预览，不执行审批与重试。','visual'));return h.join('');}
   vis.forEach(function(b){
     var rd=b.readiness||{};
@@ -747,7 +925,7 @@ function blockerLabel(code){return BLOCKER_LABEL[code]||code;}
 function blockerChip(code,cls){return '<span class="'+(cls||'blocker-chip')+'">'+esc(blockerLabel(code))+'</span>';}
 function renderPublish(){
   var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
-  var h=[];
+  var h=[flowBar('publish')];
   h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('publish')+'发布准备（只读）</div><span class="pill pill-orange">发布仍需人工操作</span></div>');
   if(!vis.length){h.push(empty('暂无视觉批次','视觉审核通过后在此查看各平台发布就绪状态；V2 不提供任何发布按钮。','publish'));}
   else{
@@ -761,11 +939,24 @@ function renderPublish(){
       h.push('<h4 style="margin:14px 0 2px">'+esc(b.packageId)+'（v'+esc(b.revision)+' · '+esc(b.status)+'）</h4>');
       // 全局阻塞只显示一次
       h.push('<div style="margin:6px 0 2px"><span class="badge badge-gray">全局阻塞</span> '+(globalBl.length?globalBl.map(function(x){return blockerChip(x);}).join(' '):'<span class="ok-chip">无</span>')+'</div>');
+      var textApproved=globalBl.indexOf('draft-package-not-approved')<0;
+      h.push('<div class="table-scroll"><table class="readiness-matrix"><thead><tr><th>平台</th><th>文稿</th><th>视觉</th><th>交付包</th><th>风险检查</th><th>最终状态</th></tr></thead><tbody>');
       platforms.forEach(function(p){
         var ready=rd.readyByPlatform&&rd.readyByPlatform[p[0]];
         var own=byPlat[p[0]]||[];
-        h.push('<div class="platform-row"><div class="platform-name">'+p[1]+'</div><div>'+(ready?'<span class="ok-chip">就绪</span>':'<span class="blocker-chip">阻塞</span>')+'<div style="margin-top:4px">'+(own.length?own.map(function(x){return blockerChip(x);}).join(''):'<span class="dim">'+(ready?'无平台专属阻塞':'—')+'</span>')+'</div></div></div>');
+        var deliverable=p[0]==='wechat'||p[0]==='xiaohongshu';
+        var delChips=own.filter(function(x){return x.indexOf('delivery-missing')>=0||x.indexOf('legacy-contract')>=0;});
+        var riskChips=own.filter(function(x){return x.indexOf('delivery-missing')<0&&x.indexOf('legacy-contract')<0;});
+        var finalHtml=ready?'<span class="ok-chip">就绪</span>':(own.length?'<span class="blocker-chip">阻塞</span>':'<span class="blocker-chip">阻塞</span>');
+        h.push('<tr><td><b>'+p[1]+'</b></td>'+
+          '<td>'+(textApproved?'<span class="ok-chip">就绪</span>':'<span class="blocker-chip">未批准</span>')+'</td>'+
+          '<td>'+(rd.visualApproved?'<span class="ok-chip">已批准</span>':'<span class="blocker-chip">待批准</span>')+'</td>'+
+          '<td>'+(deliverable?(delChips.length?delChips.map(function(x){return blockerChip(x);}).join(''):'<span class="ok-chip">就绪</span>'):'<span class="dim">—</span>')+'</td>'+
+          '<td>'+(riskChips.length?riskChips.map(function(x){return blockerChip(x);}).join(''):'<span class="dim">—</span>')+'</td>'+
+          '<td>'+finalHtml+(own.length?own.map(function(x){return blockerChip(x);}).join(''):(ready?'<span class="dim">无阻塞</span>':''))+'</td></tr>');
       });
+      h.push('</tbody></table></div>');
+      h.push('<div class="hint">“为什么不能发布”：最终状态为阻塞时，查看该平台行的文稿/视觉/交付包/风险检查列与全局阻塞。</div>');
       h.push('<div class="kv" style="font-size:12.5px;margin-top:8px">');
       h.push('<div><b>缺失槽位</b>'+(Math.max(0,Number(b.requiredCount)-Number(b.approvedCount)))+' 个（'+esc(b.approvedCount)+' / '+esc(b.requiredCount)+' 已批准）</div>');
       h.push('<div><b>交付包</b>'+(b.deliveryLink?'<a href="'+esc(b.deliveryLink)+'" target="_blank" rel="noopener noreferrer">下载最新交付 ZIP</a>':'尚未生成（V2 只读，不生成交付包）')+'</div>');
@@ -787,7 +978,7 @@ function renderGrowth(){
   var perf=D.perf||{files:0,totalPosts:0,platforms:[]};
   var h=[];
   h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('growth')+'发布表现（真实数据）</div>'+(perf.platforms&&perf.platforms.length?'<span class="pill pill-gray">'+perf.files+' 个数据文件 · '+perf.totalPosts+' 篇</span>':'')+'</div>');
-  if(!perf.platforms||!perf.platforms.length){h.push(empty('暂无真实发布表现数据','已排除 example / sample 示例数据。接入方式：在 PERF_DIR（默认 contentos-x/perf/）放入各平台导出 JSON（含 posts 数组，字段如 published_at、read_count），插件自动汇总。','growth'));}
+  if(!perf.platforms||!perf.platforms.length){h.push(empty('尚未接入真实平台表现数据','当前为空属于正常状态：系统不会展示示例数据。接入方式：在各平台后台导出发布数据（JSON，含 posts 数组，字段如 published_at、read_count、like_count、share_count），放入 PERF_DIR（默认 contentos-x/perf/），插件自动汇总出指标、趋势与平台对比。','growth'));}
   else{
     h.push('<table><thead><tr><th>平台</th><th>篇数</th><th>总阅读</th><th>平均阅读</th><th>最近发布</th></tr></thead><tbody>');
     perf.platforms.forEach(function(p){h.push('<tr><td>'+esc(p.platform)+'</td><td>'+p.posts+'</td><td>'+p.totalReads+'</td><td>'+p.avgReads+'</td><td>'+esc(p.last||'—')+'</td></tr>');});
@@ -803,24 +994,40 @@ function renderSystem(){
   var health=intel.health||{sources:[],overall:'pending'};
   var fact=D.factory||{};var db=fact.database||{schemaVersion:0,jobs:{},path:'—'};
   var h=[];
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'系统状态</div><span class="pill '+(health.overall==='green'?'pill-green':health.overall==='red'?'pill-red':'pill-gray')+'">overall='+esc(health.overall)+'</span></div>');
-  h.push('<table><thead><tr><th>信源</th><th>状态</th><th>新鲜度</th><th>阈值</th><th>连败</th></tr></thead><tbody>');
+  var overall=health.overall==='green'?'正常':health.overall==='red'?'注意':'待接入';
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'系统状态</div><span class="pill '+(health.overall==='green'?'pill-green':health.overall==='red'?'pill-red':'pill-gray')+'">'+esc(overall)+'</span></div>');
+  h.push('<div class="notice '+(health.overall==='red'?'danger':health.overall==='green'?'success':'info')+'">'+icon(health.overall==='red'?'alert':'check')+'<span class="n-text">'+(health.overall==='red'?'情报源存在异常，请查看下方信源健康与最近错误。':health.overall==='green'?'各系统运行正常，无需要关注的事项。':'情报源尚未全部接入，属正常初始状态。')+'</span></div>');
+  // 信源健康
+  h.push('<h4>信源健康</h4>');
+  h.push('<div class="table-scroll"><table><thead><tr><th>信源</th><th>状态</th><th>新鲜度</th><th>阈值</th><th>连败</th></tr></thead><tbody>');
   var dotMap={green:'dot-green',red:'dot-red',pending:'dot-gray'};
-  var labelMap={green:'绿灯',red:'红灯≈异常',pending:'待接入'};
+  var labelMap={green:'正常',red:'异常',pending:'待接入'};
   (health.sources||[]).forEach(function(s){
     h.push('<tr><td>'+esc(s.id)+'</td><td><span class="dot '+(dotMap[s.status]||'dot-gray')+'"></span> '+esc(labelMap[s.status]||s.status)+(s.note?' <span class="dim">· '+esc(s.note)+'</span>':'')+'</td><td>'+(s.stalenessHours==null?'—':s.stalenessHours+'h')+'</td><td>≤'+s.maxStalenessHours+'h</td><td>'+(s.failStreak||0)+' 次</td></tr>');
   });
-  if(!health.sources.length)h.push('<tr><td colspan="5" class="dim">（无接入源）</td></tr>');
-  h.push('</tbody></table>');
+  if(!health.sources.length)h.push('<tr><td colspan="5" class="dim">（无接入源，属正常初始状态）</td></tr>');
+  h.push('</tbody></table></div>');
+  // 工作流任务
+  h.push('<h4>工作流任务</h4>');
+  var jobKeys=Object.keys(db.jobs||{});
+  h.push('<div class="totals-strip" style="margin-top:6px">'+(jobKeys.length?jobKeys.map(function(k){return '<span class="totals-chip">'+esc(k)+' <b>'+db.jobs[k]+'</b></span>';}).join(''):'<span class="dim">（暂无任务记录）</span>')+'</div>');
   var last=intel.lastRun;
-  h.push('<div class="kv" style="margin-top:10px">');
-  h.push('<div><b>最近 run</b>'+(last?(last.ok?'<span class="badge badge-green">ok</span>':'<span class="badge badge-red">FAIL</span>')+' @ '+esc(fmtISO(last.at))+(last.stage?' · '+esc(last.stage):'')+(last.error?' · '+esc(last.error):''):'—（尚无调度记录）')+'</div>');
+  h.push('<div class="kv"><div><b>最近 run</b>'+(last?(last.ok?'<span class="badge badge-green">ok</span>':'<span class="badge badge-red">FAIL</span>')+' @ '+esc(fmtISO(last.at))+(last.stage?' · '+esc(last.stage):'')+(last.error?' · '+esc(last.error):''):'—（尚无调度记录）')+'</div></div>');
+  // 数据新鲜度
+  h.push('<h4>数据新鲜度</h4>');
   var cycleName={done:'今日产物已就绪',due:'今日融合完成待跑内容循环',idle:'无待办'};
-  h.push('<div><b>内容循环</b>'+(D.dailyCycle?(cycleName[D.dailyCycle.status]||D.dailyCycle.status):'—')+(D.dailyCycle&&D.dailyCycle.note?' · '+esc(D.dailyCycle.note):'')+'</div>');
-  h.push('<div><b>调度</b>由宿主 cron / agent 触发（只读展示，V2 不提供开关）</div>');
-  h.push('<div><b>数据库 schema</b>v'+esc(db.schemaVersion)+' · 任务：'+(Object.keys(db.jobs||{}).length?Object.keys(db.jobs).map(function(k){return k+'='+db.jobs[k];}).join(' · '):'暂无')+'</div>');
-  h.push('<div><b>情报快照</b>'+(intel.snapshotCount||0)+' 条（14 天滚动）· 归档：'+(intel.archiveCounts&&intel.archiveCounts.length?intel.archiveCounts.map(function(c){return esc(c.source)+' '+c.total+' 条';}).join(' · '):'—')+'</div>');
-  h.push('</div>');
+  h.push('<div class="kv"><div><b>内容循环</b>'+(D.dailyCycle?(cycleName[D.dailyCycle.status]||D.dailyCycle.status):'—')+(D.dailyCycle&&D.dailyCycle.note?' · '+esc(D.dailyCycle.note):'')+'</div><div><b>情报快照</b>'+(intel.snapshotCount||0)+' 条（14 天滚动）</div><div><b>调度</b>由宿主 cron / agent 触发（只读展示，V2 不提供开关）</div></div>');
+  // 降级状态
+  h.push('<h4>降级状态与最近错误</h4>');
+  var errs=[];
+  if(health.overall==='red')errs.push('情报源整体异常（overall=red）');
+  (health.sources||[]).forEach(function(s){if(s.failStreak>0)errs.push(esc(s.id)+' 连续失败 '+s.failStreak+' 次');});
+  if(last&&last.error)errs.push('最近 run 错误：'+esc(last.error));
+  if(!errs.length)h.push('<div class="notice success">'+icon('check')+'<span class="n-text">无降级或错误记录。</span></div>');
+  else{h.push('<ul style="list-style:none">'+errs.map(function(e){return '<li style="padding:4px 0;font-size:12.5px;color:var(--danger)">'+e+'</li>';}).join('')+'</ul>');}
+  // 数据库与插件
+  h.push('<h4>数据库与插件</h4>');
+  h.push('<div class="kv"><div><b>数据库 schema</b>v'+esc(db.schemaVersion)+'</div><div><b>归档</b>'+(intel.archiveCounts&&intel.archiveCounts.length?intel.archiveCounts.map(function(c){return esc(c.source)+' '+c.total+' 条';}).join(' · '):'—')+'</div></div>');
   h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body">');
   h.push('<div>数据生成：'+esc(fmtISO(D.generatedAt))+'</div>');
   h.push('<div>VAULT：<span class="mono">'+esc(D.vaultRoot)+'</span></div>');
@@ -942,6 +1149,18 @@ function closeVisualLightbox(){
   visualLightbox.items=[];visualLightbox.index=-1;visualLightbox.lastFocused=null;
   if(last&&typeof last.focus==='function')last.focus();
 }
+function copyTechId(btn){
+  var val=btn.getAttribute('data-copy')||'';
+  if(!val)return;
+  var done=function(){var old=btn.textContent;btn.textContent='已复制';btn.classList.add('copied');setTimeout(function(){btn.textContent=old;btn.classList.remove('copied');},1400);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(val).then(done,function(){fallbackCopy(val,done);});}
+  else{fallbackCopy(val,done);}
+}
+function fallbackCopy(text,done){
+  var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');}catch(e){}
+  document.body.removeChild(ta);done();
+}
 function stepVisualLightbox(delta){
   var count=visualLightbox.items.length;
   if(!count||visualLightbox.index<0)return;
@@ -975,6 +1194,7 @@ var RENDER={overview:renderOverview,intel:renderIntel,topics:renderTopics,creati
     var t=ev.target;
     if(!t||!t.closest)return;
     var nav=t.closest('[data-nav]');if(nav){navigate(nav.getAttribute('data-nav'));return;}
+    var flow=t.closest('[data-flow]');if(flow){navigate(flow.getAttribute('data-flow'));return;}
     var goto=t.closest('[data-goto]');if(goto){navigate(goto.getAttribute('data-goto'));return;}
     var pkg=t.closest('[data-pkg]');if(pkg){state.filters.creation.packageId=pkg.getAttribute('data-pkg');setHashParams({pkg:state.filters.creation.packageId});renderView('creation');return;}
     var pf=t.closest('[data-pf]');if(pf){state.filters.creation.platform=pf.getAttribute('data-pf');setHashParams({pf:state.filters.creation.platform});renderView('creation');return;}
@@ -984,6 +1204,7 @@ var RENDER={overview:renderOverview,intel:renderIntel,topics:renderTopics,creati
     var tdr=t.closest('[data-topic-drawer]');if(tdr){openTopicDrawer(tdr.getAttribute('data-topic-drawer'));return;}
     var vt=t.closest('[data-visual-thumb]');if(vt){openVisualLightbox(vt.getAttribute('data-visual-thumb'),vt);return;}
     var ah=t.closest('[data-attempt-history]');if(ah){openVisualAttemptDrawer(ah.getAttribute('data-attempt-history'));return;}
+    var cp=t.closest('[data-copy]');if(cp){copyTechId(cp);return;}
     // 审核中心精确导航：前往具体对象
     var gv=t.closest('[data-goto-visual]');if(gv){navigate('visual');setTimeout(function(){var card=document.querySelector('[data-vis-task="'+gv.getAttribute('data-goto-visual')+'"]');if(card){card.scrollIntoView({block:'center'});card.style.outline='2px solid var(--orange)';setTimeout(function(){card.style.outline='';},1600);}},80);return;}
     var gc=t.closest('[data-goto-creation]');if(gc){state.filters.creation.packageId=gc.getAttribute('data-goto-creation');navigate('creation');setTimeout(function(){setHashParams({pkg:state.filters.creation.packageId});},80);return;}

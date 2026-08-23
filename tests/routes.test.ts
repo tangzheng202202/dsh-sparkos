@@ -217,7 +217,7 @@ test('GET /sparkos/app-v2：V2 只读预览版（GET 200 · 内嵌数据 · 仅�
   assert.ok(html.includes('window._embeddedDailyData'), 'V2 注入同一数据范式')
   assert.ok(html.includes('id="visual-lightbox"'), 'V2 复用受控 lightbox')
   assert.ok(html.includes('data-nav="intel"') || html.includes("data-nav='intel'") || html.includes('data-nav'), 'V2 侧栏导航')
-  assert.ok(html.includes('只读预览版'), 'V2 只读声明')
+  assert.ok(html.includes('V2 只读预览') || html.includes('只读预览'), 'V2 只读声明')
   // 只读边界：页面内不得出现任何写端点或审批标记
   for (const forbidden of ['/sparkos/visual/decision', '/sparkos/creation/decision', '/sparkos/visual/retry', '/sparkos/visual/delivery', '/sparkos/visual/queue', '/sparkos/mutate', 'data-visual-decision', 'data-draft-decision']) {
     assert.ok(!html.includes(forbidden), 'V2 页面不得包含写端点：' + forbidden)

@@ -56,6 +56,15 @@ interface InteractionResult {
   xhsOwnBlocker: boolean
   attemptTableOk: boolean
   consoleErrors: number
+  routesRendered: boolean
+  flowNavHashOnly: boolean
+  navRouteMatch: boolean
+  statusHasText: boolean
+  attemptCurrentMarked: boolean
+  attemptHistoryDimmed: boolean
+  focusRestoredAfterDrawer: boolean
+  techDetailsCollapsed: boolean
+  noSamplePerf: boolean
 }
 
 interface ResponsiveResult {
@@ -193,6 +202,48 @@ test('v2 never sends POST requests', async () => {
   assert.equal(r.zeroFetches, true)
 })
 
+// ---------- 第二轮精修回归 ----------
+test('v2 all nine routes render their expected content', async () => {
+  const r = await interactionResult
+  assert.equal(r.routesRendered, true)
+})
+
+test('v2 flow navigation only performs hash jumps (no fetch)', async () => {
+  const r = await interactionResult
+  assert.equal(r.flowNavHashOnly, true)
+})
+
+test('v2 active nav item matches the current route', async () => {
+  const r = await interactionResult
+  assert.equal(r.navRouteMatch, true)
+})
+
+test('v2 status labels always carry text, not color alone', async () => {
+  const r = await interactionResult
+  assert.equal(r.statusHasText, true)
+})
+
+test('v2 visual drawer distinguishes current and history attempts', async () => {
+  const r = await interactionResult
+  assert.equal(r.attemptCurrentMarked, true)
+  assert.equal(r.attemptHistoryDimmed, true)
+})
+
+test('v2 drawer closes on Escape and restores focus', async () => {
+  const r = await interactionResult
+  assert.equal(r.focusRestoredAfterDrawer, true)
+})
+
+test('v2 technical details are collapsed by default', async () => {
+  const r = await interactionResult
+  assert.equal(r.techDetailsCollapsed, true)
+})
+
+test('v2 growth never shows example/sample performance data', async () => {
+  const r = await interactionResult
+  assert.equal(r.noSamplePerf, true)
+})
+
 // ---------- 响应式回归 ----------
 test('v2 responsive: no horizontal overflow at 1440/1920/1024/390', async () => {
   const r = await responsiveResult
@@ -288,7 +339,7 @@ function runV2ResponsiveFixture(): Promise<ResponsiveResult[]> {
       assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)
       const source = readFileSync(base, 'utf8')
       writeFileSync(fixture, source.replace('</body>', '<script>' + responsiveHarness() + '</script></body>'))
-      const sizes: Array<[number, number]> = [[1440, 900], [1920, 1080], [1024, 768], [390, 844]]
+      const sizes: Array<[number, number]> = [[1440, 900], [1920, 1080], [1280, 800], [1024, 768], [768, 1024], [390, 844]]
       const results: ResponsiveResult[] = []
       for (const [w, h] of sizes) {
         const chrome = spawnSync(CHROME, [
@@ -331,7 +382,7 @@ function interactionHarness(): string {
   function urlOk(u){return typeof u==='string'&&u.indexOf(ASSET_PREFIX)===0&&u.length===ASSET_PREFIX.length+20;}
   try{
     out.navItems=qa('.nav-item').length;
-    out.hero=document.getElementById('view').textContent.indexOf('今日总览')>=0;
+    out.hero=document.getElementById('view').textContent.indexOf('内容生产流程')>=0;
     out.overviewTodo=document.getElementById('view').textContent.indexOf('今日待办')>=0;
     qa('.nav-item').forEach(function(b){if(b.getAttribute('data-nav')==='intel')b.click();});
     await wait(70);
@@ -358,7 +409,7 @@ function interactionHarness(): string {
     out.noDecisionButtons=qa('[data-visual-decision]').length===0&&qa('[data-draft-decision]').length===0&&qa('[data-visual-queue]').length===0&&qa('[data-visual-retry]').length===0;
     var sel=q('[data-rf="type"]');if(sel){sel.value='visual';sel.dispatchEvent(new Event('change',{bubbles:true}));}
     out.reviewFiltered=document.getElementById('reviewList').textContent.indexOf('共 5 项')>=0;
-    var rn=q('.review-notice');
+    var rn=q('.notice.warn');
     out.reviewIconW=0;out.reviewIconH=0;
     if(rn){var ri=rn.querySelector('svg');if(ri){var rr=ri.getBoundingClientRect();out.reviewIconW=Math.round(rr.width);out.reviewIconH=Math.round(rr.height);}}
     await hash('#/visual');
@@ -385,6 +436,15 @@ function interactionHarness(): string {
       });
       return ok;
     })();
+    var ahBtn=q('[data-attempt-history]');
+    if(ahBtn){ahBtn.focus();ahBtn.click();await wait(60);
+      var adb=document.getElementById('drawerBody');
+      out.attemptCurrentMarked=adb.textContent.indexOf('当前 attempt')>=0;
+      out.attemptHistoryDimmed=adb.textContent.indexOf('历史')>=0||dbRowDimmed();
+      document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));await wait(50);
+      out.focusRestoredAfterDrawer=document.activeElement===ahBtn;
+    }else{out.attemptCurrentMarked=false;out.attemptHistoryDimmed=false;out.focusRestoredAfterDrawer=false;}
+    function dbRowDimmed(){var trs=document.querySelectorAll('#drawerBody .attempt-list tbody tr');for(var i=0;i<trs.length;i++){if(getComputedStyle(trs[i]).opacity<='0.7')return true;}return false;}
     await hash('#/creation?pkg=dp-1111111111111111');
     out.creationUrlPkg=location.hash;
     var selC=q('.cg-list .todo-row.sel');
@@ -396,26 +456,50 @@ function interactionHarness(): string {
     await hash('#/creation?pkg=bogus');
     out.creationNormalized=(function(){var s=q('.cg-list .todo-row.sel');return !!s&&s.getAttribute('data-pkg')==='dp-1111111111111111'&&location.hash.indexOf('dp-1111111111111111')>=0;})();
     await hash('#/growth');
-    out.growthEmpty=document.getElementById('view').textContent.indexOf('暂无真实发布表现数据')>=0;
+    out.growthEmpty=document.getElementById('view').textContent.indexOf('尚未接入真实平台表现数据')>=0;
+    out.noSamplePerf=document.getElementById('view').textContent.indexOf('example')<0&&document.getElementById('view').textContent.indexOf('sample')<0;
     await hash('#/publish');
     out.publishManual=document.getElementById('view').textContent.indexOf('发布仍需人工操作')>=0;
     var pvText=document.getElementById('view').textContent;
     out.globalBlockerOnce=(pvText.split('视觉资产未全部批准').length-1)===1;
-    var prs=qa('.platform-row');
-    var tgRows=prs.filter(function(r){return r.querySelector('.platform-name').textContent.trim()==='Telegram';});
-    var xRows=prs.filter(function(r){return r.querySelector('.platform-name').textContent.trim()==='X';});
-    var wRows=prs.filter(function(r){return r.querySelector('.platform-name').textContent.trim()==='微信公众号';});
-    var hRows=prs.filter(function(r){return r.querySelector('.platform-name').textContent.trim()==='小红书';});
-    out.tgXClean=tgRows.every(function(r){return r.textContent.indexOf('微信')<0&&r.textContent.indexOf('小红书')<0;})&&xRows.every(function(r){return r.textContent.indexOf('微信')<0&&r.textContent.indexOf('小红书')<0;});
-    out.wechatOwnBlocker=wRows.some(function(r){return r.textContent.indexOf('微信公众号生产交付包缺失')>=0;});
-    out.xhsOwnBlocker=hRows.some(function(r){return r.textContent.indexOf('小红书生产交付包缺失')>=0;});
-    // 所有页面无横向溢出（六个核心页面 + 其余中心）
+    var mrows=qa('.readiness-matrix tbody tr');
+    function rowOf(name){for(var i=0;i<mrows.length;i++){if(mrows[i].querySelector('td').textContent.trim()===name)return mrows[i];}return null;}
+    var tgRow=rowOf('Telegram');var xRow=rowOf('X');var wRow=rowOf('微信公众号');var hRow=rowOf('小红书');
+    out.tgXClean=(!tgRow||(tgRow.textContent.indexOf('微信')<0&&tgRow.textContent.indexOf('小红书')<0))&&(!xRow||(xRow.textContent.indexOf('微信')<0&&xRow.textContent.indexOf('小红书')<0));
+    out.wechatOwnBlocker=!!wRow&&wRow.textContent.indexOf('微信公众号生产交付包缺失')>=0;
+    out.xhsOwnBlocker=!!hRow&&hRow.textContent.indexOf('小红书生产交付包缺失')>=0;
+    // 所有页面无横向溢出（九个路由）＋ 九路由均可渲染 ＋ 导航与路由一致
     out.pagesNoHScroll=true;
+    out.routesRendered=true;
+    out.navRouteMatch=true;
     var pages=['overview','intel','topics','creation','review','visual','publish','growth','system'];
+    var markers={overview:'内容生产流程',intel:'每日 Top 5',topics:'编辑策划',creation:'草稿包',review:'编辑待办箱',visual:'视觉批次',publish:'发布准备',growth:'发布表现',system:'系统状态'};
     for(var pi=0;pi<pages.length;pi++){
       await hash('#/'+pages[pi]);
       if(document.documentElement.scrollWidth>window.innerWidth+1)out.pagesNoHScroll=false;
+      if(document.getElementById('view').textContent.indexOf(markers[pages[pi]])<0)out.routesRendered=false;
+      var act=q('.nav-item.active');
+      if(!act||act.getAttribute('data-nav')!==pages[pi])out.navRouteMatch=false;
     }
+    // 流程导航只做 hash 跳转
+    await hash('#/overview');
+    var fsBtn=q('.flow-step[data-flow="visual"]');
+    if(fsBtn){fsBtn.click();await wait(80);}
+    out.flowNavHashOnly=location.hash==='#/visual'&&fetches.length===0;
+    // 状态徽标必须带文字
+    out.statusHasText=(function(){
+      var bads=qa('.badge,.totals-chip');
+      var ok=true;
+      bads.forEach(function(b){if(!b.textContent.trim())ok=false;});
+      return ok;
+    })();
+    // 技术详情默认折叠
+    out.techDetailsCollapsed=(function(){
+      var ds=qa('details.tech');
+      var ok=true;
+      ds.forEach(function(d){if(d.open)ok=false;});
+      return ok;
+    })();
     out.consoleErrors=window.__v2errs?window.__v2errs.length:-1;
     out.zeroFetches=fetches.length===0;
   }catch(e){out.error=String(e&&e.stack||e).replace(/</g,'&lt;');}

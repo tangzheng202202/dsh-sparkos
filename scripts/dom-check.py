@@ -71,7 +71,7 @@ if os.path.exists(v2src):
         print(("OK  " if cond else "MISS ") + "[v2] " + name)
     check2("v2 title and brand", "SparkOS 工作台 V2" in dom2 and "AI 编辑部" in dom2)
     check2("v2 sidebar 9 centers", all(x in dom2 for x in ["overview", "intel", "topics", "creation", "review", "visual", "publish", "growth", "system"]) and "data-nav=" in dom2)
-    check2("v2 read-only declaration", "只读预览版" in dom2 and "V2 只读预览" in dom2)
+    check2("v2 read-only declaration", "V2 只读预览" in dom2 and "仅展示与导航" in dom2)
     check2("v2 no write endpoints", all(x not in dom2 for x in ["/sparkos/visual/decision", "/sparkos/creation/decision", "/sparkos/visual/retry", "/sparkos/visual/delivery", "/sparkos/visual/queue", "/sparkos/mutate", "data-visual-decision", "data-draft-decision", "data-visual-queue"]))
     check2("v2 no POST and no native dialogs", '"POST"' not in dom2 and "'POST'" not in dom2 and 'window.open(' not in dom2 and 'alert(' not in dom2)
     check2("v2 lightbox with controlled urls", 'id="visual-lightbox"' in dom2 and 'ATTEMPT_ID_RE' in dom2 and '/sparkos/visual/asset?attemptId=' in dom2 and 'encodeURIComponent(attemptId)' in dom2)
