@@ -6,12 +6,18 @@ import type {
   PublicationReadiness,
   VisualAttemptApproval,
   VisualBatchStatus,
+  VisualRetryEligibility,
   VisualTaskState,
 } from './types.ts'
 import { VisualPipelineError } from './errors.ts'
 
 const ATTEMPT_ID = /^va-[a-f0-9]{20}$/
 const TASK_ID = /^vt-[a-f0-9]{20}$/
+const PACKAGE_ID = /^dp-[a-f0-9]{16}$/
+const ASSET_ID = /^[a-z0-9][a-z0-9._-]{2,48}$/i
+const IDEMPOTENCY_KEY_RE = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/
+/** 补充重试要求长度上限（字符）。 */
+const MAX_SUPPLEMENTARY_CHARS = 500
 
 interface ReviewTaskRow {
   id: string
@@ -271,6 +277,239 @@ export function retryVisualTask(db: DatabaseSync, taskId: string, now = new Date
     refreshStoredBatch(db, row.batch_id, at)
     db.exec('COMMIT')
     return { taskId: row.id, previousAttemptId: row.attempt_id, state: 'retry', previousNote }
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+/* ===================== M6.2 controlled retry ===================== */
+
+interface RetryJoinRow extends ReviewTaskRow {
+  attempt_id: string
+  attempt_status: string
+  attempt_no: number
+  attempt_provider: string | null
+  decision: VisualAttemptApproval['decision'] | null
+  review_note: string | null
+  decided_at: string | null
+}
+
+interface RetryRequestRow {
+  id: string
+  idempotency_key: string
+  package_id: string
+  task_id: string
+  attempt_id: string
+  asset_id: string
+  reject_note: string
+  supplementary_instruction: string | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+/** Load the task with its current attempt and approval, or undefined. */
+function retryJoin(db: DatabaseSync, taskId: string): RetryJoinRow | undefined {
+  return db.prepare(`
+    SELECT t.*, a.id AS attempt_id, a.status AS attempt_status, a.attempt_no, a.provider AS attempt_provider,
+           p.decision, p.note AS review_note, p.decided_at
+    FROM visual_asset_tasks t
+    LEFT JOIN visual_asset_attempts a ON a.task_id=t.id AND a.attempt_no=t.current_attempt
+    LEFT JOIN approvals p ON p.subject_kind='visual_attempt' AND p.subject_id=a.id
+    WHERE t.id=?
+  `).get(taskId) as RetryJoinRow | undefined
+}
+
+/**
+ * Backend-authoritative controlled-retry eligibility. The UI may mirror it for
+ * display, but the POST route re-validates these exact conditions server-side.
+ */
+export function visualRetryEligibility(db: DatabaseSync, taskId: string): VisualRetryEligibility {
+  const row = retryJoin(db, taskId)
+  if (!row || row.attempt_id === null) {
+    return { eligible: false, reason: '没有当前 attempt', code: 'no-current-attempt', expectedNextAttemptNo: null }
+  }
+  const expectedNextAttemptNo = Number(row.current_attempt) + 1
+  const refused = (code: string, reason: string) => ({ eligible: false, reason, code, expectedNextAttemptNo })
+  if (row.decision === 'approved') return refused('approved-cannot-retry', '已批准的任务不能重试')
+  if (row.decision === 'rejected') {
+    // 被驳回的是当前 attempt，且尚未创建新 attempt（物理状态仍在等待审核）。
+    if (row.state !== 'waiting_visual_approval' || row.attempt_status !== 'waiting_visual_approval') {
+      return refused('invalid-state', '任务状态已变化，不能重试')
+    }
+    const note = row.review_note?.trim() ?? ''
+    if (!note) return refused('retry-note-required', '驳回意见为空，不能重试')
+    if (row.attempt_provider === 'stub') return refused('stub-cannot-retry', '测试图片不能重试')
+    if (Number(row.current_attempt) >= Number(row.max_attempts)) return refused('max-attempts-reached', '已达到最大重试次数')
+    return { eligible: true, reason: null, code: null, expectedNextAttemptNo }
+  }
+  return refused('invalid-state', '只有被驳回的当前 attempt 可以重试')
+}
+
+export interface RetryRequestInput {
+  packageId: string
+  taskId: string
+  currentAttemptId: string
+  assetId: string
+  idempotencyKey: string
+  supplementaryInstruction?: string
+}
+
+export interface VisualRetryRequestResult {
+  requestId: string
+  taskId: string
+  previousAttemptId: string
+  state: 'retry'
+  previousNote: string
+  supplementaryInstruction: string | null
+  expectedNextAttemptNo: number
+  idempotent: boolean
+  currentAttempt: number
+  maxAttempts: number
+}
+
+/** 补充要求：可选；不得覆盖驳回意见；禁止本地路径/URL/附件 ID/Provider 密钥。 */
+function validateSupplementary(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') throw new VisualPipelineError('bad-request', 'supplementaryInstruction 必须是字符串', 400)
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return null
+  if (trimmed.length > MAX_SUPPLEMENTARY_CHARS) {
+    throw new VisualPipelineError('supplementary-too-long', `补充要求不能超过 ${MAX_SUPPLEMENTARY_CHARS} 字`, 413)
+  }
+  const forbidden: Array<[RegExp, string]> = [
+    [/^(?:[a-z]:[\\/]|\/)/i, '本地路径'],
+    [/^(?:https?|file):\/\//i, 'URL'],
+    [/sha256:[a-f0-9]{64}/i, '附件 ID'],
+    [/attachment\s*id/i, '附件 ID'],
+    [/(?:api[_-]?key|secret|access[_-]?token|bearer)\s*[:=]/i, 'Provider 密钥'],
+  ]
+  for (const [pattern, label] of forbidden) {
+    if (pattern.test(trimmed)) throw new VisualPipelineError('supplementary-forbidden', `补充要求不得包含${label}`, 400)
+  }
+  return trimmed
+}
+
+export interface RetryRequestRef {
+  id: string
+  taskId: string
+  attemptId: string
+  rejectNote: string
+  supplementaryInstruction: string | null
+}
+
+export function latestRetryRequestForTask(db: DatabaseSync, taskId: string): RetryRequestRef | null {
+  const row = db.prepare(`
+    SELECT * FROM visual_retry_requests WHERE task_id=? ORDER BY created_at DESC, id DESC LIMIT 1
+  `).get(taskId) as RetryRequestRow | undefined
+  if (!row) return null
+  return {
+    id: row.id, taskId: row.task_id, attemptId: row.attempt_id,
+    rejectNote: row.reject_note, supplementaryInstruction: row.supplementary_instruction,
+  }
+}
+
+export function markRetryRequestClaimed(db: DatabaseSync, requestId: string, at: string): void {
+  db.prepare(`
+    UPDATE visual_retry_requests SET status='claimed', updated_at=? WHERE id=? AND status='created'
+  `).run(at, requestId)
+}
+
+/**
+ * M6.2 controlled retry: the only new user write this milestone.
+ * - strict gate (rejected current attempt, valid note, not maxed, no newer attempt);
+ * - idempotency key: replay returns the same result, same key with different
+ *   content returns 409;
+ * - creates a retry-request provenance row and flips the task to 'retry'
+ *   (the existing claim flow then creates the new attempt + workflow job);
+ * - never approves, never publishes, never touches old images or jobs.
+ */
+export function requestVisualRetry(
+  db: DatabaseSync,
+  input: RetryRequestInput,
+  now = new Date(),
+): VisualRetryRequestResult {
+  if (!PACKAGE_ID.test(input.packageId) || !TASK_ID.test(input.taskId)
+    || !ATTEMPT_ID.test(input.currentAttemptId) || !ASSET_ID.test(input.assetId)) {
+    throw new VisualPipelineError('bad-request', 'packageId、taskId、currentAttemptId 或 assetId 不合法', 400)
+  }
+  if (typeof input.idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_RE.test(input.idempotencyKey)) {
+    throw new VisualPipelineError('bad-request', 'idempotencyKey 不合法（1–128 位字母数字 . _ : -）', 400)
+  }
+  const supplementary = validateSupplementary(input.supplementaryInstruction)
+  // 幂等优先：同一幂等键的重复请求（即使状态已前移）返回相同结果；
+  // 相同幂等键但内容不同 → 409 冲突。判断在严格门之前，避免重放被状态变化误杀。
+  const existing = db.prepare('SELECT * FROM visual_retry_requests WHERE idempotency_key=?').get(input.idempotencyKey) as RetryRequestRow | undefined
+  if (existing) {
+    const same = existing.package_id === input.packageId && existing.task_id === input.taskId
+      && existing.attempt_id === input.currentAttemptId && existing.asset_id === input.assetId
+      && (existing.supplementary_instruction ?? null) === supplementary
+    if (!same) throw new VisualPipelineError('idempotency-conflict', '相同幂等键但内容不同，拒绝冲突请求', 409)
+    const live = retryJoin(db, input.taskId)
+    return {
+      requestId: existing.id, taskId: input.taskId, previousAttemptId: existing.attempt_id,
+      state: 'retry', previousNote: existing.reject_note, supplementaryInstruction: existing.supplementary_instruction,
+      expectedNextAttemptNo: live ? Number(live.current_attempt) + 1 : 0, idempotent: true,
+      currentAttempt: live ? Number(live.current_attempt) : 0,
+      maxAttempts: live ? Number(live.max_attempts) : 0,
+    }
+  }
+  const row = retryJoin(db, input.taskId)
+  if (!row || row.attempt_id === null) throw new VisualPipelineError('not-found', '视觉任务或当前 attempt 不存在', 404)
+  // 身份一致性先于资格门：包/资产/attempt 不匹配是更强的冲突信号
+  if (row.package_id !== input.packageId || row.asset_id !== input.assetId) {
+    throw new VisualPipelineError('retry-identity-mismatch', 'packageId 或 assetId 与任务不一致', 409)
+  }
+  if (row.attempt_id !== input.currentAttemptId || Number(row.attempt_no) !== Number(row.current_attempt)) {
+    throw new VisualPipelineError('not-current-attempt', '只能重试任务的当前 attempt', 409)
+  }
+  const eligibility = visualRetryEligibility(db, input.taskId)
+  if (!eligibility.eligible) {
+    const status = eligibility.code === 'max-attempts-reached' || eligibility.code === 'retry-note-required'
+      ? 422
+      : eligibility.code === 'no-current-attempt' ? 404 : 409
+    throw new VisualPipelineError(eligibility.code ?? 'invalid-state', eligibility.reason ?? '任务当前不可重试', status)
+  }
+  const at = now.toISOString()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    // Re-verify the strict gate inside the transaction (state may have changed).
+    const fresh = retryJoin(db, input.taskId)
+    const freshEligible = fresh ? visualRetryEligibility(db, input.taskId).eligible : false
+    if (!fresh || !freshEligible || fresh.attempt_id !== input.currentAttemptId
+      || fresh.package_id !== input.packageId || fresh.asset_id !== input.assetId) {
+      throw new VisualPipelineError('retry-conflict', '视觉任务状态在提交期间发生变化', 409)
+    }
+    const freshNote = fresh.review_note!.trim()
+    const requestId = randomUUID()
+    db.prepare(`
+      INSERT INTO visual_retry_requests(
+        id, idempotency_key, package_id, task_id, attempt_id, asset_id,
+        reject_note, supplementary_instruction, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created', ?, ?)
+    `).run(requestId, input.idempotencyKey, input.packageId, input.taskId, input.currentAttemptId, input.assetId,
+      freshNote, supplementary, at, at)
+    const updated = db.prepare(`
+      UPDATE visual_asset_tasks SET state='retry', lease_token_hash=NULL, lease_expires_at=NULL,
+        last_error=?, max_attempts=CASE WHEN max_attempts <= current_attempt THEN current_attempt + 1 ELSE max_attempts END,
+        updated_at=? WHERE id=? AND current_attempt=?
+    `).run(freshNote, at, input.taskId, row.current_attempt)
+    if (Number(updated.changes) !== 1) throw new VisualPipelineError('retry-conflict', '视觉任务重试发生并发冲突', 409)
+    db.prepare(`
+      INSERT INTO visual_asset_events(task_id, attempt_id, from_state, to_state, reason, created_at)
+      VALUES (?, ?, 'rejected', 'retry', ?, ?)
+    `).run(input.taskId, input.currentAttemptId,
+      `按驳回意见重试；意见：${freshNote}${supplementary ? `；补充要求：${supplementary}` : ''}`, at)
+    db.prepare(`UPDATE visual_batches SET status='queued', updated_at=? WHERE id=?`).run(at, row.batch_id)
+    refreshStoredBatch(db, row.batch_id, at)
+    db.exec('COMMIT')
+    return {
+      requestId, taskId: input.taskId, previousAttemptId: input.currentAttemptId,
+      state: 'retry', previousNote: freshNote, supplementaryInstruction: supplementary,
+      expectedNextAttemptNo: Number(row.current_attempt) + 1, idempotent: false,
+      currentAttempt: Number(row.current_attempt), maxAttempts: Number(row.max_attempts),
+    }
   } catch (error) {
     db.exec('ROLLBACK')
     throw error

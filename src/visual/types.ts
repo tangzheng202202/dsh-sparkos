@@ -100,6 +100,40 @@ export interface VisualAttemptApproval {
   decidedAt: string | null
 }
 
+/** One visual_asset_events row (audit history of a task). */
+export interface VisualTaskEvent {
+  id: number
+  taskId: string
+  attemptId: string | null
+  fromState: string | null
+  toState: string
+  reason: string | null
+  createdAt: string
+}
+
+/** Backend-computed controlled-retry eligibility for a visual task. */
+export interface VisualRetryEligibility {
+  eligible: boolean
+  reason: string | null
+  code: string | null
+  expectedNextAttemptNo: number | null
+}
+
+/** One visual_retry_requests row (M6.2 controlled retry provenance). */
+export interface VisualRetryRequest {
+  id: string
+  idempotencyKey: string
+  packageId: string
+  taskId: string
+  attemptId: string
+  assetId: string
+  rejectNote: string
+  supplementaryInstruction: string | null
+  status: 'created' | 'claimed' | 'superseded'
+  createdAt: string
+  updatedAt: string
+}
+
 export interface PlatformReadiness {
   wechat: boolean
   telegram: boolean
@@ -118,7 +152,13 @@ export interface PublicationReadiness {
 
 export interface VisualStatusSnapshot {
   batches: Array<VisualBatch & {
-    tasks: Array<VisualAssetTask & { attempts: VisualAssetAttempt[] }>
+    tasks: Array<VisualAssetTask & {
+      attempts: VisualAssetAttempt[]
+      /** Backend-computed controlled-retry eligibility (M6.2). */
+      retry: VisualRetryEligibility
+      /** Full audit trail of the task (visual_asset_events). */
+      events: VisualTaskEvent[]
+    }>
     readiness: {
       required: number
       queued: number

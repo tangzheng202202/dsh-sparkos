@@ -11,7 +11,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { envPath, VAULT_ROOT } from '../vault.ts'
 
-export const FACTORY_SCHEMA_VERSION = 5
+export const FACTORY_SCHEMA_VERSION = 6
 
 export function defaultFactoryDbPath(): string {
   return envPath('SPARKOS_DB_PATH', path.join(VAULT_ROOT, 'data', 'sparkos.db'))
@@ -343,6 +343,31 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
         ON visual_delivery_artifacts(package_id, version DESC);
       CREATE INDEX IF NOT EXISTS idx_visual_delivery_batch
         ON visual_delivery_artifacts(batch_id, version DESC);
+    `,
+  },
+  {
+    version: 6,
+    sql: `
+      -- M6.2 controlled retry provenance: one row per retry request created by a
+      -- human from the V2 visual card. The row pins the rejected attempt, the
+      -- reject note, the optional supplementary instruction and the idempotency
+      -- key, so repeated submissions for the same current attempt replay the
+      -- same result while a different payload under the same key is a conflict.
+      CREATE TABLE IF NOT EXISTS visual_retry_requests (
+        id TEXT PRIMARY KEY,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        package_id TEXT NOT NULL REFERENCES draft_packages(id),
+        task_id TEXT NOT NULL REFERENCES visual_asset_tasks(id),
+        attempt_id TEXT NOT NULL REFERENCES visual_asset_attempts(id),
+        asset_id TEXT NOT NULL,
+        reject_note TEXT NOT NULL,
+        supplementary_instruction TEXT,
+        status TEXT NOT NULL CHECK (status IN ('created', 'claimed', 'superseded')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_visual_retry_requests_task
+        ON visual_retry_requests(task_id, created_at DESC);
     `,
   },
 ]

@@ -140,6 +140,19 @@ tr.row-click:hover{background:var(--surface-2)}
 .btn-ghost{border:1px solid var(--line);color:var(--ink-2);background:var(--surface)}
 .btn-ghost:hover{background:var(--surface-2)}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn-retry{background:var(--orange);color:#fff;border:1px solid var(--orange)}
+.btn-retry:hover{background:var(--orange-strong);border-color:var(--orange-strong)}
+.btn-retry:disabled{opacity:.55;cursor:not-allowed}
+.vis-note-box{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--danger-soft);border-left:3px solid var(--danger);font-size:12px;line-height:1.6;color:var(--ink-2);overflow-wrap:anywhere}
+.vis-note-box .vn-label{font-weight:700;color:var(--danger)}
+.vis-max-note{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--warning-soft);color:var(--warning);font-size:12px;line-height:1.6}
+.vis-stub-note{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--gray-soft);color:var(--ink-3);font-size:12px;line-height:1.6}
+.retry-dialog-thumb{width:100%;max-height:220px;object-fit:contain;border-radius:8px;border:1px solid var(--line);background:#1A140C;margin-bottom:10px}
+.retry-sup-counter{font-size:11px;color:var(--ink-3);margin-top:3px;text-align:right}
+.retry-sup-counter.over{color:var(--danger)}
+.poll-hint{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-3);margin-left:8px}
+.poll-hint .dot{animation:pulse-dot 1.6s ease infinite}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.25}}
 .mono{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);word-break:break-all}
 .dim{color:var(--ink-3);font-size:12px}
 /* ---- 统一组件 ---- */
@@ -348,7 +361,7 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
       <div><div class="brand-name">SparkOS</div><div class="brand-sub">AI 编辑部 · V2 预览</div></div>
     </div>
     <nav class="nav" id="nav"></nav>
-    <div class="nav-status-card"><b><span class="dot dot-blue"></span>V2 受控操作 · 仅开放视觉审核</b>视觉图片可人工批准/驳回；选题、草稿、重试、交付与发布未开放，请前往原版工作台。</div>
+    <div class="nav-status-card"><b><span class="dot dot-blue"></span>V2 受控操作 · 仅开放视觉审核与按意见重试</b>视觉图片可人工批准/驳回；被驳回图片可按意见创建重试任务（不会在浏览器中直接生图）。选题、草稿、交付与发布未开放，请前往原版工作台。</div>
   </aside>
   <div class="main">
     <header class="topbar">
@@ -356,7 +369,7 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
       <div class="topbar-title" id="topbarTitle"></div>
       <div class="topbar-sub" id="topbarSub"></div>
       <div class="topbar-meta">
-        <span class="pill pill-blue">V2 受控操作 · 仅开放视觉审核</span>
+        <span class="pill pill-blue">V2 受控操作 · 仅开放视觉审核与按意见重试</span>
         <span class="hide-sm" id="topbarTime"></span>
         <span class="pill pill-gray hide-sm" id="topbarHealth"></span>
       </div>
@@ -379,6 +392,14 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
     <div class="modal-head"><div class="modal-title" id="reviewDialogTitle"></div><button class="modal-close" data-review-close type="button" aria-label="关闭">✕</button></div>
     <div class="modal-body" id="reviewDialogBody"></div>
     <div class="modal-foot" id="reviewDialogFoot"></div>
+  </div>
+</div>
+<div id="retry-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="按意见重试确认">
+  <div class="modal-backdrop" data-retry-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="retryDialogTitle">按意见重试</div><button class="modal-close" data-retry-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="retryDialogBody"></div>
+    <div class="modal-foot" id="retryDialogFoot"></div>
   </div>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -552,6 +573,9 @@ function renderView(view){
   $('topbarHealth').textContent='信源 '+overallName;
   $('view').innerHTML=RENDER[view]();
   if(view==='review')applyReviewFilters();
+  // M6.2：离开视觉页停止轮询；进入且存在 pipeline 任务时只读轮询
+  if(view==='visual')startVisualPolling();
+  else stopVisualPolling();
   $('view').scrollTop=0;window.scrollTo(0,0);
 }
 
@@ -566,16 +590,24 @@ function renderOverview(){
   var vis=(fact.visual&&fact.visual.batches)||[];
   var pendingTopics=ed.filter(function(c){return !c.decision||c.decision==='pending';}).length;
   var pendingDrafts=drafts.filter(function(p){return p.status==='waiting_approval';}).length;
-  var pendingVisual=0;vis.forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.state==='waiting_visual_approval')pendingVisual++;});});
+  // M6.2 计数语义：待审图片只统计等待视觉审核；被驳回可重试单独显示；进行中的 pipeline 单独显示
+  var pendingVisual=0;var rejectedRetryable=0;var visualInFlight=0;
+  vis.forEach(function(b){(b.tasks||[]).forEach(function(t){
+    if(t.state==='waiting_visual_approval')pendingVisual++;
+    if(t.state==='rejected'&&visualRetryInfo(t).eligible)rejectedRetryable++;
+    if(t.pipelineState==='queued'||t.pipelineState==='retry'||t.pipelineState==='generating'||t.pipelineState==='generated')visualInFlight++;
+  });});
   var abCount=ed.filter(function(c){return c.verificationGrade==='A'||c.verificationGrade==='B';}).length;
   var blockers=[];vis.forEach(function(b){var bl=(b.readiness&&b.readiness.blockers)||[];blockers=blockers.concat(bl);});
   var greenSrc=srcs.filter(function(s){return s.status==='green';}).length;
   var h=[];
   var healthName={green:'正常',red:'异常',pending:'待接入'}[health.overall]||health.overall;
   var pubReady=vis.some(function(b){return b.readiness&&b.readiness.readyForPublication;});
-  var todoCount=pendingVisual+pendingDrafts+pendingTopics+(d.distillQueue||[]).length+blockers.length;
+  var todoCount=pendingVisual+rejectedRetryable+visualInFlight+pendingDrafts+pendingTopics+(d.distillQueue||[]).length+blockers.length;
   var todos=[];
-  if(pendingVisual)todos.push({sev:0,type:'视觉',cls:'badge-orange',title:pendingVisual+' 张图片待审核',meta:'视觉中心 · 可批准或驳回（受控开放）',target:'visual'});
+  if(pendingVisual)todos.push({sev:0,type:'视觉',cls:'badge-orange',title:pendingVisual+' 张图片待审核',meta:'视觉中心 · 仅统计等待视觉审核的图片',target:'visual'});
+  if(rejectedRetryable)todos.push({sev:0,type:'视觉',cls:'badge-red',title:rejectedRetryable+' 张被驳回图片待重试',meta:'按驳回意见创建重试任务（受控操作）',target:'visual'});
+  if(visualInFlight)todos.push({sev:0,type:'视觉',cls:'badge-blue',title:visualInFlight+' 个视觉任务生成中',meta:'等待 DSH Agent 领取/生成（只读轮询）',target:'visual'});
   if(pendingDrafts)todos.push({sev:1,type:'创作',cls:'badge-blue',title:pendingDrafts+' 个草稿包待审批',meta:'平台预览与事实边界（V2 只读）',target:'creation'});
   if(blockers.length)todos.push({sev:2,type:'交付',cls:'badge-red',title:'发布准备存在 '+blockers.length+' 项阻塞',meta:blockers.slice(0,3).map(function(x){return blockerLabel(x);}).join('；')+(blockers.length>3?' 等':''),target:'publish'});
   if(pendingTopics)todos.push({sev:3,type:'选题',cls:'badge-amber',title:pendingTopics+' 张策划卡待审批',meta:'A/B 证据闸门（V2 只读）',target:'topics'});
@@ -854,7 +886,13 @@ function reviewItems(){
   var drafts=(D.factory&&D.factory.drafts)||[];
   drafts.forEach(function(p){if(p.status!=='waiting_approval')return;items.push({key:'draft',type:'草稿',sev:1,time:p.createdAt,title:p.title||p.id,id:p.id,target:'creation',note:'v'+p.revision+' · '+p.id,risk:(p.reviewNote||(p.validation&&p.validation.errors&&p.validation.errors.join('；'))||'')});});
   var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
-  vis.forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.state!=='waiting_visual_approval')return;var curA=null;(t.attempts||[]).forEach(function(a){if(Number(a.attemptNo)===Number(t.currentAttempt))curA=a;});items.push({key:'visual',type:'图片',sev:0,time:curA?curA.createdAt:null,title:t.assetId,id:t.id,target:'visual',note:b.packageId+' · '+t.placement,risk:t.reviewNote||t.lastError||''});});});
+  vis.forEach(function(b){(b.tasks||[]).forEach(function(t){
+    var curA=null;(t.attempts||[]).forEach(function(a){if(Number(a.attemptNo)===Number(t.currentAttempt))curA=a;});
+    // 待审核（waiting_visual_approval）
+    if(t.state==='waiting_visual_approval')items.push({key:'visual',type:'图片',sev:0,time:curA?curA.createdAt:null,title:t.assetId,id:t.id,target:'visual',note:b.packageId+' · '+t.placement,risk:t.reviewNote||t.lastError||''});
+    // M6.2：被驳回且可重试 → “待处理：需要重试”；生成中不算待审核
+    if(t.state==='rejected'&&visualRetryInfo(t).eligible)items.push({key:'visual',type:'图片',sev:0,time:curA?curA.createdAt:null,title:t.assetId,id:t.id,target:'visual',note:'待处理：需要重试 · '+b.packageId+' · '+t.placement,risk:'按驳回意见创建重试任务'});
+  });});
   (D.distillQueue||[]).forEach(function(e){items.push({key:'distill',type:'蒸馏',sev:2,time:null,title:e.file,id:e.file,target:'review',note:e.summary,risk:''});});
   return items;
 }
@@ -894,7 +932,7 @@ function renderReview(){
   var f=state.filters.review;
   var h=[flowBar('review')];
   h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('review')+'审核中心 · 编辑待办箱</div><span class="pill pill-orange">V2 预览模式</span></div>');
-  h.push('<div class="notice warn">'+icon('alert')+'<span class="n-text">本页为只读预览：审批、驳回、重试、交付与发布操作均未启用，请前往原版工作台 /sparkos/app 执行。</span></div>');
+  h.push('<div class="notice warn">'+icon('alert')+'<span class="n-text">本页为受控预览：审批、驳回与按意见重试已开放；选题、草稿、交付与发布操作未启用，请前往原版工作台 /sparkos/app 执行。</span></div>');
   var all=reviewItems();
   var totalC=all.length;
   var cTopic=all.filter(function(x){return x.key==='topic';}).length;
@@ -914,8 +952,34 @@ function renderReview(){
 /* ============ visual ============ */
 function currentAttempt(task){return (task.attempts||[]).filter(function(a){return Number(a.attemptNo)===Number(task.currentAttempt);})[0]||null;}
 function dimsOf(a){return (a&&a.sourceWidth&&a.sourceHeight)?a.sourceWidth+'×'+a.sourceHeight:'—';}
+/* M6.2 受控重试：以后端 t.retry 为准（服务端权威判定），fixture/旧数据回退到客户端镜像。 */
+function visualRetryInfo(t){
+  if(t&&t.retry&&typeof t.retry.eligible==='boolean')return t.retry;
+  var a=currentAttempt(t);
+  var note=((a&&a.approval&&a.approval.note)||'').trim();
+  var eligible=!!t&&!!a&&t.state==='rejected'
+    &&Number(a.attemptNo)===Number(t.currentAttempt)
+    &&a.approval&&a.approval.decision==='rejected'&&!!note
+    &&Number(t.currentAttempt)<Number(t.maxAttempts)
+    &&(!t.pipelineState||t.pipelineState==='waiting_visual_approval')
+    &&a.provider!=='stub';
+  return {eligible:eligible,reason:eligible?null:'客户端镜像判定不可重试',code:eligible?null:'invalid-state',expectedNextAttemptNo:t?Number(t.currentAttempt)+1:null};
+}
+/* 明确区分阶段：排队中 / 等待 Agent 领取 / 生成中 / 附件校验中，绝不统称“处理中”。 */
+function visualStateBadge(t){
+  var s=t.state;
+  if(s==='waiting_visual_approval')return '<span class="badge badge-amber">等待视觉审核</span>';
+  if(s==='approved')return '<span class="badge badge-green">已批准</span>';
+  if(s==='rejected')return '<span class="badge badge-red">已驳回</span>';
+  if(s==='retry')return '<span class="badge badge-blue">等待 Agent 领取</span>';
+  if(s==='queued')return '<span class="badge badge-gray">排队中</span>';
+  if(s==='generating')return '<span class="badge badge-blue">生成中</span>';
+  if(s==='generated')return '<span class="badge badge-blue">附件校验中</span>';
+  if(s==='failed')return '<span class="badge badge-red">重试失败</span>';
+  return '<span class="badge badge-gray">'+esc(s)+'</span>';
+}
 function techDetails(t,a){
-  // 卡片内只保留当前 attempt 的技术信息（折叠）；完整 attempt 历史在抽屉
+  // 卡片内只保留当前 attempt 的技术信息（折叠）；完整 attempt 历史与事件在抽屉
   return '<details class="tech"><summary>技术信息（当前 attempt）</summary><div class="tech-body"><div>attemptId：<span class="mono">'+esc(a?a.id:'—')+'</span> <button type="button" class="copy-btn" data-copy="'+esc(a?a.id:'')+'">复制</button></div><div>SHA：<span class="mono">'+esc(a&&a.importedSha256?a.importedSha256.slice(0,12):'—')+'</span> · '+esc(a&&a.sourceMediaType||'—')+' · '+(a&&a.sourceBytes||0)+' B</div><div>provider/model：'+esc((a&&a.provider||'—')+' / '+(a&&a.model||'—'))+'</div></div></details>';
 }
 function openVisualAttemptDrawer(taskId){
@@ -925,7 +989,7 @@ function openVisualAttemptDrawer(taskId){
   var t=found.task;
   var h=[];
   h.push('<div class="kv"><div><b>资产</b>'+esc(t.assetId)+'</div><div><b>放置</b>'+esc(t.placement)+'</div><div><b>包</b><span class="mono">'+esc(found.batch.packageId)+'</span> <button type="button" class="copy-btn" data-copy="'+esc(found.batch.packageId)+'">复制</button></div></div>');
-  h.push('<h4>attempt 历史（共 '+(t.attempts||[]).length+' 次）</h4>');
+  h.push('<h4>attempt 历史（共 '+(t.attempts||[]).length+' 次，仅查看不可操作）</h4>');
   if(!(t.attempts||[]).length){h.push(empty('暂无 attempt 记录','','doc'));}
   else{
     h.push('<table class="attempt-list"><thead><tr><th>attempt</th><th>状态</th><th>provider</th><th>尺寸</th><th>id</th><th></th></tr></thead><tbody>');
@@ -937,23 +1001,32 @@ function openVisualAttemptDrawer(taskId){
     });
     h.push('</tbody></table>');
   }
-  openDrawer(t.assetId+' · attempt 历史',h.join(''));
+  // 技术抽屉：历史事件（审计）
+  h.push('<h4>事件记录（'+(t.events||[]).length+'）</h4>');
+  if(!(t.events||[]).length){h.push('<div class="dim">暂无事件记录。</div>');}
+  else{
+    h.push('<div style="font-size:11.5px;line-height:1.8">'+t.events.map(function(ev){
+      var arrow=ev.fromState?esc(ev.fromState)+' → '+esc(ev.toState):esc(ev.toState);
+      return '<div><span class="dim">'+esc(fmtISO(ev.createdAt))+'</span> · '+arrow+(ev.attemptId?' · <span class="mono">'+esc(ev.attemptId)+'</span>':'')+(ev.reason?'<div style="color:var(--ink-3)">'+esc(ev.reason)+'</div>':'')+'</div>';
+    }).join('')+'</div>');
+  }
+  openDrawer(t.assetId+' · 详情',h.join(''));
 }
 function renderVisual(){
   var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
   var h=[flowBar('visual')];
-  if(!vis.length){h.push(empty('暂无视觉批次','批准草稿包后创建视觉任务；V2 只读预览，不执行审批与重试。','visual'));return h.join('');}
+  if(!vis.length){h.push(empty('暂无视觉批次','批准草稿包后创建视觉任务；V2 仅开放视觉审核与按意见重试。','visual'));return h.join('');}
   vis.forEach(function(b){
     var rd=b.readiness||{};
     var statusName={partially_approved:'部分批准',visual_approved_test:'视觉已批准（测试）',visual_approved:'视觉已批准',waiting_visual_approval:'等待视觉审核',rejected:'有图片被驳回',queued:'排队中',generating:'生成中',failed:'失败'};
-    h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('visual')+'视觉批次 · '+esc(statusName[b.status]||b.status)+'</div><div><span class="badge badge-gray">'+esc(b.packageId)+'</span> <span class="badge badge-amber">'+esc(b.approvedCount)+' / '+esc(b.requiredCount)+' 已批准</span>'+(rd.testOnly?' <span class="badge badge-red">测试图片不可发布</span>':'')+'</div></div>');
+    h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('visual')+'视觉批次 · '+esc(statusName[b.status]||b.status)+'</div><div><button type="button" class="btn btn-ghost" data-visual-refresh aria-label="只读刷新视觉状态">刷新状态</button> <span class="badge badge-gray">'+esc(b.packageId)+'</span> <span class="badge badge-amber">'+esc(b.approvedCount)+' / '+esc(b.requiredCount)+' 已批准</span>'+(rd.testOnly?' <span class="badge badge-red">测试图片不可发布</span>':'')+'</div></div>');
     h.push('<div class="vgrid">');
     (b.tasks||[]).forEach(function(t){
       var a=currentAttempt(t);
       var img=a&&a.importedRelativePath?('<button type="button" class="thumb-wrap" data-visual-thumb="'+esc(a.id)+'" aria-label="查看大图：'+esc(t.altText)+'"><img loading="lazy" alt="'+esc(t.altText)+'" src="'+visualAssetUrl(a.id)+'"></button>'):('<div class="preview-empty" style="min-height:170px">'+icon('image')+'<div>尚无图片</div></div>');
-      var stub=a&&a.provider==='stub';
-      var stateBadge=t.state==='waiting_visual_approval'?'<span class="badge badge-amber">待审核</span>':t.state==='approved'?'<span class="badge badge-green">已批准</span>':t.state==='rejected'?'<span class="badge badge-red">已驳回</span>':'<span class="badge badge-gray">'+esc(t.state)+'</span>';
-      h.push('<div class="vis-card" data-vis-task="'+esc(t.id)+'">'+img+'<div class="v-title">'+esc(t.assetId)+' '+stateBadge+'</div><div class="vis-meta">'+(stub?'<span class="badge badge-red">测试 stub</span>':'<span class="badge badge-blue">'+esc(a.provider)+'</span>')+' <span class="dim">'+esc(a&&a.model||'—')+'</span><br>'+dimsOf(a)+' · '+esc(t.placement)+'<br>当前 attempt #'+esc(t.currentAttempt)+' · 失败 '+(t.failureCount||0)+' · retry '+(t.retryCount||0)+'</div>'+techDetails(t,a)+'<div class="v-attempt-btn"><button type="button" class="btn btn-ghost" data-attempt-history="'+esc(t.id)+'">查看 attempt 历史</button></div>'+visActions(t,a)+'</div>');
+      var stub=!!a&&a.provider==='stub';
+      var providerCell=stub?'<span class="badge badge-red">测试 stub</span>':('<span class="badge badge-blue">'+esc(a?a.provider:'—')+'</span>');
+      h.push('<div class="vis-card" data-vis-task="'+esc(t.id)+'">'+img+'<div class="v-title">'+esc(t.assetId)+' '+visualStateBadge(t)+'</div><div class="vis-meta">'+providerCell+' <span class="dim">'+esc(a&&a.model||'—')+'</span><br>'+dimsOf(a)+' · '+esc(t.placement)+'<br>当前 attempt #'+esc(t.currentAttempt)+' · 失败 '+(t.failureCount||0)+' · retry '+(t.retryCount||0)+'</div>'+techDetails(t,a)+'<div class="v-attempt-btn"><button type="button" class="btn btn-ghost" data-attempt-history="'+esc(t.id)+'">查看 attempt 历史</button></div>'+visActions(t,a)+'</div>');
     });
     h.push('</div></div>');
   });
@@ -1236,7 +1309,7 @@ function stepVisualLightbox(delta){
 var RENDER={overview:renderOverview,intel:renderIntel,topics:renderTopics,creation:renderCreation,review:renderReview,visual:renderVisual,publish:renderPublish,growth:renderGrowth,system:renderSystem};
 
 
-/* ============ 视觉审核（V2 受控操作 · 仅开放视觉审核） ============ */
+/* ============ 视觉审核与按意见重试（V2 受控操作） ============ */
 var reviewDialog={attemptId:null,decision:null,batch:null,task:null,attempt:null,lastFocus:null,busy:false};
 var toastTimer=null;
 function isReviewable(task,attempt){
@@ -1362,6 +1435,171 @@ async function submitVisualReview(){
     handleReviewError(err);
   }
 }
+/* ============ M6.2 受控重试对话框（正式 modal，不用 window.confirm） ============ */
+var retryDialog={taskId:null,batch:null,task:null,attempt:null,lastFocus:null,busy:false};
+var RETRY_SUP_MAX=500;
+function openVisualRetryDialog(taskId,trigger){
+  var found=null;
+  (D.factory&&D.factory.visual&&D.factory.visual.batches||[]).forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.id===taskId)found={batch:b,task:t};});});
+  if(!found)return;
+  var t=found.task,a=currentAttempt(t);
+  var info=visualRetryInfo(t);
+  if(!info.eligible||!a){
+    showToast('该图片当前不可重试，正在刷新最新状态','error');
+    refreshVisual(found.batch.packageId).then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  retryDialog.taskId=taskId;retryDialog.batch=found.batch;retryDialog.task=t;retryDialog.attempt=a;
+  retryDialog.lastFocus=trigger||document.activeElement;retryDialog.busy=false;
+  renderRetryDialog();
+  var dlg=$('retry-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-retry-close]');if(close)close.focus();
+}
+function renderRetryDialog(){
+  var d=retryDialog;var t=d.task,a=d.attempt,b=d.batch;
+  var url=visualAssetUrl(a.id);
+  var note=(a.approval&&a.approval.note)||t.reviewNote||'';
+  var info=visualRetryInfo(t);
+  var h=[];
+  if(url)h.push('<img class="retry-dialog-thumb" alt="'+esc(t.altText||'')+'" src="'+url+'">');
+  h.push('<div class="kv">');
+  h.push('<div><b>assetId</b>'+esc(t.assetId)+'</div><div><b>用途</b>'+esc(t.placement)+'</div>');
+  h.push('<div><b>attempt</b>#'+esc(String(a.attemptNo))+'（当前）</div><div><b>provider/model</b>'+esc((a.provider||'—')+' / '+(a.model||'—'))+'</div>');
+  h.push('<div><b>尺寸</b>'+esc(dimsOf(a))+'</div><div><b>下一 attempt</b>#'+esc(String(info.expectedNextAttemptNo))+'</div>');
+  h.push('<div><b>尝试上限</b>已用 '+esc(String(t.currentAttempt))+' / '+esc(String(t.maxAttempts))+' 次</div>');
+  h.push('</div>');
+  if(t.prompt)h.push('<div style="margin-top:8px"><b style="font-size:12px">原 prompt 摘要</b><div class="dim" style="font-size:11.5px">'+esc(String(t.prompt).slice(0,120))+(String(t.prompt).length>120?'…':'')+'</div></div>');
+  if(note)h.push('<div class="vis-note-box"><span class="vn-label">驳回意见全文：</span>'+esc(note)+'</div>');
+  h.push('<div class="modal-warn">本操作只创建重试任务，不会在浏览器中直接生图；DSH Agent 领取后按 authoritative prompt 生成，并重新进入人工视觉审核。补充要求仅作为附加说明，不能覆盖或删除原驳回意见。</div>');
+  h.push('<div style="margin-top:12px"><label for="retry-supplementary" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">补充重试要求（可选）</label><textarea id="retry-supplementary" class="modal-note" maxlength="'+RETRY_SUP_MAX+'" placeholder="例如：加强主体占比、去除左下角杂物；不得填写本地路径、URL、附件 ID 或密钥"></textarea><div class="retry-sup-counter" id="retrySupCounter">0 / '+RETRY_SUP_MAX+'</div></div>');
+  h.push('<div class="modal-err" id="retryDialogErr"></div>');
+  $('retryDialogBody').innerHTML=h.join('');
+  $('retryDialogFoot').innerHTML='<button type="button" class="btn btn-ghost" data-retry-cancel>取消</button><button type="button" class="btn btn-retry" data-retry-confirm>确认创建重试任务</button>';
+  var sup=$('retry-supplementary');
+  if(sup)sup.addEventListener('input',function(){var c=$('retrySupCounter');if(c){c.textContent=sup.value.length+' / '+RETRY_SUP_MAX;c.classList.toggle('over',sup.value.length>RETRY_SUP_MAX);}});
+}
+function closeRetryDialog(){
+  if(!retryDialog.taskId)return;
+  var dlg=$('retry-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId)document.body.classList.remove('modal-open');
+  var last=retryDialog.lastFocus;
+  retryDialog.taskId=null;retryDialog.batch=null;retryDialog.task=null;retryDialog.attempt=null;retryDialog.lastFocus=null;retryDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showRetryDialogError(msg){var e=$('retryDialogErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setRetryBusy(busy,label){
+  retryDialog.busy=busy;
+  var dlg=$('retry-dialog');
+  var btn=dlg.querySelector('[data-retry-confirm]');
+  var cancel=dlg.querySelector('[data-retry-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleRetryError(err){
+  var code=err&&err.code;
+  var msg='请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='not-found'){msg='任务或图片不存在，可能已变化，正在刷新最新状态';needsRefresh=true;}
+  else if(code==='not-current-attempt'||code==='retry-conflict'||code==='retry-identity-mismatch'||code==='invalid-state'||code==='idempotency-conflict'){msg='任务状态已变化，正在刷新';needsRefresh=true;}
+  else if(code==='approved-cannot-retry'){msg='该图片已批准，不能重试';needsRefresh=true;}
+  else if(code==='max-attempts-reached'){msg='已达到最大重试次数，需要人工处理';needsRefresh=true;}
+  else if(code==='retry-note-required'){msg='缺少有效的驳回意见，不能重试';needsRefresh=true;}
+  else if(code==='stub-cannot-retry'){msg='测试图片不能重试';}
+  else if(code==='supplementary-too-long'){msg='补充要求不能超过 '+RETRY_SUP_MAX+' 字';}
+  else if(code==='supplementary-forbidden'){msg=err.message||'补充要求包含不允许的内容';}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(code==='payload-too-large'){msg='请求体过大';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showRetryDialogError(msg);
+  if(needsRefresh&&retryDialog.batch){
+    refreshVisual(retryDialog.batch.packageId).then(function(){renderRouter();}).catch(function(){});
+  }
+}
+async function submitVisualRetry(){
+  if(!retryDialog.taskId||retryDialog.busy)return;
+  var d=retryDialog;var t=d.task,a=d.attempt,b=d.batch;
+  var supEl=$('retry-supplementary');var sup=supEl?supEl.value.trim():'';
+  if(sup.length>RETRY_SUP_MAX){showRetryDialogError('补充要求不能超过 '+RETRY_SUP_MAX+' 字');return;}
+  if(/^(?:[a-z]:[\\/]|\/)/i.test(sup)||/^(?:https?|file):\/\//i.test(sup)||/sha256:[a-f0-9]{64}/i.test(sup)||/attachment\s*id/i.test(sup)||/(?:api[_-]?key|secret|access[_-]?token|bearer)\s*[:=]/i.test(sup)){
+    showRetryDialogError('补充要求不得包含本地路径、URL、附件 ID 或 Provider 密钥');return;
+  }
+  var errEl=$('retryDialogErr');if(errEl)errEl.classList.remove('show');
+  setRetryBusy(true,'正在创建重试任务');
+  try{
+    var payload={packageId:b.packageId,taskId:t.id,currentAttemptId:a.id,assetId:t.assetId,idempotencyKey:'retry:'+t.id+':'+a.id};
+    if(sup)payload.supplementaryInstruction=sup;
+    var resp=await fetch('/sparkos/visual/retry',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var pkg=b.packageId;
+    closeRetryDialog();
+    showToast('重试任务已创建，等待 Agent 领取','success');
+    try{await refreshVisual(pkg);}catch(e2){showToast('已创建，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setRetryBusy(false);
+    handleRetryError(err);
+  }
+}
+/* ============ M6.2 只读轮询（仅 GET；页面隐藏/离开视觉页停止；单包单轮询器；网络错误退避） ============ */
+var visualPoller={timers:{},delayMs:6000,maxDelayMs:30000};
+/* 测试钩子：允许 DOM 回归测试在隔离 fixture 中调节轮询节奏（生产数据不依赖它）。 */
+window.sparkosVisualPoller=visualPoller;
+function visualPipelineActive(){
+  var active={};
+  (D.factory&&D.factory.visual&&D.factory.visual.batches||[]).forEach(function(b){
+    var has=false;
+    (b.tasks||[]).forEach(function(t){if(t.pipelineState==='queued'||t.pipelineState==='retry'||t.pipelineState==='generating'||t.pipelineState==='generated')has=true;});
+    if(has)active[b.packageId]=true;
+  });
+  return Object.keys(active);
+}
+function stopVisualPolling(){
+  Object.keys(visualPoller.timers).forEach(function(k){clearTimeout(visualPoller.timers[k]);});
+  visualPoller.timers={};
+}
+function scheduleVisualPoll(packageId,delay){
+  if(document.hidden||state.view!=='visual')return;
+  if(visualPoller.timers[packageId])clearTimeout(visualPoller.timers[packageId]);
+  visualPoller.timers[packageId]=setTimeout(function(){visualPoller.timers[packageId]=null;pollVisualPackage(packageId);},delay||visualPoller.delayMs);
+}
+async function pollVisualPackage(packageId){
+  if(document.hidden||state.view!=='visual')return;
+  try{
+    await refreshVisual(packageId);
+    visualPoller.delayMs=6000;
+    renderRouter();
+  }catch(e){
+    // 网络错误退避
+    visualPoller.delayMs=Math.min(visualPoller.delayMs*2,visualPoller.maxDelayMs);
+  }
+  scheduleVisualPoll(packageId,visualPoller.delayMs);
+}
+function startVisualPolling(){
+  stopVisualPolling();
+  visualPoller.delayMs=6000;
+  var packages=visualPipelineActive();
+  packages.forEach(function(pkg){scheduleVisualPoll(pkg,visualPoller.delayMs);});
+}
+async function manualRefreshVisual(){
+  var bs=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
+  if(!bs.length){showToast('当前没有视觉批次','info');return;}
+  var pkgs=[];
+  bs.forEach(function(b){if(pkgs.indexOf(b.packageId)<0)pkgs.push(b.packageId);});
+  try{
+    for(var i=0;i<pkgs.length;i++){await refreshVisual(pkgs[i]);}
+    renderRouter();
+    showToast('已刷新视觉状态','success');
+  }catch(e){showToast('刷新失败：'+String(e&&e.message||e),'error');}
+}
 function visActions(t,a){
   var decAt=(a&&a.approval&&a.approval.decidedAt)?fmtISO(a.approval.decidedAt):null;
   if(isReviewable(t,a)){
@@ -1371,7 +1609,31 @@ function visActions(t,a){
     return '<div class="vis-status"><span class="badge badge-green">已批准</span>'+(decAt?'<span class="dim">'+esc(decAt)+'</span>':'')+(t.reviewNote?'<span class="dim">意见：'+esc(t.reviewNote)+'</span>':'')+'</div>';
   }
   if(t.state==='rejected'){
-    return '<div class="vis-status"><span class="badge badge-red">已驳回</span>'+(t.reviewNote?'<span class="dim">'+esc(t.reviewNote)+'</span>':'')+'</div>';
+    // 已驳回：主要操作是“按意见重试”；不再显示批准/驳回；历史 attempt 只能查看。
+    var note=(a&&a.approval&&a.approval.note)||t.reviewNote||'';
+    var info=visualRetryInfo(t);
+    var h=['<div class="vis-actions">'];
+    h.push('<button type="button" class="btn btn-ghost" data-visual-open="'+esc(a?a.id:'')+'" aria-label="查看原图">查看原图</button>');
+    if(note){h.push('<details class="tech" style="margin:0"><summary>查看完整意见</summary><div class="tech-body">'+esc(note)+'</div></details>');}
+    if(info.eligible&&a){h.push('<button type="button" class="btn btn-retry" data-visual-retry="'+esc(t.id)+'">按意见重试</button>');}
+    h.push('</div><div class="vis-status"><span class="badge badge-red">已驳回</span>'+(decAt?'<span class="dim">驳回时间 '+esc(decAt)+'</span>':''));
+    if(note){h.push('<div class="vis-note-box"><span class="vn-label">驳回意见：</span>'+esc(note.length>120?note.slice(0,120)+'…':note)+'</div>');}
+    if(info.eligible){h.push('<div class="dim">下一 attempt #'+esc(String(info.expectedNextAttemptNo))+' · 已用 '+esc(String(t.currentAttempt))+' / '+esc(String(t.maxAttempts))+' 次</div>');}
+    else if(info.code==='max-attempts-reached'){h.push('<div class="vis-max-note">已达到最大重试次数（'+esc(String(t.currentAttempt))+'/'+esc(String(t.maxAttempts))+'），需要人工处理。</div>');}
+    else if(a&&a.provider==='stub'){h.push('<div class="vis-stub-note">测试图片（stub）不可重试。</div>');}
+    else{h.push('<div class="vis-stub-note">'+esc(info.reason||'当前不可重试')+'。</div>');}
+    h.push('</div>');
+    return h.join('');
+  }
+  if(t.state==='retry'){
+    return '<div class="vis-status"><span class="badge badge-blue">等待 Agent 领取</span><span class="dim">已按驳回意见创建重试任务；DSH Agent 领取后将生成新图片并重新进入视觉审核。</span></div>';
+  }
+  if(t.state==='failed'){
+    return '<div class="vis-status"><span class="badge badge-red">重试失败</span>'+(t.lastError?'<span class="dim">'+esc(t.lastError)+'</span>':'')+'</div>';
+  }
+  if(t.state==='queued'||t.state==='generating'||t.state==='generated'){
+    var pipe=t.state==='queued'?'排队中 · 等待 Agent 领取':t.state==='generating'?'生成中 · 由 DSH Agent 执行（只读轮询）':'附件校验中';
+    return '<div class="vis-status"><span class="dim">'+esc(pipe)+'</span></div>';
   }
   return '';
 }
@@ -1415,6 +1677,13 @@ function visActions(t,a){
     var rb=t.closest('[data-review-backdrop]');if(rb){closeReviewDialog();return;}
     var rcc=t.closest('[data-review-cancel]');if(rcc){closeReviewDialog();return;}
     var rcf=t.closest('[data-review-confirm]');if(rcf){submitVisualReview();return;}
+    // M6.2 受控重试对话框
+    var vretry=t.closest('[data-visual-retry]');if(vretry){openVisualRetryDialog(vretry.getAttribute('data-visual-retry'),vretry);return;}
+    var rtc=t.closest('[data-retry-close]');if(rtc){closeRetryDialog();return;}
+    var rtb=t.closest('[data-retry-backdrop]');if(rtb){closeRetryDialog();return;}
+    var rtcancel=t.closest('[data-retry-cancel]');if(rtcancel){closeRetryDialog();return;}
+    var rtconfirm=t.closest('[data-retry-confirm]');if(rtconfirm){submitVisualRetry();return;}
+    var vrfr=t.closest('[data-visual-refresh]');if(vrfr){manualRefreshVisual();return;}
     var ah=t.closest('[data-attempt-history]');if(ah){openVisualAttemptDrawer(ah.getAttribute('data-attempt-history'));return;}
     var cp=t.closest('[data-copy]');if(cp){copyTechId(cp);return;}
     // 审核中心精确导航：前往具体对象
@@ -1438,11 +1707,17 @@ function visActions(t,a){
     if(ev.key==='Escape'){
       if(visualLightbox.index>=0){ev.preventDefault();closeVisualLightbox();return;}
       if(drawer.open){ev.preventDefault();closeDrawer();return;}
+      if($('retry-dialog')&&!$('retry-dialog').classList.contains('hidden')){ev.preventDefault();closeRetryDialog();return;}
     }
     if(visualLightbox.index>=0){
       if(ev.key==='ArrowLeft'){ev.preventDefault();stepVisualLightbox(-1);return;}
       if(ev.key==='ArrowRight'){ev.preventDefault();stepVisualLightbox(1);}
     }
+  });
+  // M6.2：页面不可见时暂停轮询，回到可见且仍在视觉页时恢复
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){stopVisualPolling();}
+    else if(state.view==='visual'){startVisualPolling();}
   });
   boot();
 })();

@@ -218,9 +218,11 @@ test('GET /sparkos/app-v2：V2 只读预览版（GET 200 · 内嵌数据 · 仅�
   assert.ok(html.includes('id="visual-lightbox"'), 'V2 复用受控 lightbox')
   assert.ok(html.includes('data-nav="intel"') || html.includes("data-nav='intel'") || html.includes('data-nav'), 'V2 侧栏导航')
   assert.ok(html.includes('V2 只读预览') || html.includes('只读预览'), 'V2 只读声明')
-  // 受控写边界：唯一允许的写端点是视觉审核 decision（人工确认后发送）；其余写端点一律不得出现
+  // 受控写边界（M6.2）：V2 允许的两个写端点是视觉审核 decision 与按意见重试 retry，
+  // 且都只在人工确认对话框提交时以 POST 发送；其余写端点一律不得出现。
   assert.ok(html.includes('/sparkos/visual/decision'), 'V2 应引用受控视觉审核端点')
-  for (const forbidden of ['/sparkos/creation/decision', '/sparkos/visual/retry', '/sparkos/visual/delivery', '/sparkos/visual/queue', '/sparkos/mutate', '/sparkos/editorial/decision', 'data-draft-decision', 'data-editorial']) {
+  assert.ok(html.includes('/sparkos/visual/retry'), 'V2 应引用受控重试端点（仅人工确认后 POST）')
+  for (const forbidden of ['/sparkos/creation/decision', '/sparkos/visual/delivery', '/sparkos/visual/queue', '/sparkos/mutate', '/sparkos/editorial/decision', 'data-draft-decision', 'data-editorial', '/sparkos/creation/revise']) {
     assert.ok(!html.includes(forbidden), 'V2 页面不得包含写端点：' + forbidden)
   }
   assert.ok(!html.includes('"PUT"') && !html.includes('"PATCH"') && !html.includes('"DELETE"') && !html.includes("'PUT'") && !html.includes("'PATCH'") && !html.includes("'DELETE'"), 'V2 不得发起 PUT/PATCH/DELETE')

@@ -81,7 +81,7 @@ export function registerVisualTools(ctx: Context): void {
         const claim = withDb((db) => claimVisualTask(db, args))
         if (claim === null) return ok('当前没有可领取的视觉任务。', { claimed: false })
         return ok(
-          `已领取 ${claim.task.assetId}（${claim.task.targetWidth}x${claim.task.targetHeight}，image_generate aspect=${claim.imageStudioAspect}）。请将 images[0] 的完整附件引用原样回交 sparkos_visual_submit。`,
+          `已领取 ${claim.task.assetId}（${claim.task.targetWidth}x${claim.task.targetHeight}，image_generate aspect=${claim.imageStudioAspect}）。authoritativePrompt 已含原 prompt、固定规格与事实边界约束${claim.previousNote ? '，并附驳回意见与补充要求' : ''}；请按 authoritativePrompt 调用 image_generate，再将 images[0] 的完整附件引用原样回交 sparkos_visual_submit。`,
           { claimed: true, ...claim } as unknown as Record<string, JsonValue>,
         )
       } catch (error) { return failed(error) }

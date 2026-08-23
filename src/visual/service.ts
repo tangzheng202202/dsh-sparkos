@@ -31,7 +31,15 @@ import type {
   VisualTaskState,
 } from './types.ts'
 import { VisualPipelineError } from './errors.ts'
-import { attemptApproval, logicalTaskState, publicationReadiness, visualReviewAggregate } from './review.ts'
+import {
+  attemptApproval,
+  latestRetryRequestForTask,
+  logicalTaskState,
+  markRetryRequestClaimed,
+  publicationReadiness,
+  visualRetryEligibility,
+  visualReviewAggregate,
+} from './review.ts'
 
 const PACKAGE_ID = /^dp-[a-f0-9]{16}$/
 const TASK_ID = /^vt-[a-f0-9]{20}$/
@@ -461,6 +469,12 @@ export interface VisualClaim {
   leaseToken: string
   imageStudioAspect: string
   previousNote: string | null
+  /**
+   * M6.2 authoritative prompt: original asset prompt + fixed target spec +
+   * fact-boundary constraint, and for retries the reject note, optional
+   * supplementary instruction and the previous attempt's provider/model.
+   */
+  authoritativePrompt: string
 }
 
 export function claimVisualTask(
@@ -507,11 +521,29 @@ export function claimVisualTask(
     `).run(attemptId, row.id, jobId, attemptNo, row.prompt, at, at)
     visualEvent(db, row.id, attemptId, from, 'generating', 'claimed with a hashed lease token', at)
     refreshBatchStatus(db, row.batch_id, at)
+    // M6.2 authoritative prompt: retries must carry the reject note and any
+    // supplementary instruction verbatim so the agent cannot omit them.
+    const retryRef = from === 'retry' ? latestRetryRequestForTask(db, row.id) : null
+    const target = TARGETS[row.aspect_ratio]
+    let authoritativePrompt = `${row.prompt}\n[固定规格] ${row.aspect_ratio}（${target.width}x${target.height}px）\n[事实边界] 不得改变事实边界；不得删除或覆盖原驳回意见与补充要求`
+    if (retryRef) {
+      const previous = db.prepare(`
+        SELECT provider, model, attempt_no FROM visual_asset_attempts WHERE task_id=? AND attempt_no=?
+      `).get(row.id, row.current_attempt) as { provider: string | null; model: string | null; attempt_no: number } | undefined
+      authoritativePrompt += `\n[驳回意见] ${retryRef.rejectNote}\n[补充要求] ${retryRef.supplementaryInstruction ?? '无'}`
+      if (previous) {
+        authoritativePrompt += `\n[上一 attempt] #${previous.attempt_no} provider=${previous.provider ?? '—'} model=${previous.model ?? '—'}`
+      }
+      markRetryRequestClaimed(db, retryRef.id, at)
+    }
     const task = taskFromRow(db.prepare('SELECT * FROM visual_asset_tasks WHERE id = ?').get(row.id) as unknown as TaskRow)
     const attempt = attemptFromRow(db.prepare('SELECT * FROM visual_asset_attempts WHERE id = ?').get(attemptId) as unknown as AttemptRow)
     const batch = batchFromRow(db.prepare('SELECT * FROM visual_batches WHERE id = ?').get(row.batch_id) as unknown as BatchRow)
     db.exec('COMMIT')
-    return { batch, task, attempt, leaseToken: token, imageStudioAspect: TARGETS[row.aspect_ratio].preset, previousNote: row.last_error }
+    return {
+      batch, task, attempt, leaseToken: token, imageStudioAspect: target.preset, previousNote: row.last_error,
+      authoritativePrompt,
+    }
   } catch (error) {
     db.exec('ROLLBACK')
     throw error
@@ -899,6 +931,16 @@ export function visualStatus(db: DatabaseSync, packageId?: string): VisualStatus
           .map((attemptRow) => ({ ...attemptFromRow(attemptRow), approval: attemptApproval(db, attemptRow.id) }))
         const current = attempts.find((attempt) => attempt.attemptNo === Number(taskRow.current_attempt)) ?? null
         const reviewNote = current?.approval?.note ?? taskRow.last_error
+        const events = (db.prepare(`
+          SELECT id, task_id, attempt_id, from_state, to_state, reason, created_at
+          FROM visual_asset_events WHERE task_id=? ORDER BY id
+        `).all(taskRow.id) as Array<{
+          id: number; task_id: string; attempt_id: string | null; from_state: string | null
+          to_state: string; reason: string | null; created_at: string
+        }>).map((event) => ({
+          id: Number(event.id), taskId: event.task_id, attemptId: event.attempt_id,
+          fromState: event.from_state, toState: event.to_state, reason: event.reason, createdAt: event.created_at,
+        }))
         return {
           ...taskFromRow(taskRow),
           state: logicalTaskState(db, taskRow.id, current?.id ?? null, taskRow.state),
@@ -907,6 +949,8 @@ export function visualStatus(db: DatabaseSync, packageId?: string): VisualStatus
           retryCount: attempts.filter((attempt) => attempt.status === 'retry').length,
           reviewNote,
           attempts,
+          retry: visualRetryEligibility(db, taskRow.id),
+          events,
         }
       })
       const pipelineCount = (state: Exclude<VisualTaskState, 'approved' | 'rejected'>): number => tasks.filter((task) => task.pipelineState === state).length

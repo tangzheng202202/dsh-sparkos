@@ -177,13 +177,13 @@ test('schema v3 through v5 migration is additive, idempotent, and preserves v1/v
   legacy.close()
   for (let pass = 0; pass < 2; pass += 1) {
     const db = openFactoryDatabase({ path: file })
-    assert.equal(databaseHealth(db, file).schemaVersion, 5)
+    assert.equal(databaseHealth(db, file).schemaVersion, 6)
     assert.deepEqual((db.prepare('SELECT id, status FROM draft_packages ORDER BY id').all() as Array<{ id: string; status: string }>).map((row) => ({ ...row })), [
       { id: 'dp-1111111111111111', status: 'rejected' },
       { id: 'dp-2222222222222222', status: 'approved' },
     ])
     assert.equal(Number((db.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version=4').get() as { count: number }).count), 1)
-    for (const table of ['visual_batches', 'visual_asset_tasks', 'visual_asset_attempts', 'visual_asset_events']) {
+    for (const table of ['visual_batches', 'visual_asset_tasks', 'visual_asset_attempts', 'visual_asset_events', 'visual_retry_requests']) {
       assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table))
     }
     db.close()

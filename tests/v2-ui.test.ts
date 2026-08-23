@@ -336,6 +336,7 @@ test('v2 overview: second row is 7/12 Top5 + 5/12 flow', async () => {
   const r = await responsiveResult
   for (const w of [1440, 1920]) {
     const i = r.find((x) => x.width === w)
+    assert.ok(i, 'missing ' + w)
     assert.equal(i.ovTop5Ratio, 7, 'top5 ratio at ' + w)
     assert.equal(i.ovFlowRatio, 5, 'flow ratio at ' + w)
   }
@@ -345,6 +346,7 @@ test('v2 overview: todo card spans the full row', async () => {
   const r = await responsiveResult
   for (const w of [1440, 1920]) {
     const i = r.find((x) => x.width === w)
+    assert.ok(i, 'missing ' + w)
     assert.equal(i.ovTodoFull, true, 'todo full width at ' + w)
   }
 })
@@ -353,6 +355,7 @@ test('v2 overview: row-4 cards are equal width and height on desktop', async () 
   const r = await responsiveResult
   for (const w of [1440, 1920]) {
     const i = r.find((x) => x.width === w)
+    assert.ok(i, 'missing ' + w)
     assert.equal(i.ovRow4EqualW, true, 'row4 width at ' + w)
     assert.equal(i.ovRow4EqualH, true, 'row4 height at ' + w)
   }
@@ -421,7 +424,8 @@ test('v2 visual review: card and lightbox share the same review entry', async ()
 
 test('v2 visual review: review inbox pending count updates after approvals', async () => {
   const r = await reviewResult
-  assert.equal(r.reviewPendingCountAfter, 2)
+  // 2 张等待审核（444、666）+ 1 张被驳回可重试（888，非 stub）= 3
+  assert.equal(r.reviewPendingCountAfter, 3)
 })
 
 test('v2 visual review: no retry/delivery/generate/publish calls', async () => {
@@ -605,7 +609,8 @@ function interactionHarness(): string {
     out.reviewPreview=document.getElementById('view').textContent.indexOf('V2 预览模式')>=0;
     out.noDecisionButtons=qa('[data-visual-decision]').length===0&&qa('[data-draft-decision]').length===0&&qa('[data-visual-queue]').length===0&&qa('[data-visual-retry]').length===0;
     var sel=q('[data-rf="type"]');if(sel){sel.value='visual';sel.dispatchEvent(new Event('change',{bubbles:true}));}
-    out.reviewFiltered=document.getElementById('reviewList').textContent.indexOf('共 5 项')>=0;
+    // 视觉待审 5 项 + 被驳回可重试 1 项（888）= 6
+    out.reviewFiltered=document.getElementById('reviewList').textContent.indexOf('共 6 项')>=0;
     var rn=q('.notice.warn');
     out.reviewIconW=0;out.reviewIconH=0;
     if(rn){var ri=rn.querySelector('svg');if(ri){var rr=ri.getBoundingClientRect();out.reviewIconW=Math.round(rr.width);out.reviewIconH=Math.round(rr.height);}}
@@ -819,7 +824,7 @@ function reviewHarness(): string {
     var wCard=q('[data-vis-task="vt-11111111111111111111"]');
     out.waitingHasActions=!!wCard&&!!wCard.querySelector('[data-visual-approve]')&&!!wCard.querySelector('[data-visual-reject]')&&!!wCard.querySelector('[data-visual-open]');
     out.approvedNoActions=(function(){var c=q('[data-vis-task="vt-77777777777777777777"]');return !!c&&!c.querySelector('[data-visual-approve]')&&!c.querySelector('[data-visual-reject]');})();
-    out.rejectedNoActions=(function(){var c=q('[data-vis-task="vt-33333333333333333333"]');return !!c&&!c.querySelector('[data-visual-approve]')&&!c.querySelector('[data-visual-reject]');})();
+    out.rejectedNoActions=(function(){var c=q('[data-vis-task="vt-33333333333333333333"]');return !!c&&!c.querySelector('[data-visual-approve]')&&!c.querySelector('[data-visual-reject]')&&!c.querySelector('[data-visual-retry]');})();
     // approve flow (note optional, empty)
     q('[data-visual-approve="va-11111111111111111111"]').click();await wait(60);
     out.approveDialogFields=(function(){var d=q('#review-dialog');var b=q('#reviewDialogBody').textContent;return !d.classList.contains('hidden')&&q('#reviewDialogTitle').textContent==='批准图片'&&b.indexOf('cover-main')>=0&&b.indexOf('批准后将计入')>=0&&b.indexOf('审核意见（可选）')>=0;})();

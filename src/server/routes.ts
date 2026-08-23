@@ -29,7 +29,7 @@ import { runIntelTick } from '../intel/tick.ts'
 import { listRuntimeDrafts, listVaultDrafts, readDraft } from '../daily.ts'
 import { openFactoryDatabase } from '../storage/database.ts'
 import { queueVisualBatch, readVisualAsset, visualStatus, VisualPipelineError } from '../visual/service.ts'
-import { decideVisualAttempt, retryVisualTask } from '../visual/review.ts'
+import { decideVisualAttempt, requestVisualRetry, retryVisualTask } from '../visual/review.ts'
 import { createVisualDelivery, listVisualDeliveries, readVisualDeliveryFile, readVisualDeliveryZip } from '../visual/delivery.ts'
 
 
@@ -203,13 +203,27 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
         return
       }
-      if (typeof body.taskId !== 'string' || Object.keys(body).some((key) => key !== 'taskId')) {
-        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 taskId' } })
+      const keys = Object.keys(body)
+      // M6.2 controlled retry schema; the legacy { taskId } shape still works.
+      if (keys.length === 1 && typeof body.taskId === 'string') {
+        const db = openFactoryDatabase()
+        try { respondJson(res, 200, { ok: true, value: retryVisualTask(db, body.taskId) }) }
+        catch (error) { respondVisualError(res, error) } finally { db.close() }
+        return
+      }
+      const allowed = ['packageId', 'taskId', 'currentAttemptId', 'assetId', 'idempotencyKey', 'supplementaryInstruction']
+      if (keys.some((key) => !allowed.includes(key))
+        || typeof body.packageId !== 'string' || typeof body.taskId !== 'string'
+        || typeof body.currentAttemptId !== 'string' || typeof body.assetId !== 'string'
+        || typeof body.idempotencyKey !== 'string'
+        || (body.supplementaryInstruction !== undefined && typeof body.supplementaryInstruction !== 'string')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 packageId、taskId、currentAttemptId、assetId、idempotencyKey 和可选 supplementaryInstruction' } })
         return
       }
       const db = openFactoryDatabase()
-      try { respondJson(res, 200, { ok: true, value: retryVisualTask(db, body.taskId) }) }
-      catch (error) { respondVisualError(res, error) } finally { db.close() }
+      try {
+        respondJson(res, 200, { ok: true, value: requestVisualRetry(db, body as { packageId: string; taskId: string; currentAttemptId: string; assetId: string; idempotencyKey: string; supplementaryInstruction?: string }) })
+      } catch (error) { respondVisualError(res, error) } finally { db.close() }
       return
     }
     if (req.method === 'POST' && path === '/sparkos/visual/delivery') {

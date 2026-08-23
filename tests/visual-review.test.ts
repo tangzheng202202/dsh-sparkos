@@ -158,7 +158,7 @@ function visualError(code: string): (error: unknown) => boolean {
   return (error) => error instanceof VisualPipelineError && error.code === code
 }
 
-test('schema v4 to v5 is additive and idempotent without changing five existing attempts', async () => {
+test('schema v4 to v6 is additive and idempotent without changing five existing attempts', async () => {
   const file = path.join(root, 'migration-v4.db')
   const item = fixture({ dbPath: file })
   const first = claimVisualTask(item.db, { packageId: item.package.id }, new Date('2026-08-23T11:00:00Z'))!
@@ -171,13 +171,14 @@ test('schema v4 to v5 is additive and idempotent without changing five existing 
   assert.equal(before.length, 5)
   item.db.close()
   const raw = new DatabaseSync(file)
-  raw.exec('DROP TABLE visual_delivery_artifacts; DELETE FROM schema_migrations WHERE version=5;')
+  raw.exec('DROP TABLE visual_delivery_artifacts; DROP TABLE visual_retry_requests; DELETE FROM schema_migrations WHERE version IN (5, 6);')
   raw.close()
   for (let pass = 0; pass < 2; pass += 1) {
     const migrated = openFactoryDatabase({ path: file })
-    assert.equal(databaseHealth(migrated, file).schemaVersion, 5)
+    assert.equal(databaseHealth(migrated, file).schemaVersion, 6)
     assert.deepEqual(migrated.prepare('SELECT id, task_id, attempt_no, status, imported_sha256 FROM visual_asset_attempts ORDER BY id').all(), before)
     assert.equal(Number((migrated.prepare('SELECT COUNT(*) AS count FROM visual_delivery_artifacts').get() as { count: number }).count), 0)
+    assert.ok(migrated.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='visual_retry_requests'").get(), 'v6 visual_retry_requests 表已创建')
     migrated.close()
   }
 })
