@@ -63,6 +63,7 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
 .visual-feedback.error{background:#FBE4DF;color:#8B3323}.visual-feedback.success{background:#E4EFE6;color:#4E7A58}
 /* ---- M5A visual review lightbox（页面内大图预览）---- */
 body.lightbox-open{overflow:hidden}
+#visual-lightbox .hidden{display:none}
 .visual-lightbox{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center}
 .visual-lightbox.hidden{display:none}
 .visual-lightbox-backdrop{position:absolute;inset:0;background:rgba(20,14,8,.88)}
@@ -74,8 +75,9 @@ body.lightbox-open{overflow:hidden}
 .visual-lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;pointer-events:auto;width:44px;height:64px;border:none;border-radius:10px;background:rgba(255,248,239,.14);color:#fff;font-size:26px;cursor:pointer}
 .visual-lightbox-nav:hover{background:rgba(232,86,61,.85)}
 .visual-lightbox-prev{left:14px}.visual-lightbox-next{right:14px}
-.visual-lightbox-error{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#FFD9CE;font-size:14px;background:rgba(30,20,12,.9);border-radius:6px}
-.visual-lightbox-error a{pointer-events:auto;color:#fff}
+.visual-lightbox-error{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#FFD9CE;font-size:14px;background:rgba(30,20,12,.9);border-radius:6px}
+.visual-lightbox-error.show{display:flex}
+.visual-lightbox-error a{pointer-events:auto;color:#fff;margin:0 3px}
 .visual-lightbox-info{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);pointer-events:auto;background:rgba(255,248,239,.97);color:var(--text);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:9px 14px;max-width:min(620px,92vw);max-height:150px;overflow:auto;font-size:11.5px;line-height:1.6;overflow-wrap:anywhere}
 .visual-lb-row{display:flex;gap:8px}
 .visual-lb-row b{min-width:88px;color:var(--dim);font-weight:600;flex-shrink:0}
@@ -146,8 +148,11 @@ body.lightbox-open{overflow:hidden}
     <div class="visual-lightbox-stage" data-lightbox-stage>
       <img class="visual-lightbox-img" data-lightbox-img alt="">
       <div class="visual-lightbox-error hidden" data-lightbox-error role="alert">
-        <div>图片加载失败</div>
-        <a class="btn" data-lightbox-error-link href="#" target="_blank" rel="noopener noreferrer">打开原图</a>
+        <div data-lightbox-error-msg>图片加载失败</div>
+        <div>
+          <a class="btn" data-lightbox-anchor data-lightbox-error-link href="#" target="_blank" rel="noopener noreferrer">打开原图</a>
+          <a class="btn" data-lightbox-anchor data-lightbox-error-current href="#">在当前标签查看原图</a>
+        </div>
       </div>
     </div>
     <button type="button" class="visual-lightbox-nav visual-lightbox-next" data-lightbox-next aria-label="下一张（方向键 →）">›</button>
@@ -333,7 +338,8 @@ function renderVisual(p){
   var batch=visualBatchFor(p.id);
   if(!batch)return p.status==="approved"?"<div class=\"visual-panel\"><b>视觉生产</b><div class=\"dim\" style=\"margin:5px 0\">尚未创建视觉批次</div><button type=\"button\" class=\"btn adopt\" data-visual-queue=\""+esc(p.id)+"\">创建视觉任务</button></div>":"";
   var rd=batch.readiness||{},statusName={partially_approved:"部分批准",visual_approved_test:"视觉已批准（测试）",visual_approved:"视觉已批准",waiting_visual_approval:"等待视觉审核",rejected:"有图片被驳回",queued:"排队中",generating:"生成中",failed:"失败"};
-  var cards=(batch.tasks||[]).map(function(t){var a=currentAttempt(t);var stub=a&&a.provider==="stub";var preview=a&&a.importedRelativePath?"<button type=\"button\" class=\"visual-thumb\" data-visual-thumb=\""+esc(a.id)+"\" aria-label=\"查看大图："+esc(t.altText)+"\"><img loading=\"lazy\" alt=\""+esc(t.altText)+"\" src=\"/sparkos/visual/asset?attemptId="+encodeURIComponent(a.id)+"\"></button>":"<div class=\"empty\" style=\"padding:28px 4px\">尚无图片</div>";
+  var cards=(batch.tasks||[]).map(function(t){var a=currentAttempt(t);var stub=a&&a.provider==="stub";var assetUrl=a&&a.importedRelativePath?visualAssetUrl(a.id):null;
+    var preview=assetUrl?"<button type=\"button\" class=\"visual-thumb\" data-visual-thumb=\""+esc(a.id)+"\" aria-label=\"查看大图："+esc(t.altText)+"\"><img loading=\"lazy\" alt=\""+esc(t.altText)+"\" src=\""+assetUrl+"\"></button>":"<div class=\"empty\" style=\"padding:28px 4px\">尚无图片</div>";
     var dims=a&&a.sourceWidth?esc(a.sourceWidth)+"×"+esc(a.sourceHeight):"—";var sha=a&&a.importedSha256?esc(a.importedSha256.slice(0,12)):"—";
     var ui=a?visualReviewState(a.id):null,busy=!!(ui&&ui.busy);var actions=t.state==="waiting_visual_approval"?"<button type=\"button\" class=\"btn adopt\" data-visual-decision=\"approved\" data-attempt=\""+esc(a&&a.id)+"\" "+(busy?"disabled":"")+">"+(busy&&ui.pendingDecision==="approved"?"处理中…":"批准图片")+"</button><button type=\"button\" class=\"btn ignore\" data-visual-decision=\"rejected\" data-attempt=\""+esc(a&&a.id)+"\" "+(busy?"disabled":"")+">驳回图片</button>":t.state==="rejected"?"<button type=\"button\" class=\"btn adopt\" data-visual-retry=\""+esc(t.id)+"\">按意见重试</button>":t.state==="approved"?"<span class=\"decided\">图片已批准 ✓</span>":"";
     var editor=ui&&ui.open&&t.state==="waiting_visual_approval"?"<div class=\"visual-review-editor\" data-visual-review-editor=\""+esc(a.id)+"\"><label for=\"visual-note-"+esc(a.id)+"\">驳回意见（必填）</label><textarea id=\"visual-note-"+esc(a.id)+"\" data-visual-note=\""+esc(a.id)+"\" maxlength=\"2000\" placeholder=\"请说明需要修改的内容\" "+(busy?"disabled":"")+">"+esc(ui.note)+"</textarea><div style=\"margin-top:7px\"><button type=\"button\" class=\"btn ignore\" data-visual-reject-confirm=\""+esc(a.id)+"\" "+(busy||!ui.note.trim()?"disabled":"")+">"+(busy&&ui.pendingDecision==="rejected"?"处理中…":"确认驳回")+"</button><button type=\"button\" class=\"btn\" data-visual-reject-cancel=\""+esc(a.id)+"\" "+(busy?"disabled":"")+">取消</button></div></div>":"";
@@ -384,7 +390,10 @@ function renderCreation(){
 }
 // ---- M5A visual lightbox（页面内大图预览 · 不触达任何审批 API）----
 var visualLightbox={items:[],index:-1,lastFocused:null};
+// 唯一 attemptId 校验规则：与后端 /^va-[a-f0-9]{20}$/ 完全一致（20 位 hex，禁止其他格式）
+var ATTEMPT_ID_RE=/^va-[a-f0-9]{20}$/;
 function visualLightboxItems(attemptId){
+  if(!ATTEMPT_ID_RE.test(attemptId))return [];
   var found=visualTaskForAttempt(attemptId);
   if(!found)return [];
   return (found.batch.tasks||[]).map(function(t){
@@ -394,21 +403,38 @@ function visualLightboxItems(attemptId){
   }).filter(Boolean);
 }
 function visualLightboxCurrent(){return visualLightbox.items[visualLightbox.index];}
-function visualAssetUrl(attemptId){return "/sparkos/visual/asset?attemptId="+encodeURIComponent(attemptId);}
+// 唯一受控 URL 生成：缩略图 / Lightbox / 原图链接全部走这里；非法 ID、任意 URL、文件路径一律返回 null
+function visualAssetUrl(attemptId){
+  if(typeof attemptId!=="string"||!ATTEMPT_ID_RE.test(attemptId))return null;
+  return "/sparkos/visual/asset?attemptId="+encodeURIComponent(attemptId);
+}
 function renderVisualLightboxImage(){
   var lb=document.getElementById("visual-lightbox");
   var item=visualLightboxCurrent();
   if(!lb||!item)return;
   var img=lb.querySelector("[data-lightbox-img]");
   var error=lb.querySelector("[data-lightbox-error]");
+  var msg=lb.querySelector("[data-lightbox-error-msg]");
   var link=lb.querySelector("[data-lightbox-error-link]");
+  var linkCurrent=lb.querySelector("[data-lightbox-error-current]");
   var url=visualAssetUrl(item.attemptId);
   img.alt=item.task.altText||"";
-  img.src=url;
   img.classList.remove("hidden");
-  error.classList.add("hidden");
+  error.classList.remove("show");
+  if(!url){
+    msg.textContent="图片加载失败（attemptId 非法："+item.attemptId+"）";
+    img.classList.add("hidden");
+    error.classList.add("show");
+    return;
+  }
+  img.src=url;
   link.href=url;
-  img.onerror=function(){img.classList.add("hidden");error.classList.remove("hidden");};
+  linkCurrent.href=url;
+  img.onerror=function(){
+    img.classList.add("hidden");
+    msg.textContent="图片加载失败（无法加载视觉资产 "+item.attemptId+"，请用下方链接重试）";
+    error.classList.add("show");
+  };
 }
 function renderVisualLightboxInfo(){
   var lb=document.getElementById("visual-lightbox");
@@ -430,10 +456,12 @@ function renderVisualLightboxInfo(){
     ["prompt",esc(t.prompt)]
   ].map(function(r){return "<div class=\"visual-lb-row\"><b>"+r[0]+"</b><span>"+r[1]+"</span></div>";}).join("");
   var indexLabel="<div class=\"visual-lb-row\"><b>图片</b><span>"+(visualLightbox.index+1)+" / "+visualLightbox.items.length+"</span></div>";
-  var openLink="<div class=\"visual-lb-row\"><b>原图</b><a href=\""+visualAssetUrl(a.id)+"\" target=\"_blank\" rel=\"noopener noreferrer\">打开原图</a></div>";
+  var url=visualAssetUrl(a.id);
+  var openLink=url?"<div class=\"visual-lb-row\"><b>原图</b><a data-lightbox-anchor data-lightbox-open href=\""+url+"\" target=\"_blank\" rel=\"noopener noreferrer\">打开原图</a> <a data-lightbox-anchor data-lightbox-open-current href=\""+url+"\">在当前标签查看原图</a></div>":"";
   lb.querySelector("[data-lightbox-info]").innerHTML=indexLabel+rows+openLink;
 }
 function openVisualLightbox(attemptId,trigger){
+  if(!ATTEMPT_ID_RE.test(attemptId))return;
   var items=visualLightboxItems(attemptId);
   if(!items.length)return;
   var index=-1;
@@ -473,6 +501,11 @@ function stepVisualLightbox(delta){
   lb.querySelector("[data-lightbox-backdrop]").addEventListener("click",function(ev){ev.stopPropagation();closeVisualLightbox();});
   lb.querySelector("[data-lightbox-prev]").addEventListener("click",function(ev){ev.stopPropagation();stepVisualLightbox(-1);});
   lb.querySelector("[data-lightbox-next]").addEventListener("click",function(ev){ev.stopPropagation();stepVisualLightbox(1);});
+  // 原图链接：普通同源 anchor——stopPropagation 防止误触遮罩，绝不 preventDefault（新标签被拦时可用同标签链接）
+  lb.addEventListener("click",function(ev){
+    var anchor=ev.target&&ev.target.closest?ev.target.closest("[data-lightbox-anchor]"):null;
+    if(anchor)ev.stopPropagation();
+  });
   document.addEventListener("keydown",function(ev){
     if(visualLightbox.index<0)return;
     if(ev.key==="Escape"){ev.preventDefault();closeVisualLightbox();return;}

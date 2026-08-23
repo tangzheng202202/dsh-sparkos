@@ -95,6 +95,12 @@ interface LightboxResult {
   originalLinkValid: boolean
   imageErrorShown: boolean
   errorLinkValid: boolean
+  errorCurrentHrefValid: boolean
+  errorMsgHasAttemptId: boolean
+  urlsIdentical: boolean
+  sameTabLinkPresent: boolean
+  linkNotPrevented: boolean
+  invalidIdRejected: boolean
   noApprovalCallsDuringLightbox: boolean
   arrowRight: boolean
   nextButton: boolean
@@ -142,10 +148,28 @@ test('lightbox shows full asset info and only a system attempt asset link', asyn
   assert.equal(result.originalLinkValid, true)
 })
 
-test('lightbox image load failure shows error and original link', async () => {
+test('lightbox image load failure shows understandable error and valid links', async () => {
   const result = await lightboxResult
   assert.equal(result.imageErrorShown, true)
   assert.equal(result.errorLinkValid, true)
+  assert.equal(result.errorCurrentHrefValid, true)
+  assert.equal(result.errorMsgHasAttemptId, true)
+})
+
+test('lightbox thumbnail, image and original links share one controlled URL', async () => {
+  const result = await lightboxResult
+  assert.equal(result.urlsIdentical, true)
+})
+
+test('lightbox original links never preventDefault and provide a same-tab variant', async () => {
+  const result = await lightboxResult
+  assert.equal(result.linkNotPrevented, true)
+  assert.equal(result.sameTabLinkPresent, true)
+})
+
+test('lightbox single validator rejects invalid attempt ids', async () => {
+  const result = await lightboxResult
+  assert.equal(result.invalidIdRejected, true)
 })
 
 test('lightbox Escape closes and restores focus to the thumbnail', async () => {
@@ -381,9 +405,35 @@ function lightboxHarness(): string {
     var href=linkHref();
     out.infoHasOriginalLink=!!href;
     out.originalLinkValid=!!href&&ATTEMPT_RE.test(href);
-    out.imageErrorShown=!lb().querySelector("[data-lightbox-error]").classList.contains("hidden");
+    out.imageErrorShown=lb().querySelector("[data-lightbox-error]").classList.contains("show");
     var errorHref=lb().querySelector("[data-lightbox-error-link]").getAttribute("href");
     out.errorLinkValid=!!errorHref&&ATTEMPT_RE.test(errorHref);
+    out.errorCurrentHrefValid=(function(){var h=lb().querySelector("[data-lightbox-error-current]").getAttribute("href");return !!h&&ATTEMPT_RE.test(h);})();
+    out.errorMsgHasAttemptId=lb().querySelector("[data-lightbox-error-msg]").textContent.indexOf("11111111111111111111")>=0;
+    out.urlsIdentical=(function(){
+      var tsrc=thumb(cover).querySelector("img").getAttribute("src");
+      var imgSrc=lb().querySelector("[data-lightbox-img]").getAttribute("src");
+      var infoHref=lb().querySelector('[data-lightbox-info] a[data-lightbox-open]').getAttribute("href");
+      var errHref2=lb().querySelector("[data-lightbox-error-link]").getAttribute("href");
+      return tsrc===imgSrc&&imgSrc===infoHref&&infoHref===errHref2&&ATTEMPT_RE.test(tsrc);
+    })();
+    out.sameTabLinkPresent=(function(){
+      var a=lb().querySelector('[data-lightbox-info] a[data-lightbox-open-current]');
+      return !!a&&a.getAttribute("target")===null&&ATTEMPT_RE.test(a.getAttribute("href"));
+    })();
+    out.linkNotPrevented=(function(){
+      var a=lb().querySelector('[data-lightbox-info] a[data-lightbox-open]');
+      var prevented=false;
+      a.addEventListener("click",function(ev){prevented=ev.defaultPrevented;},{once:true});
+      a.click();
+      return !prevented&&a.getAttribute("href").indexOf("/sparkos/visual/asset?attemptId=va-")===0;
+    })();
+    out.invalidIdRejected=(function(){
+      var bad=["va-6905f7dd8abdedf03","va-gggggggggggggggggggg","../../etc/passwd","javascript:alert(1)","VA-6905F7DD8ABDEDF03CDA","",null];
+      var allNull=bad.every(function(id){return window.visualAssetUrl(id)===null;});
+      var good=window.visualAssetUrl("va-6905f7dd8abdedf03cda");
+      return allNull&&good==="/sparkos/visual/asset?attemptId=va-6905f7dd8abdedf03cda";
+    })();
     out.noApprovalCallsDuringLightbox=requests.length===0;
 
     key("ArrowRight");await settle();

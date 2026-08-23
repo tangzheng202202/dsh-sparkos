@@ -429,6 +429,17 @@ test('HTTP queue/status/asset and factory snapshot expose controlled visual stat
   assert.equal(preview.headers['cross-origin-resource-policy'], 'same-origin')
   assert.equal(preview.body.compare(data), 0)
   assert.equal((await http('GET', '/sparkos/visual/asset?attemptId=../../etc/passwd')).status, 404)
+
+  // 真实形态 attemptId（va- + 20 位 hex，与后端生成规则一致）返回 200
+  assert.match(claim.attempt.id, /^va-[a-f0-9]{20}$/)
+  const realShape = await http('GET', `/sparkos/visual/asset?attemptId=${claim.attempt.id}`)
+  assert.equal(realShape.status, 200)
+  assert.match(realShape.headers['content-type'] || '', /^image\//)
+  // 非法格式一律拒绝：16 位/18 位截断、非 hex、大写、路径穿越、空串
+  for (const bad of ['va-6905f7dd8abdedf0', 'va-6905f7dd8abdedf03', 'va-gggggggggggggggggggg', 'VA-6905F7DD8ABDEDF03CDA', '../../etc/passwd', '']) {
+    const rejected = await http('GET', `/sparkos/visual/asset?attemptId=${encodeURIComponent(bad)}`)
+    assert.equal(rejected.status, 404, '应拒绝非法 attemptId: ' + bad)
+  }
   assert.equal((await http('GET', `/sparkos/visual/asset?attemptId=${claim.attempt.id}&path=/tmp/forbidden`)).status, 400)
   assert.equal(buildFactorySnapshot().visual.batches[0].packageId, fixture.package.id)
 })
