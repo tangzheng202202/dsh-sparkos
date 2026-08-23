@@ -919,6 +919,16 @@ export async function submitVisualAttachment(
   }
 }
 
+/** M6.4 只读交付链接：返回该草稿包最新 manifest 交付包的下载端点；无则 null。 */
+function latestDeliveryLink(db: DatabaseSync, packageId: string): string | null {
+  const row = db.prepare(`
+    SELECT id FROM visual_delivery_artifacts
+    WHERE package_id=? AND platform='shared' AND format='manifest'
+    ORDER BY version DESC LIMIT 1
+  `).get(packageId) as { id: string } | undefined
+  return row ? `/sparkos/visual/download?deliveryId=${row.id}` : null
+}
+
 export function visualStatus(db: DatabaseSync, packageId?: string): VisualStatusSnapshot {
   if (packageId !== undefined && !PACKAGE_ID.test(packageId)) throw new VisualPipelineError('bad-request', 'packageId 不合法', 400)
   const rows = (packageId === undefined
@@ -959,6 +969,8 @@ export function visualStatus(db: DatabaseSync, packageId?: string): VisualStatus
       const publication = publicationReadiness(db, row.id)
       return {
         ...batchFromRow(row), status: aggregate.status, approvedCount: aggregate.approvedCount, requiredCount: aggregate.requiredCount,
+        // M6.4 只读交付下载链接（最新 manifest 交付包；无则 null）
+        deliveryLink: latestDeliveryLink(db, row.package_id),
         tasks,
         readiness: {
           required: aggregate.requiredCount,

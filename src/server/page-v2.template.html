@@ -418,6 +418,14 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
     <div class="modal-foot" id="draftReviseFoot"></div>
   </div>
 </div>
+<div id="delivery-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="生成交付包确认">
+  <div class="modal-backdrop" data-delivery-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="deliveryDialogTitle">生成交付包</div><button class="modal-close" data-delivery-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="deliveryDialogBody"></div>
+    <div class="modal-foot" id="deliveryDialogFoot"></div>
+  </div>
+</div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <div id="visual-lightbox" class="visual-lightbox hidden" role="dialog" aria-modal="true" aria-label="视觉图片大图预览">
@@ -1087,8 +1095,8 @@ function blockerChip(code,cls){return '<span class="'+(cls||'blocker-chip')+'">'
 function renderPublish(){
   var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
   var h=[flowBar('publish')];
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('publish')+'发布准备（只读）</div><span class="pill pill-orange">发布仍需人工操作</span></div>');
-  if(!vis.length){h.push(empty('暂无视觉批次','视觉审核通过后在此查看各平台发布就绪状态；V2 不提供任何发布按钮。','publish'));}
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('publish')+'发布准备（受控）</div><span class="pill pill-orange">发布仍需人工操作</span></div>');
+  if(!vis.length){h.push(empty('暂无视觉批次','视觉审核通过后在此查看各平台发布就绪状态，并可受控生成交付包（不自动发布）。','publish'));}
   else{
     vis.forEach(function(b){
       var rd=b.readiness||{};
@@ -1120,9 +1128,16 @@ function renderPublish(){
       h.push('<div class="hint">“为什么不能发布”：最终状态为阻塞时，查看该平台行的文稿/视觉/交付包/风险检查列与全局阻塞。</div>');
       h.push('<div class="kv" style="font-size:12.5px;margin-top:8px">');
       h.push('<div><b>缺失槽位</b>'+(Math.max(0,Number(b.requiredCount)-Number(b.approvedCount)))+' 个（'+esc(b.approvedCount)+' / '+esc(b.requiredCount)+' 已批准）</div>');
-      h.push('<div><b>交付包</b>'+(b.deliveryLink?'<a href="'+esc(b.deliveryLink)+'" target="_blank" rel="noopener noreferrer">下载最新交付 ZIP</a>':'尚未生成（V2 只读，不生成交付包）')+'</div>');
+      h.push('<div><b>交付包</b>'+(b.deliveryLink?'<a data-delivery-download href="'+esc(b.deliveryLink)+'" target="_blank" rel="noopener noreferrer">下载最新交付 ZIP</a>':'尚未生成（可在下方受控生成）')+'</div>');
       h.push('<div><b>就绪状态</b>'+(rd.readyForPublication?'<span class="badge badge-green">可发布（人工操作）</span>':'<span class="badge badge-red">尚未全部就绪</span>')+'</div>');
       h.push('<div><b>视觉批准</b>'+(rd.visualApproved?'<span class="badge badge-green">已批准</span>':'<span class="badge badge-amber">等待批准</span>')+(rd.testOnly?' · <span class="badge badge-red">TEST ONLY</span>':'')+'</div>');
+      h.push('</div>');
+      // M6.4 受控交付生成：只生成交付包，不自动发布
+      h.push('<div class="vis-actions" style="margin-top:12px">');
+      if(rd.visualApproved){h.push('<button type="button" class="btn btn-ghost" data-delivery-action="preview" data-package="'+esc(b.packageId)+'">生成预览交付包</button>');}
+      else{h.push('<button type="button" class="btn btn-ghost" data-delivery-action="preview" data-package="'+esc(b.packageId)+'" disabled title="需先批准全部视觉">生成预览交付包</button>');}
+      if(rd.deliveryReady){h.push('<button type="button" class="btn btn-retry" data-delivery-action="production" data-package="'+esc(b.packageId)+'">生成生产交付包</button>');}
+      else{h.push('<button type="button" class="btn btn-retry" data-delivery-action="production" data-package="'+esc(b.packageId)+'" disabled title="'+(rd.testOnly?'测试图片（stub）不可生产交付':'需非 stub 图片且契约完整')+'">生成生产交付包</button>');}
       h.push('</div>');
       if(all.length){
         h.push('<details class="tech"><summary>技术详情 · 原始阻塞码（'+all.length+'）</summary><div class="tech-body">'+all.map(function(x){return '<div class="mono">'+esc(x)+'</div>';}).join('')+'</div></details>');
@@ -1756,6 +1771,105 @@ async function submitDraftRevise(){
     handleDraftReviseError(err);
   }
 }
+/* ============ M6.4 交付包生成受控确认（正式对话框） ============ */
+var deliveryDialog={packageId:null,mode:null,batch:null,lastFocus:null,busy:false};
+function batchForPackage(packageId){var f=null;(D.factory&&D.factory.visual&&D.factory.visual.batches||[]).forEach(function(b){if(b.packageId===packageId)f=b;});return f;}
+function openDeliveryDialog(packageId,mode,trigger){
+  var b=batchForPackage(packageId);
+  if(!b)return;
+  var rd=b.readiness||{};
+  if(!rd.visualApproved){
+    showToast('视觉尚未全部批准，不能生成交付包，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  if(mode==='production'&&!rd.deliveryReady){
+    showToast('当前不满足生产交付条件（需非 stub 图片且契约完整），正在刷新','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  deliveryDialog.packageId=packageId;deliveryDialog.mode=mode;deliveryDialog.batch=b;
+  deliveryDialog.lastFocus=trigger||document.activeElement;deliveryDialog.busy=false;
+  renderDeliveryDialog();
+  var dlg=$('delivery-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-delivery-close]');if(close)close.focus();
+}
+function renderDeliveryDialog(){
+  var d=deliveryDialog;var b=d.batch;var rd=b.readiness||{};
+  var production=d.mode==='production';
+  $('deliveryDialogTitle').textContent=production?'生成生产交付包':'生成预览交付包';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>packageId</b><span class="mono">'+esc(b.packageId)+'</span></div><div><b>模式</b>'+(production?'生产（production）':'预览（preview）')+'</div>');
+  h.push('<div><b>目标平台</b>微信公众号 · 小红书（交付包含两平台产物）</div>');
+  h.push('<div><b>视觉批准</b>'+esc(b.approvedCount)+' / '+esc(b.requiredCount)+'</div>');
+  if(b.deliveryLink)h.push('<div><b>已有交付包</b>可下载最新版；重新生成将产生新版本，不覆盖旧版</div>');
+  h.push('</div>');
+  var blockers=(rd.blockers||[]).filter(function(x){return x;});
+  if(blockers.length){h.push('<div class="modal-warn">当前阻塞项：'+blockers.slice(0,4).map(function(x){return blockerLabel(x);}).join('；')+(blockers.length>4?' 等':'')+'</div>');}
+  h.push('<div class="modal-warn">'+(production?'生产交付包用于正式发布素材；仅在非 stub 图片且契约完整时可生成。':'预览交付包用于核对排版与素材，测试图片会被标注 TEST ONLY，不可用于发布。')+'本操作只生成交付包，不会自动发布到任何平台。</div>');
+  h.push('<div class="modal-err" id="deliveryDialogErr"></div>');
+  $('deliveryDialogBody').innerHTML=h.join('');
+  $('deliveryDialogFoot').innerHTML='<button type="button" class="btn btn-ghost" data-delivery-cancel>取消</button><button type="button" class="btn btn-retry" data-delivery-confirm>'+(production?'确认生成生产交付包':'确认生成预览交付包')+'</button>';
+}
+function closeDeliveryDialog(){
+  if(!deliveryDialog.packageId)return;
+  var dlg=$('delivery-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!draftDialog.packageId&&!reviseDialog.packageId)document.body.classList.remove('modal-open');
+  var last=deliveryDialog.lastFocus;
+  deliveryDialog.packageId=null;deliveryDialog.mode=null;deliveryDialog.batch=null;deliveryDialog.lastFocus=null;deliveryDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showDeliveryDialogError(msg){var e=$('deliveryDialogErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setDeliveryBusy(busy,label){
+  deliveryDialog.busy=busy;
+  var dlg=$('delivery-dialog');
+  var btn=dlg.querySelector('[data-delivery-confirm]');
+  var cancel=dlg.querySelector('[data-delivery-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleDeliveryError(err){
+  var code=err&&err.code;
+  var msg=err&&err.message||'请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='visual-not-approved'){msg='视觉尚未全部批准，不能生成交付包';needsRefresh=true;}
+  else if(code==='production-gate'){msg='生产交付条件不满足：'+(err.message||'');needsRefresh=true;}
+  else if(code==='conflict'||code==='invalid-state'){msg='状态已变化，正在刷新';needsRefresh=true;}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showDeliveryDialogError(msg);
+  if(needsRefresh&&deliveryDialog.packageId){refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});}
+}
+async function submitDelivery(){
+  if(!deliveryDialog.packageId||deliveryDialog.busy)return;
+  var d=deliveryDialog;
+  var errEl=$('deliveryDialogErr');if(errEl)errEl.classList.remove('show');
+  setDeliveryBusy(true,'正在生成交付包');
+  try{
+    var resp=await fetch('/sparkos/visual/delivery',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId,mode:d.mode})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var created=!!(json.value&&json.value.created);
+    var deliveryId=json.value&&json.value.delivery&&json.value.delivery.id;
+    closeDeliveryDialog();
+    showToast(created?'交付包已生成':'交付包已存在（内容未变化）','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已生成，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+    if(deliveryId)setTimeout(function(){var a=document.querySelector('[data-delivery-download]');if(a)a.focus();},50);
+  }catch(err){
+    setDeliveryBusy(false);
+    handleDeliveryError(err);
+  }
+}
 /* ============ M6.2 只读轮询（仅 GET；页面隐藏/离开视觉页停止；单包单轮询器；网络错误退避） ============ */
 var visualPoller={timers:{},delayMs:6000,maxDelayMs:30000};
 /* 测试钩子：允许 DOM 回归测试在隔离 fixture 中调节轮询节奏（生产数据不依赖它）。 */
@@ -1904,6 +2018,12 @@ function visActions(t,a){
     var drb=t.closest('[data-draft-revise-backdrop]');if(drb){closeDraftReviseDialog();return;}
     var drcancel=t.closest('[data-draft-revise-cancel]');if(drcancel){closeDraftReviseDialog();return;}
     var drconfirm=t.closest('[data-draft-revise-confirm]');if(drconfirm){submitDraftRevise();return;}
+    // M6.4 交付包生成受控确认
+    var dela=t.closest('[data-delivery-action]');if(dela){openDeliveryDialog(dela.getAttribute('data-package'),dela.getAttribute('data-delivery-action'),dela);return;}
+    var delc=t.closest('[data-delivery-close]');if(delc){closeDeliveryDialog();return;}
+    var delb=t.closest('[data-delivery-backdrop]');if(delb){closeDeliveryDialog();return;}
+    var delcancel=t.closest('[data-delivery-cancel]');if(delcancel){closeDeliveryDialog();return;}
+    var delconfirm=t.closest('[data-delivery-confirm]');if(delconfirm){submitDelivery();return;}
     // 审核中心精确导航：前往具体对象
     var gv=t.closest('[data-goto-visual]');if(gv){navigate('visual');setTimeout(function(){var card=document.querySelector('[data-vis-task="'+gv.getAttribute('data-goto-visual')+'"]');if(card){card.scrollIntoView({block:'center'});card.style.outline='2px solid var(--orange)';setTimeout(function(){card.style.outline='';},1600);}},80);return;}
     var gc=t.closest('[data-goto-creation]');if(gc){state.filters.creation.packageId=gc.getAttribute('data-goto-creation');navigate('creation');setTimeout(function(){setHashParams({pkg:state.filters.creation.packageId});},80);return;}
@@ -1928,6 +2048,7 @@ function visActions(t,a){
       if($('retry-dialog')&&!$('retry-dialog').classList.contains('hidden')){ev.preventDefault();closeRetryDialog();return;}
       if($('draft-decision-dialog')&&!$('draft-decision-dialog').classList.contains('hidden')){ev.preventDefault();closeDraftDecisionDialog();return;}
       if($('draft-revise-dialog')&&!$('draft-revise-dialog').classList.contains('hidden')){ev.preventDefault();closeDraftReviseDialog();return;}
+      if($('delivery-dialog')&&!$('delivery-dialog').classList.contains('hidden')){ev.preventDefault();closeDeliveryDialog();return;}
     }
     if(visualLightbox.index>=0){
       if(ev.key==='ArrowLeft'){ev.preventDefault();stepVisualLightbox(-1);return;}

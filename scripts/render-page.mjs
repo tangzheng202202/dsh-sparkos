@@ -117,7 +117,17 @@ if (fixtureRoot) {
     requiredCount: 1, approvedCount: 0, createdAt: '2026-08-22T12:00:00Z', updatedAt: '2026-08-22T12:00:00Z',
     tasks: [otherTask],
     readiness: { required: 1, queued: 0, generating: 0, waitingVisualApproval: 1, failed: 0, readyForVisualApproval: true, visualApproved: false, testOnly: false, deliveryReady: false, readyByPlatform: { wechat: true, telegram: true, x: true, xiaohongshu: true }, readyForPublication: false, blockers: [] },
-  }] }
+  // M6.4 fixture：交付就绪批次（全部批准、非 stub、契约完整），仅注入 V2
+  }, v2 ? {
+    id: 'vb-33333333333333333333', packageId: 'dp-5555555555555555', revision: 1, sourceAssetsSha256: 'd'.repeat(64), status: 'visual_approved',
+    requiredCount: 2, approvedCount: 2, createdAt: '2026-08-22T13:00:00Z', updatedAt: '2026-08-22T13:00:00Z', deliveryLink: null,
+    tasks: [
+      task('vt-aaaaaaaaaaaaaaaaaaaa', 'deliv-cover', 'approved', null, { attemptNo: 21, provider: 'openai', attemptOverrides: { provider: 'openai', model: 'image-model', approval: { decision: 'approved', note: 'OK', decidedAt: '2026-08-22T13:10:00Z' } } }),
+      task('vt-bbbbbbbbbbbbbbbbbbbb', 'deliv-inline', 'approved', null, { attemptNo: 31, provider: 'openai', attemptOverrides: { provider: 'openai', model: 'image-model', approval: { decision: 'approved', note: 'OK', decidedAt: '2026-08-22T13:11:00Z' } } }),
+    ],
+    readiness: { required: 2, queued: 0, generating: 0, waitingVisualApproval: 0, failed: 0, readyForVisualApproval: true, visualApproved: true, testOnly: false, deliveryReady: true, readyByPlatform: { wechat: true, telegram: true, x: true, xiaohongshu: true }, readyForPublication: true, blockers: [] },
+  } : null,
+  ].filter(Boolean) }
   // V2 fixture：可解释排名 + 编辑策划 + 情报簇（抽屉/导航/详情测试）
   const ranked = (id, rank, topic, grade) => ({
     rank, topicKey: id, clusterId: 'c-20260822-' + String(rank).padStart(3, '0'), topic,
