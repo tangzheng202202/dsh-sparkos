@@ -52,6 +52,12 @@ input.search{border:1px solid var(--border);border-radius:8px;padding:7px 12px;f
 .visual-meta{font-size:11.5px;color:var(--dim);line-height:1.65;overflow-wrap:anywhere}
 .test-only{display:inline-block;background:#8B1E1E;color:#fff;border-radius:5px;padding:3px 7px;font-size:11px;font-weight:800;margin:4px 0}
 .review-note{margin:6px 0;padding:7px;border-left:3px solid var(--accent);background:#FBE4DF;color:#8B3323;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.visual-review-editor{margin-top:8px;padding:9px;border:1px solid var(--border);border-radius:8px;background:#FFF8EF}
+.visual-review-editor label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}
+.visual-review-editor textarea{display:block;width:100%;min-height:76px;resize:vertical;border:1px solid var(--border);border-radius:7px;padding:7px 9px;background:#fff;color:var(--text);font:inherit;font-size:12.5px;line-height:1.5}
+.visual-review-editor textarea:focus{outline:2px solid rgba(232,86,61,.2);border-color:var(--accent)}
+.visual-feedback{margin-top:7px;padding:7px 9px;border-radius:7px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.visual-feedback.error{background:#FBE4DF;color:#8B3323}.visual-feedback.success{background:#E4EFE6;color:#4E7A58}
 </style>
 </head>
 <body>
@@ -131,6 +137,7 @@ var nav = document.getElementById("nav");
 for (var ti = 0; ti < CENTERS.length; ti++) {
   var tb = CENTERS[ti];
   var b = document.createElement("button");
+  b.type = "button";
   b.className = "nav-tab"; b.textContent = tb[1]; b.dataset.tabs = tb[2].join(",");
   b.onclick = function () {
     var tabs = this.dataset.tabs.split(",");
@@ -236,7 +243,7 @@ function renderTopics(){
   el.innerHTML=sorted.map(function(m,idx){
     var decided=decisionOf("topic",m.event_id);
     var acts=decided?"<span class=\"decided\">"+(decided==="adopt"?"已采纳 ✓":"已忽略 ✗")+"</span>"
-      :"<button class=\"btn adopt\" data-kind=\"topic\" data-id=\""+esc(m.event_id)+"\" data-action=\"adopt\">✓ 采纳</button><button class=\"btn ignore\" data-kind=\"topic\" data-id=\""+esc(m.event_id)+"\" data-action=\"ignore\">✗ 忽略</button>";
+      :"<button type=\"button\" class=\"btn adopt\" data-kind=\"topic\" data-id=\""+esc(m.event_id)+"\" data-action=\"adopt\">✓ 采纳</button><button type=\"button\" class=\"btn ignore\" data-kind=\"topic\" data-id=\""+esc(m.event_id)+"\" data-action=\"ignore\">✗ 忽略</button>";
     return "<div class=\"topic-row\"><span class=\"badge "+freshClass(m.fresh_hours)+"\">"+freshLabel(m.fresh_hours)+"</span><div class=\"t-main\"><div class=\"t-title\">"+esc(m.title||m.event_id)+"</div><div class=\"t-meta\">"+esc(m.event_id)+" · "+esc(lineName(m.primary_line))+(m.supporting&&m.supporting.length?" · 补充角度 "+m.supporting.length+" 个":"")+"</div></div><div>"+acts+"</div></div>";
   }).join("");
   el.querySelectorAll("button[data-kind=topic]").forEach(function(b){b.onclick=function(){decide("topic",b.dataset.id,b.dataset.action,b);};});
@@ -250,7 +257,7 @@ function renderEditorial(){
   var patternName={persistent:"连续霸榜",accelerating:"加速上升",resurfacing:"二次升温",reversal:"事实反转",structural:"结构议题",emerging:"新兴话题"};
   var cards=(p.cards||[]).map(function(c){
     var decision=c.decision==="approved"?"<span class=\"decided\">已批准 ✓</span>":c.decision==="rejected"?"<span class=\"dim\">已驳回 ✗</span>":
-      "<button class=\"btn adopt\" data-editorial=\"approved\" data-card=\""+esc(c.id)+"\">✓ 批准进入创作</button><button class=\"btn ignore\" data-editorial=\"rejected\" data-card=\""+esc(c.id)+"\">✗ 驳回</button>";
+      "<button type=\"button\" class=\"btn adopt\" data-editorial=\"approved\" data-card=\""+esc(c.id)+"\">✓ 批准进入创作</button><button type=\"button\" class=\"btn ignore\" data-editorial=\"rejected\" data-card=\""+esc(c.id)+"\">✗ 驳回</button>";
     return "<div style=\"padding:12px 0;border-bottom:1px solid var(--border)\"><div><b>#"+c.rank+" "+esc(c.title)+"</b><span class=\"badge badge-green\">证据 "+esc(c.verificationGrade)+"</span><span class=\"badge badge-amber\">"+esc(patternName[c.trendPattern]||c.trendPattern)+"</span><span class=\"badge\">价值 "+Number(c.expectedValue).toFixed(1)+"</span></div>"+
       "<div style=\"margin:7px 0;font-size:13px\"><b>核心判断：</b>"+esc(c.coreThesis)+"</div><div class=\"dim\"><b>为什么现在：</b>"+esc(c.whyNow)+"</div>"+
       (c.facts.length?"<div class=\"dim\" style=\"margin-top:5px\">事实："+esc(c.facts.join("；"))+"</div>":"")+
@@ -271,20 +278,35 @@ renderEditorial();
 // ---- factory draft packages: preview + human approval + M5B visual review ----
 function visualBatchFor(packageId){var bs=D.factory&&D.factory.visual&&D.factory.visual.batches||[];return bs.find(function(b){return b.packageId===packageId;});}
 function currentAttempt(task){return (task.attempts||[]).find(function(a){return Number(a.attemptNo)===Number(task.currentAttempt);})||null;}
+var visualReviewUi=Object.create(null),visualDeliveryUi=Object.create(null);
+function visualReviewState(attemptId){return visualReviewUi[attemptId]||(visualReviewUi[attemptId]={open:false,note:"",busy:false,pendingDecision:"",message:"",error:""});}
+function visualTaskForAttempt(attemptId){var found=null;(D.factory&&D.factory.visual&&D.factory.visual.batches||[]).some(function(batch){return (batch.tasks||[]).some(function(task){var attempt=currentAttempt(task);if(attempt&&attempt.id===attemptId){found={batch:batch,task:task,attempt:attempt};return true;}return false;});});return found;}
+function visualResponseError(response,json){if(json&&json.error&&json.error.message)return String(json.error.message);if(!response.ok)return "请求失败（HTTP "+response.status+"）";return "服务器返回失败";}
+function applyVisualDecision(attemptId,decision,note,value){var found=visualTaskForAttempt(attemptId);if(!found)return;found.task.state=value&&value.taskState||decision;found.task.reviewNote=value&&value.note!=null?value.note:(decision==="rejected"?note:null);found.attempt.status=found.task.state;found.attempt.approval={decision:decision,note:found.task.reviewNote,decidedAt:new Date().toISOString()};if(value){found.batch.status=value.batchStatus||found.batch.status;found.batch.approvedCount=value.approvedCount==null?found.batch.approvedCount:value.approvedCount;found.batch.requiredCount=value.requiredCount==null?found.batch.requiredCount:value.requiredCount;}}
+async function submitVisualDecision(attemptId,decision,note){var ui=visualReviewState(attemptId);if(ui.busy)return;var clean=String(note||"").trim();if(decision==="rejected"&&!clean)return;ui.busy=true;ui.pendingDecision=decision;ui.error="";ui.message="";renderCreation();try{
+  var body={attemptId:attemptId,decision:decision};if(decision==="rejected")body.note=clean;
+  var response=await fetch("/sparkos/visual/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});var json;
+  try{json=await response.json();}catch(parseError){throw new Error("服务器返回了无效 JSON");}
+  if(!response.ok||!json||!json.ok)throw new Error(visualResponseError(response,json));
+  applyVisualDecision(attemptId,decision,clean,json.value||{});ui.busy=false;ui.pendingDecision="";ui.open=false;ui.note="";ui.message=decision==="rejected"?"图片已驳回":"图片已批准";renderCreation();
+}catch(error){ui.busy=false;ui.pendingDecision="";ui.error=error&&error.message?String(error.message):"视觉审核请求失败";ui.open=decision==="rejected";renderCreation();}}
 function renderVisual(p){
   var batch=visualBatchFor(p.id);
-  if(!batch)return p.status==="approved"?"<div class=\"visual-panel\"><b>视觉生产</b><div class=\"dim\" style=\"margin:5px 0\">尚未创建视觉批次</div><button class=\"btn adopt\" data-visual-queue=\""+esc(p.id)+"\">创建视觉任务</button></div>":"";
+  if(!batch)return p.status==="approved"?"<div class=\"visual-panel\"><b>视觉生产</b><div class=\"dim\" style=\"margin:5px 0\">尚未创建视觉批次</div><button type=\"button\" class=\"btn adopt\" data-visual-queue=\""+esc(p.id)+"\">创建视觉任务</button></div>":"";
   var rd=batch.readiness||{},statusName={partially_approved:"部分批准",visual_approved_test:"视觉已批准（测试）",visual_approved:"视觉已批准",waiting_visual_approval:"等待视觉审核",rejected:"有图片被驳回",queued:"排队中",generating:"生成中",failed:"失败"};
   var cards=(batch.tasks||[]).map(function(t){var a=currentAttempt(t);var stub=a&&a.provider==="stub";var preview=a&&a.importedRelativePath?"<img loading=\"lazy\" alt=\""+esc(t.altText)+"\" src=\"/sparkos/visual/asset?attemptId="+encodeURIComponent(a.id)+"\">":"<div class=\"empty\" style=\"padding:28px 4px\">尚无图片</div>";
     var dims=a&&a.sourceWidth?esc(a.sourceWidth)+"×"+esc(a.sourceHeight):"—";var sha=a&&a.importedSha256?esc(a.importedSha256.slice(0,12)):"—";
-    var actions=t.state==="waiting_visual_approval"?"<button class=\"btn adopt\" data-visual-decision=\"approved\" data-attempt=\""+esc(a&&a.id)+"\">批准图片</button><button class=\"btn ignore\" data-visual-decision=\"rejected\" data-attempt=\""+esc(a&&a.id)+"\">驳回图片</button>":t.state==="rejected"?"<button class=\"btn adopt\" data-visual-retry=\""+esc(t.id)+"\">按意见重试</button>":t.state==="approved"?"<span class=\"decided\">图片已批准 ✓</span>":"";
-    return "<div class=\"visual-asset\">"+preview+"<div><b>"+esc(t.assetId)+"</b><span class=\"badge\">"+esc(t.kind)+"</span><span class=\"badge\">attempt "+esc(t.currentAttempt)+"</span></div>"+(stub?"<div class=\"test-only\">测试图片，不可发布</div>":"")+"<div class=\"visual-meta\"><b>位置：</b>"+esc(t.placement)+"<br><b>Prompt：</b>"+esc(t.prompt)+"<br><b>Alt：</b>"+esc(t.altText)+"<br><b>来源：</b>"+esc(a&&a.provider||"—")+" / "+esc(a&&a.model||"—")+"<br><b>文件：</b>"+dims+" · "+esc(a&&a.sourceMediaType||"—")+" · "+esc(a&&a.sourceBytes||0)+" B · SHA "+sha+"<br><b>历史：</b>失败 "+esc(t.failureCount||0)+" · retry "+esc(t.retryCount||0)+"</div>"+(t.reviewNote?"<div class=\"review-note\">驳回/失败意见："+esc(t.reviewNote)+"</div>":"")+"<div style=\"margin-top:7px\">"+actions+"</div></div>";
+    var ui=a?visualReviewState(a.id):null,busy=!!(ui&&ui.busy);var actions=t.state==="waiting_visual_approval"?"<button type=\"button\" class=\"btn adopt\" data-visual-decision=\"approved\" data-attempt=\""+esc(a&&a.id)+"\" "+(busy?"disabled":"")+">"+(busy&&ui.pendingDecision==="approved"?"处理中…":"批准图片")+"</button><button type=\"button\" class=\"btn ignore\" data-visual-decision=\"rejected\" data-attempt=\""+esc(a&&a.id)+"\" "+(busy?"disabled":"")+">驳回图片</button>":t.state==="rejected"?"<button type=\"button\" class=\"btn adopt\" data-visual-retry=\""+esc(t.id)+"\">按意见重试</button>":t.state==="approved"?"<span class=\"decided\">图片已批准 ✓</span>":"";
+    var editor=ui&&ui.open&&t.state==="waiting_visual_approval"?"<div class=\"visual-review-editor\" data-visual-review-editor=\""+esc(a.id)+"\"><label for=\"visual-note-"+esc(a.id)+"\">驳回意见（必填）</label><textarea id=\"visual-note-"+esc(a.id)+"\" data-visual-note=\""+esc(a.id)+"\" maxlength=\"2000\" placeholder=\"请说明需要修改的内容\" "+(busy?"disabled":"")+">"+esc(ui.note)+"</textarea><div style=\"margin-top:7px\"><button type=\"button\" class=\"btn ignore\" data-visual-reject-confirm=\""+esc(a.id)+"\" "+(busy||!ui.note.trim()?"disabled":"")+">"+(busy&&ui.pendingDecision==="rejected"?"处理中…":"确认驳回")+"</button><button type=\"button\" class=\"btn\" data-visual-reject-cancel=\""+esc(a.id)+"\" "+(busy?"disabled":"")+">取消</button></div></div>":"";
+    var feedback=ui&&ui.error?"<div class=\"visual-feedback error\" role=\"alert\">"+esc(ui.error)+"</div>":ui&&ui.message?"<div class=\"visual-feedback success\" role=\"status\">"+esc(ui.message)+"</div>":"";
+    return "<div class=\"visual-asset\" data-visual-card=\""+esc(t.id)+"\">"+preview+"<div><b>"+esc(t.assetId)+"</b><span class=\"badge\">"+esc(t.kind)+"</span><span class=\"badge\">attempt "+esc(t.currentAttempt)+"</span></div>"+(stub?"<div class=\"test-only\">测试图片，不可发布</div>":"")+"<div class=\"visual-meta\"><b>位置：</b>"+esc(t.placement)+"<br><b>Prompt：</b>"+esc(t.prompt)+"<br><b>Alt：</b>"+esc(t.altText)+"<br><b>来源：</b>"+esc(a&&a.provider||"—")+" / "+esc(a&&a.model||"—")+"<br><b>文件：</b>"+dims+" · "+esc(a&&a.sourceMediaType||"—")+" · "+esc(a&&a.sourceBytes||0)+" B · SHA "+sha+"<br><b>历史：</b>失败 "+esc(t.failureCount||0)+" · retry "+esc(t.retryCount||0)+"</div>"+(t.reviewNote?"<div class=\"review-note\">驳回/失败意见："+esc(t.reviewNote)+"</div>":"")+"<div style=\"margin-top:7px\">"+actions+"</div>"+editor+feedback+"</div>";
   }).join("");
   var test=rd.testOnly?"<span class=\"test-only\">TEST ONLY · 不可发布</span>":"";
   var publish=rd.readyForPublication?"<span class=\"badge badge-green\">生产可发布</span>":"<span class=\"badge badge-red\">readyForPublication=false</span>";
   var blockers=(rd.blockers||[]).length?"<div class=\"dim\" style=\"margin:5px 0;color:#A97B2F\">阻塞："+esc(rd.blockers.join("；"))+"</div>":"";
-  var delivery=rd.visualApproved?"<button class=\"btn ignore\" data-visual-delivery=\"preview\" data-package=\""+esc(p.id)+"\">生成预览交付包</button><button class=\"btn adopt\" data-visual-delivery=\"production\" data-package=\""+esc(p.id)+"\" "+(rd.deliveryReady?"":"disabled")+">生成生产交付包</button>"+(batch.deliveryLink?"<a class=\"leg\" href=\""+esc(batch.deliveryLink)+"\">下载最新交付 ZIP</a>":""):"";
-  return "<div class=\"visual-panel\"><div class=\"visual-progress\"><b>视觉审核 · "+esc(statusName[batch.status]||batch.status)+"</b><span>"+esc(batch.approvedCount)+" / "+esc(batch.requiredCount)+" 已批准</span>"+test+publish+"</div>"+blockers+"<div class=\"visual-grid\">"+cards+"</div><div style=\"margin-top:9px\">"+delivery+"</div></div>";
+  var delivery=rd.visualApproved?"<button type=\"button\" class=\"btn ignore\" data-visual-delivery=\"preview\" data-package=\""+esc(p.id)+"\">生成预览交付包</button><button type=\"button\" class=\"btn adopt\" data-visual-delivery=\"production\" data-package=\""+esc(p.id)+"\" "+(rd.deliveryReady?"":"disabled")+">生成生产交付包</button>"+(batch.deliveryLink?"<a class=\"leg\" href=\""+esc(batch.deliveryLink)+"\">下载最新交付 ZIP</a>":""):"";
+  var deliveryUi=visualDeliveryUi[p.id];var deliveryFeedback=deliveryUi&&deliveryUi.error?"<div class=\"visual-feedback error\" role=\"alert\">"+esc(deliveryUi.error)+"</div>":deliveryUi&&deliveryUi.message?"<div class=\"visual-feedback success\" role=\"status\">"+esc(deliveryUi.message)+"</div>":"";
+  return "<div class=\"visual-panel\"><div class=\"visual-progress\"><b>视觉审核 · "+esc(statusName[batch.status]||batch.status)+"</b><span>"+esc(batch.approvedCount)+" / "+esc(batch.requiredCount)+" 已批准</span>"+test+publish+"</div>"+blockers+"<div class=\"visual-grid\">"+cards+"</div><div style=\"margin-top:9px\">"+delivery+"</div>"+deliveryFeedback+"</div>";
 }
 async function refreshVisual(packageId){var r=await fetch("/sparkos/visual/status?packageId="+encodeURIComponent(packageId));var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"视觉状态读取失败");D.factory.visual=D.factory.visual||{batches:[]};D.factory.visual.batches=(D.factory.visual.batches||[]).filter(function(b){return b.packageId!==packageId;}).concat(j.value.batches||[]);}
 function renderCreation(){
@@ -294,7 +316,7 @@ function renderCreation(){
   el.innerHTML=ps.map(function(p){
     var title=p.title||p.id;
     var artifacts=(p.artifacts||[]).map(function(a){var file=a.relativePath.split("/").pop();return "<a class=\"leg\" target=\"_blank\" rel=\"noopener\" href=\"/sparkos/creation/artifact?packageId="+encodeURIComponent(p.id)+"&file="+encodeURIComponent(file)+"\">"+esc(file)+"</a>";}).join("");
-    var acts=p.status==="waiting_approval"?"<button class=\"btn adopt\" data-draft-decision=\"approved\" data-package=\""+esc(p.id)+"\">✓ 批准草稿</button><button class=\"btn ignore\" data-draft-decision=\"rejected\" data-package=\""+esc(p.id)+"\">✗ 驳回草稿</button>":p.status==="rejected"?"<button class=\"btn adopt\" data-draft-revise=\""+esc(p.id)+"\">↻ 创建修订版</button>":"";
+    var acts=p.status==="waiting_approval"?"<button type=\"button\" class=\"btn adopt\" data-draft-decision=\"approved\" data-package=\""+esc(p.id)+"\">✓ 批准草稿</button><button type=\"button\" class=\"btn ignore\" data-draft-decision=\"rejected\" data-package=\""+esc(p.id)+"\">✗ 驳回草稿</button>":p.status==="rejected"?"<button type=\"button\" class=\"btn adopt\" data-draft-revise=\""+esc(p.id)+"\">↻ 创建修订版</button>":"";
     var errs=p.validation&&p.validation.errors&&p.validation.errors.length?"<div class=\"dim\" style=\"color:#C24B33;margin-top:5px\">校验："+esc(p.validation.errors.join("；"))+"</div>":"";
     var notes=(p.reviewNote?"<div class=\"dim\" style=\"color:#C24B33;margin-top:5px\">"+(p.status==="rejected"?"驳回意见：":"审核意见：")+esc(p.reviewNote)+"</div>":"")+(p.parentReviewNote?"<div class=\"dim\" style=\"color:#A97B2F;margin-top:5px\">父版本驳回意见："+esc(p.parentReviewNote)+"</div>":"");
     return "<div style=\"padding:12px 0;border-bottom:1px solid var(--border)\"><div><b>"+esc(title)+"</b><span class=\"badge\">v"+esc(p.revision||1)+"</span><span class=\"badge\">"+esc(statusName[p.status]||p.status)+"</span><span class=\"dim\">"+esc(p.id)+"</span></div>"+
@@ -313,9 +335,12 @@ function renderCreation(){
     ps.unshift({id:j.value.id,cardId:j.value.cardId,revision:j.value.revision,parentPackageId:j.value.parentPackageId,status:j.value.status,title:j.value.request&&j.value.request.sourceCard?j.value.request.sourceCard.title:j.value.id,validation:j.value.validation,assetCount:0,artifacts:[],reviewNote:j.value.reviewNote,parentReviewNote:j.value.parentReviewNote,createdAt:j.value.createdAt,updatedAt:j.value.updatedAt,decidedAt:null});renderCreation();
   }catch(e){btn.disabled=false;btn.textContent="重试";}};});
   el.querySelectorAll("[data-visual-queue]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var r=await fetch("/sparkos/visual/queue",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.visualQueue})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(btn.dataset.visualQueue);renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
-  el.querySelectorAll("[data-visual-decision]").forEach(function(btn){btn.onclick=async function(){var note;var decision=btn.dataset.visualDecision;if(decision==="rejected"){var input=window.prompt("请输入驳回图片的审核意见（必填）");if(input===null||!input.trim())return;note=input.trim();}btn.disabled=true;try{var body={attemptId:btn.dataset.attempt,decision:decision};if(note)body.note=note;var r=await fetch("/sparkos/visual/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");var batch=visualBatchFor(j.value.taskId);var task;(D.factory.visual.batches||[]).forEach(function(b){var found=(b.tasks||[]).find(function(t){return t.id===j.value.taskId;});if(found){batch=b;task=found;}});await refreshVisual(batch&&batch.packageId||"");renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
+  el.querySelectorAll("[data-visual-decision]").forEach(function(btn){btn.onclick=function(){var attemptId=btn.dataset.attempt,decision=btn.dataset.visualDecision;if(decision==="rejected"){var ui=visualReviewState(attemptId);if(ui.busy)return;ui.open=true;ui.error="";ui.message="";renderCreation();return;}submitVisualDecision(attemptId,"approved","");};});
+  el.querySelectorAll("[data-visual-note]").forEach(function(input){input.oninput=function(){var ui=visualReviewState(input.dataset.visualNote);ui.note=input.value;var confirm=input.parentNode.querySelector("[data-visual-reject-confirm]");if(confirm)confirm.disabled=ui.busy||!ui.note.trim();};});
+  el.querySelectorAll("[data-visual-reject-confirm]").forEach(function(btn){btn.onclick=function(){var ui=visualReviewState(btn.dataset.visualRejectConfirm);submitVisualDecision(btn.dataset.visualRejectConfirm,"rejected",ui.note);};});
+  el.querySelectorAll("[data-visual-reject-cancel]").forEach(function(btn){btn.onclick=function(){var ui=visualReviewState(btn.dataset.visualRejectCancel);if(ui.busy)return;ui.open=false;ui.note="";ui.error="";ui.message="";renderCreation();};});
   el.querySelectorAll("[data-visual-retry]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var batch; (D.factory.visual.batches||[]).forEach(function(b){if((b.tasks||[]).some(function(t){return t.id===btn.dataset.visualRetry;}))batch=b;});var r=await fetch("/sparkos/visual/retry",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({taskId:btn.dataset.visualRetry})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(batch.packageId);renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
-  el.querySelectorAll("[data-visual-delivery]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var r=await fetch("/sparkos/visual/delivery",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.package,mode:btn.dataset.visualDelivery})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(btn.dataset.package);var batch=visualBatchFor(btn.dataset.package);batch.deliveryLink="/sparkos/visual/download?deliveryId="+encodeURIComponent(j.value.delivery.id);renderCreation();window.alert("交付包已生成，可通过下载端点获取："+j.value.delivery.id);}catch(e){btn.disabled=false;btn.textContent="重试";}};});
+  el.querySelectorAll("[data-visual-delivery]").forEach(function(btn){btn.onclick=async function(){var packageId=btn.dataset.package;visualDeliveryUi[packageId]={message:"处理中…",error:""};renderCreation();try{var r=await fetch("/sparkos/visual/delivery",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:packageId,mode:btn.dataset.visualDelivery})});var j;try{j=await r.json();}catch(parseError){throw new Error("服务器返回了无效 JSON");}if(!r.ok||!j||!j.ok)throw new Error(visualResponseError(r,j));await refreshVisual(packageId);var batch=visualBatchFor(packageId);batch.deliveryLink="/sparkos/visual/download?deliveryId="+encodeURIComponent(j.value.delivery.id);visualDeliveryUi[packageId]={message:"交付包已生成："+j.value.delivery.id,error:""};renderCreation();}catch(e){visualDeliveryUi[packageId]={message:"",error:e&&e.message?String(e.message):"交付包生成失败"};renderCreation();}};});
 }
 renderCreation();
 
@@ -327,7 +352,7 @@ function renderDrafts(){
   el.innerHTML=drafts.map(function(d,idx){
     return "<div style=\"padding:10px 0;border-bottom:1px solid var(--border)\"><div><b>📝 "+esc(d.file)+"</b><span class=\"badge\">"+esc(d.platform||"")+"</span> <span class=\"dim\">"+d.bytes+"B</span></div>"+
       "<pre style=\"white-space:pre-wrap;font-size:12.5px;color:var(--dim);margin:6px 0 0;background:#FFFDF8;border:1px solid var(--border);border-radius:8px;padding:8px;max-height:110px;overflow:auto\">"+esc(d.preview)+"</pre>"+
-      "<button class=\"btn\" data-draft-view=\""+idx+"\" style=\"margin-top:6px\">查看全文</button>"+
+      "<button type=\"button\" class=\"btn\" data-draft-view=\""+idx+"\" style=\"margin-top:6px\">查看全文</button>"+
       "<pre class=\"draft-full\" style=\"display:none;white-space:pre-wrap;font-size:12.5px;margin:6px 0 0;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;max-height:380px;overflow:auto\"></pre></div>";
   }).join("");
   el.querySelectorAll("[data-draft-view]").forEach(function(btn){
@@ -354,8 +379,8 @@ function renderDistill(){
     return "<div style=\"padding:10px 0;border-bottom:1px solid var(--border)\">"+
       "<div>🔥 <b>"+esc(e.file)+"</b><span class=\"badge\">"+esc(e.dir)+"</span>"+(e.targets.length?" · 主线 "+esc(e.targets.join(",")):"")+"</div>"+
       "<div style=\"color:var(--dim);margin:4px 0\">"+esc(e.summary)+"</div>"+
-      "<button class=\"btn adopt\" data-kind=\"distill\" data-id=\""+esc(e.file)+"\" data-action=\"adopt\">✓ 采纳（过四红线）</button>"+
-      "<button class=\"btn ignore\" data-kind=\"distill\" data-id=\""+esc(e.file)+"\" data-action=\"ignore\">✗ 驳回</button></div>";}).join("");
+      "<button type=\"button\" class=\"btn adopt\" data-kind=\"distill\" data-id=\""+esc(e.file)+"\" data-action=\"adopt\">✓ 采纳（过四红线）</button>"+
+      "<button type=\"button\" class=\"btn ignore\" data-kind=\"distill\" data-id=\""+esc(e.file)+"\" data-action=\"ignore\">✗ 驳回</button></div>";}).join("");
   el.querySelectorAll("button[data-kind=distill]").forEach(function(b){b.onclick=function(){distillDecide(b);};});
 }
 async function distillDecide(btn){
@@ -374,7 +399,7 @@ function renderWriteback(){
   if(!wb.length){el.innerHTML="<div class=\"empty\">暂无待写回条目（采纳蒸馏候选后自动入列）</div>";return;}
   el.innerHTML=wb.map(function(e,idx){
     return "<div style=\"padding:10px 0;border-bottom:1px solid var(--border)\"><div><b>📤 "+esc(e.file)+"</b> <span class=\"badge\">"+esc(e.dir||"")+"</span> <span class=\"dim\">"+esc(e.target||"")+"</span></div>"+
-      "<div style=\"margin:6px 0\"><button class=\"btn adopt\" data-wb-copy=\""+idx+"\">📋 复制全文</button><button class=\"btn ignore\" data-wb-remove=\""+idx+"\">已写回并移除</button></div>"+
+      "<div style=\"margin:6px 0\"><button type=\"button\" class=\"btn adopt\" data-wb-copy=\""+idx+"\">📋 复制全文</button><button type=\"button\" class=\"btn ignore\" data-wb-remove=\""+idx+"\">已写回并移除</button></div>"+
       "<pre class=\"wb-pre\" style=\"display:none;white-space:pre-wrap;font-size:12px;background:#FFFDF8;border:1px solid var(--border);border-radius:8px;padding:8px;max-height:260px;overflow:auto\">"+esc(e.content)+"</pre></div>";}).join("");
   el.querySelectorAll("[data-wb-copy]").forEach(function(btn){
     btn.onclick=function(){var e=D.writebackQueue[Number(btn.dataset.wbCopy)];

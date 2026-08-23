@@ -59,8 +59,8 @@ if (fixtureRoot) {
     { ...shared, id: 'dp-2222222222222222', revision: 2, parentPackageId: 'dp-1111111111111111', status: 'approved', reviewNote: null, parentReviewNote: '需要重写开头', decidedAt: '2026-08-22T12:00:00Z' },
     { ...shared, id: 'dp-3333333333333333', revision: 3, parentPackageId: 'dp-2222222222222222', status: 'waiting_approval', reviewNote: null, parentReviewNote: null, decidedAt: null },
   ]
-  const attempt = (id, provider = 'stub') => ({
-    id, taskId: 'vt-11111111111111111111', attemptNo: 1, provider, model: 'stub-v1', sourceWidth: 900, sourceHeight: 383,
+  const attempt = (id, taskId, provider = 'stub') => ({
+    id, taskId, attemptNo: 1, provider, model: 'stub-v1', sourceWidth: 900, sourceHeight: 383,
     sourceMediaType: 'image/png', sourceBytes: 64, importedRelativePath: 'visual/fixture.png', importedSha256: 'a'.repeat(64), status: 'waiting_visual_approval', approval: { decision: 'pending', note: null, decidedAt: null },
   })
   const task = (id, assetId, state, note) => ({
@@ -68,13 +68,13 @@ if (fixtureRoot) {
     placement: assetId === 'cover-main' ? '微信公众号封面' : '微信正文第一节后', prompt: '<b>必须转义的提示词</b>', altText: '安全替代文本',
     aspectRatio: assetId === 'cover-main' ? '2.35:1' : '16:9', targetWidth: 900, targetHeight: 383, state,
     pipelineState: 'waiting_visual_approval', currentAttempt: 1, maxAttempts: 3, failureCount: state === 'rejected' ? 1 : 0, retryCount: state === 'rejected' ? 1 : 0,
-    reviewNote: note, attempts: [attempt('va-' + (assetId === 'cover-main' ? '1' : '2').repeat(20))], createdAt: '2026-08-22T10:00:00Z', updatedAt: '2026-08-22T11:00:00Z',
+    reviewNote: note, attempts: [attempt('va-' + ({ 'cover-main': '1', 'inline-one': '2', 'carousel-one': '3', 'failure-one': '4' }[assetId] ?? '5').repeat(20), id)], createdAt: '2026-08-22T10:00:00Z', updatedAt: '2026-08-22T11:00:00Z',
   })
   workbenchData.factory.visual = { batches: [{
     id: 'vb-11111111111111111111', packageId: 'dp-2222222222222222', revision: 2, sourceAssetsSha256: 'b'.repeat(64), status: 'partially_approved',
-    requiredCount: 2, approvedCount: 0, createdAt: '2026-08-22T10:00:00Z', updatedAt: '2026-08-22T11:00:00Z',
-    tasks: [task('vt-11111111111111111111', 'cover-main', 'waiting_visual_approval', null), task('vt-22222222222222222222', 'inline-one', 'rejected', '<img src=x onerror=reviewAttack()>')],
-    readiness: { required: 2, queued: 0, generating: 0, waitingVisualApproval: 2, failed: 0, readyForVisualApproval: true, visualApproved: false, testOnly: true, deliveryReady: false, readyByPlatform: { wechat: false, telegram: true, x: true, xiaohongshu: false }, readyForPublication: false, blockers: ['stub-visual-assets-test-only'] },
+    requiredCount: 4, approvedCount: 0, createdAt: '2026-08-22T10:00:00Z', updatedAt: '2026-08-22T11:00:00Z',
+    tasks: [task('vt-11111111111111111111', 'cover-main', 'waiting_visual_approval', null), task('vt-22222222222222222222', 'inline-one', 'waiting_visual_approval', null), task('vt-44444444444444444444', 'failure-one', 'waiting_visual_approval', null), task('vt-33333333333333333333', 'carousel-one', 'rejected', '<img src=x onerror=reviewAttack()>')],
+    readiness: { required: 4, queued: 0, generating: 0, waitingVisualApproval: 3, failed: 0, readyForVisualApproval: true, visualApproved: false, testOnly: true, deliveryReady: false, readyByPlatform: { wechat: false, telegram: true, x: true, xiaohongshu: false }, readyForPublication: false, blockers: ['stub-visual-assets-test-only'] },
   }] }
 }
 const data = JSON.stringify(workbenchData).replace(/</g, '\\u003c')
