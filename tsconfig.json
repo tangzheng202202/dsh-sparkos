@@ -13,12 +13,12 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@deepseek-ai/cordis": ["/Users/mac/cow/apps/dsh/vendor/cordis"],
-      "@deepseek-ai/dsh-tools": ["/Users/mac/cow/apps/dsh/packages/core/tools"],
-      "@deepseek-ai/dsh-settings": ["/Users/mac/cow/apps/dsh/packages/settings/settings"],
-      "@deepseek-ai/dsh-credentials": ["/Users/mac/cow/apps/dsh/packages/credentials/credentials"],
-      "@deepseek-ai/dsh-attachment": ["/Users/mac/cow/apps/dsh/packages/attachment/attachment"],
-      "@deepseek-ai/dsh-host-webserver": ["/Users/mac/cow/apps/dsh/packages/host/webserver"]
+      "@deepseek-ai/cordis": ["../../cow/apps/dsh/vendor/cordis"],
+      "@deepseek-ai/dsh-tools": ["../../cow/apps/dsh/packages/core/tools"],
+      "@deepseek-ai/dsh-settings": ["../../cow/apps/dsh/packages/settings/settings"],
+      "@deepseek-ai/dsh-credentials": ["../../cow/apps/dsh/packages/credentials/credentials"],
+      "@deepseek-ai/dsh-attachment": ["../../cow/apps/dsh/packages/attachment/attachment"],
+      "@deepseek-ai/dsh-host-webserver": ["../../cow/apps/dsh/packages/host/webserver"]
     }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
