@@ -182,6 +182,28 @@ tr.row-click:hover{background:var(--surface-2)}
 .grid-2>*,.grid-3>*{min-width:0}
 .grid-2 .span2{grid-column:1/-1}
 @media (max-width:900px){.grid-2 .todo-first{order:-1}}
+/* ---- 今日总览驾驶舱网格 ---- */
+.ov-dashboard{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:stretch}
+.ov-dashboard>.card{min-width:0;display:flex;flex-direction:column}
+.ov-dashboard>.card .card-head{flex:none}
+.ov-metrics{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,1fr);gap:12px;min-width:0}
+.ov-metrics .metric-card{display:flex;flex-direction:column;padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-sm);text-align:left;cursor:pointer;transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
+.ov-metrics .metric-card:hover{border-color:var(--line-strong);background:var(--surface-2);box-shadow:var(--shadow-md)}
+.ov-metrics .metric-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ov-metrics .metric-card .stat-label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3);font-weight:600;margin-bottom:10px}
+.ov-metrics .metric-card .stat-label svg{width:14px;height:14px}
+.ov-metrics .metric-card .stat-value{font-size:26px;font-weight:700;line-height:1.15;margin-bottom:6px}
+.ov-metrics .metric-card .stat-sub{font-size:11.5px;color:var(--ink-3);line-height:1.5}
+.ov-top5{grid-column:span 7}
+.ov-flow{grid-column:span 5}
+.ov-todo{grid-column:1/-1}
+.ov-sources{grid-column:span 4}
+.ov-jobs{grid-column:span 4}
+.ov-alerts{grid-column:span 4}
+.ov-dashboard .card-head{min-height:32px;align-items:center}
+@media (max-width:1240px){.ov-top5,.ov-flow{grid-column:1/-1}.ov-todo{order:-1}}
+@media (max-width:1024px){.ov-metrics{grid-template-columns:repeat(3,1fr)}.ov-sources,.ov-jobs,.ov-alerts{grid-column:span 6}}
+@media (max-width:767px){.ov-metrics{grid-template-columns:repeat(2,1fr)}.ov-sources,.ov-jobs,.ov-alerts{grid-column:1/-1}}
 @media (max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
 .creation-grid{display:grid;grid-template-columns:320px minmax(480px,1fr) 320px;grid-template-areas:"list preview fact";gap:14px;align-items:start}
 .creation-grid .cg-list{grid-area:list;min-width:0}
@@ -511,7 +533,7 @@ function renderOverview(){
   var pubReady=vis.some(function(b){return b.readiness&&b.readiness.readyForPublication;});
   var todoCount=pendingVisual+pendingDrafts+pendingTopics+(d.distillQueue||[]).length+blockers.length;
   var todos=[];
-  if(pendingVisual)todos.push({sev:0,type:'视觉',cls:'badge-orange',title:pendingVisual+' 张图片待审核',meta:'逐个放大查看后审批（V2 只读）',target:'visual'});
+  if(pendingVisual)todos.push({sev:0,type:'视觉',cls:'badge-orange',title:pendingVisual+' 张图片待审核',meta:'视觉中心 · 可批准或驳回（受控开放）',target:'visual'});
   if(pendingDrafts)todos.push({sev:1,type:'创作',cls:'badge-blue',title:pendingDrafts+' 个草稿包待审批',meta:'平台预览与事实边界（V2 只读）',target:'creation'});
   if(blockers.length)todos.push({sev:2,type:'交付',cls:'badge-red',title:'发布准备存在 '+blockers.length+' 项阻塞',meta:blockers.slice(0,3).map(function(x){return blockerLabel(x);}).join('；')+(blockers.length>3?' 等':''),target:'publish'});
   if(pendingTopics)todos.push({sev:3,type:'选题',cls:'badge-amber',title:pendingTopics+' 张策划卡待审批',meta:'A/B 证据闸门（V2 只读）',target:'topics'});
@@ -529,35 +551,33 @@ function renderOverview(){
     {label:'待审图片',value:pendingVisual,sub:'视觉 attempt',ic:'visual',target:'visual',cls:pendingVisual?'amber-num':''},
     {label:'发布准备',value:pubReady?'就绪':(blockers.length?('阻塞 '+blockers.length):'—'),sub:pubReady?'人工发布':'readiness blockers',ic:'publish',target:'publish',cls:blockers.length?'red-num':''}
   ];
-  h.push('<div class="stat-grid" style="margin-bottom:14px">');
+  h.push('<div class="ov-dashboard">');
+  // 第一行：五个等宽指标卡（整卡可点击，仅 hash 跳转）
+  h.push('<div class="ov-metrics" role="group" aria-label="关键指标">');
   metrics.forEach(function(s){
-    h.push('<button type="button" class="stat metric-card" data-goto="'+s.target+'" style="text-align:left;cursor:pointer"><div class="stat-label">'+icon(s.ic)+esc(s.label)+'</div><div class="stat-value '+s.cls+'">'+esc(s.value)+'</div><div class="stat-sub">'+esc(s.sub)+'</div></button>');
+    h.push('<button type="button" class="metric-card" data-goto="'+s.target+'"><div class="stat-label">'+icon(s.ic)+esc(s.label)+'</div><div class="stat-value '+s.cls+'">'+esc(s.value)+'</div><div class="stat-sub">'+esc(s.sub)+'</div></button>');
   });
   h.push('</div>');
-
-  // 第二行：Top5 / 内容生产流程 / 待办事项
-  h.push('<div class="grid-2" style="grid-template-columns:1fr 1fr;align-items:start">');
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('intel')+'今日 Top 5</div><button type="button" class="btn btn-ghost" data-goto="intel">查看全部</button></div>');
+  // 第二行：7/12 Top5 + 5/12 内容生产流程
+  h.push('<div class="card ov-top5"><div class="card-head"><div class="card-title">'+icon('intel')+'今日 Top 5</div><button type="button" class="btn btn-ghost" data-goto="intel">查看全部</button></div>');
   if(fact.ranking&&(fact.ranking.top5||[]).length){
-    h.push('<table><tbody>');
+    h.push('<div class="table-scroll"><table><tbody>');
     (fact.ranking.top5||[]).slice(0,5).forEach(function(t){
       h.push('<tr class="row-click" data-intel-drawer="'+esc(t.topicKey)+'" style="cursor:pointer"><td style="width:28px"><b style="color:'+(t.rank===1?'var(--accent)':'var(--ink-3)')+'">#'+t.rank+'</b></td><td>'+esc(t.topic)+'</td><td style="width:110px">'+gradeBadge(t.verificationGrade)+'</td><td style="width:64px" class="dim">热度 '+t.heatScore.toFixed(0)+'</td></tr>');
     });
-    h.push('</tbody></table>');
+    h.push('</tbody></table></div>');
   }else{
     h.push(empty('暂无排名数据','完成情报簇分析与 intel rank 后展示每日 Top 5；当前属于未开始阶段，属正常情况。','intel'));
   }
   h.push('</div>');
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'内容生产流程</div></div>'+flowBar('overview')+'<div class="hint">状态来自现有数据：'+flow.map(function(s){var m=fsName[s.status]||fsName.empty;return s.name+'（'+s.count+' · '+m.l+'）';}).join(' · ')+'</div></div>');
-  h.push('<div class="card span2 todo-first"><div class="card-head"><div class="card-title">'+icon('check')+'今日待办</div>'+(todos.length?'<span class="pill pill-amber">'+todos.length+' 项</span>':'<span class="pill pill-green">已清空</span>')+'</div>');
+  h.push('<div class="card ov-flow"><div class="card-head"><div class="card-title">'+icon('system')+'内容生产流程</div></div><div style="flex:1;display:flex;flex-direction:column;justify-content:center">'+flowBar('overview')+'<div class="hint">状态来自现有数据：'+flow.map(function(s){var m=fsName[s.status]||fsName.empty;return s.name+'（'+s.count+' · '+m.l+'）';}).join(' · ')+'</div></div></div>');
+  // 第三行：今日待办全宽
+  h.push('<div class="card ov-todo"><div class="card-head"><div class="card-title">'+icon('check')+'今日待办</div>'+(todos.length?'<span class="pill pill-amber">'+todos.length+' 项</span>':'<span class="pill pill-green">已清空</span>')+'</div>');
   if(!todos.length){h.push('<div class="empty">'+icon('check')+'<div>今日无待办事项</div><div class="empty-note">审核队列为空、无发布阻塞——这是正常状态。</div></div>');}
   else{todos.forEach(function(t){h.push('<div class="todo-row"><span class="badge '+t.cls+'">'+t.type+'</span><div class="todo-main"><div class="todo-title">'+esc(t.title)+'</div><div class="todo-meta">'+esc(t.meta)+'</div></div><button type="button" class="btn btn-ghost" data-goto="'+t.target+'">前往</button></div>');});}
   h.push('</div>');
-  h.push('</div>');
-
-  // 第三行：信源健康 / 最近任务 / 系统提醒
-  h.push('<div class="grid-3" style="align-items:start">');
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('intel')+'信源健康</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
+  // 第四行：信源健康 / 任务记录 / 系统提醒（4/12 × 3，等高）
+  h.push('<div class="card ov-sources"><div class="card-head"><div class="card-title">'+icon('intel')+'信源健康</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
   if(!srcs.length){h.push('<div class="dim">（无接入源）</div>');}
   else{
     srcs.slice(0,5).forEach(function(s){
@@ -567,7 +587,7 @@ function renderOverview(){
     });
   }
   h.push('</div>');
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'任务记录</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
+  h.push('<div class="card ov-jobs"><div class="card-head"><div class="card-title">'+icon('system')+'任务记录</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
   var jobName={queued:'排队中',running:'运行中',waiting_approval:'待审核',succeeded:'成功',failed:'失败',cancelled:'已取消'};
   var jobBadge={queued:'badge-gray',running:'badge-blue',waiting_approval:'badge-amber',succeeded:'badge-green',failed:'badge-red',cancelled:'badge-gray'};
   var jobs=(fact.database&&fact.database.jobs)||{};
@@ -580,7 +600,7 @@ function renderOverview(){
   }
   h.push('<div class="hint">工作流任务（workflow job）记录，反映系统曾执行的任务状态，不等于当前待审核数量。</div>');
   h.push('</div>');
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('alert')+'系统提醒</div></div>');
+  h.push('<div class="card ov-alerts"><div class="card-head"><div class="card-title">'+icon('alert')+'系统提醒</div></div>');
   var alerts=[];
   if(health.overall==='red')alerts.push({cls:'badge-red',text:'情报源整体异常',target:'system'});
   if(blockers.length)alerts.push({cls:'badge-red',text:'发布准备存在 '+blockers.length+' 项阻塞',target:'publish'});
@@ -591,8 +611,7 @@ function renderOverview(){
     h.push('<div class="todo-row">'+(a.target?'<button type="button" class="btn btn-ghost" data-goto="'+a.target+'">查看</button>':'<span class="badge badge-green">正常</span>')+'<div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+a.text+'</div></div></div>');
   });
   h.push('</div>');
-  h.push('</div>');
-  return h.join('');
+  h.push('</div>');return h.join('');
 }
 function anyVisualRejected(){var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];return vis.some(function(b){return b.status==='rejected';});}
 function anyDraftRejected(){var drafts=(D.factory&&D.factory.drafts)||[];return drafts.some(function(p){return p.status==='rejected';});}
