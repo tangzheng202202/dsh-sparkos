@@ -218,13 +218,15 @@ test('GET /sparkos/app-v2：V2 只读预览版（GET 200 · 内嵌数据 · 仅�
   assert.ok(html.includes('id="visual-lightbox"'), 'V2 复用受控 lightbox')
   assert.ok(html.includes('data-nav="intel"') || html.includes("data-nav='intel'") || html.includes('data-nav'), 'V2 侧栏导航')
   assert.ok(html.includes('V2 受控操作'), 'V2 受控操作声明')
-  // 受控写边界（M6.4）：V2 允许的写端点为视觉 decision/retry、草稿 decision/revise
-  // 与交付 delivery，均只在人工确认对话框提交时以 POST 发送；其余写端点一律不得出现。
+  // 受控写边界（M6.6）：V2 允许的写端点为视觉 decision/retry、草稿 decision/revise、
+  // 交付 delivery 与发布 publish（publish 仅创建台账 job，不自动发布），
+  // 均只在人工确认对话框提交时以 POST 发送；其余写端点一律不得出现。
   assert.ok(html.includes('/sparkos/visual/decision'), 'V2 应引用受控视觉审核端点')
   assert.ok(html.includes('/sparkos/visual/retry'), 'V2 应引用受控重试端点（仅人工确认后 POST）')
   assert.ok(html.includes('/sparkos/creation/decision'), 'V2 应引用受控草稿审批端点（仅人工确认后 POST）')
   assert.ok(html.includes('/sparkos/creation/revise'), 'V2 应引用受控草稿修订端点（仅人工确认后 POST）')
   assert.ok(html.includes('/sparkos/visual/delivery'), 'V2 应引用受控交付生成端点（仅人工确认后 POST）')
+  assert.ok(html.includes('/sparkos/publish'), 'V2 应引用受控发布任务端点（仅创建台账，不自动发布）')
   assert.ok(html.includes('data-draft-decision'), 'V2 应含草稿审批按钮')
   for (const forbidden of ['/sparkos/visual/queue', '/sparkos/mutate', '/sparkos/editorial/decision', 'data-editorial']) {
     assert.ok(!html.includes(forbidden), 'V2 页面不得包含写端点：' + forbidden)

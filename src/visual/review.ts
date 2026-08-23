@@ -10,6 +10,7 @@ import type {
   VisualTaskState,
 } from './types.ts'
 import { VisualPipelineError } from './errors.ts'
+import { createJob } from '../storage/jobs.ts'
 
 const ATTEMPT_ID = /^va-[a-f0-9]{20}$/
 const TASK_ID = /^vt-[a-f0-9]{20}$/
@@ -586,4 +587,45 @@ export function logicalTaskState(db: DatabaseSync, taskId: string, attemptId: st
   return approval.decision === 'approved' || approval.decision === 'rejected'
     ? approval.decision
     : pipelineState as VisualTaskState
+}
+/* ===================== M6.6 受控发布任务（台账，不自动发布） ===================== */
+
+export interface PublishTaskResult {
+  jobId: string
+  packageId: string
+  status: string
+  created: boolean
+  readyForPublication: boolean
+}
+
+/**
+ * M6.6 受控发布任务创建：仅当 publicationReadiness.readyForPublication 且非 testOnly
+ * 时，创建一个 kind='publish' 的 workflow job 作为可追溯台账；绝不实际发布到任何平台
+ * （发布仍由人工在对应后台执行）。幂等：同包重复请求复用/返回同一任务（createJob 幂等键）。
+ */
+export function createPublishTask(db: DatabaseSync, packageId: string, now = new Date()): PublishTaskResult {
+  if (!PACKAGE_ID.test(packageId)) throw new VisualPipelineError('bad-request', 'packageId 不合法', 400)
+  const batch = db.prepare('SELECT id FROM visual_batches WHERE package_id=?').get(packageId) as { id: string } | undefined
+  if (!batch) throw new VisualPipelineError('not-found', '视觉批次不存在：' + packageId, 404)
+  const readiness = publicationReadiness(db, batch.id)
+  if (!readiness.readyForPublication || readiness.testOnly) {
+    const reason = readiness.testOnly ? '测试图片（stub）不可创建发布任务'
+      : readiness.blockers.length > 0 ? readiness.blockers[0] : '发布尚未就绪'
+    throw new VisualPipelineError('publish-not-ready', reason, 409)
+  }
+  const created = createJob(db, {
+    kind: 'publish',
+    input: { packageId },
+    idempotencyKey: `publish:${packageId}`,
+    priority: 10,
+    now,
+  })
+  return { jobId: created.job.id, packageId, status: created.job.status, created: created.created, readyForPublication: true }
+}
+
+/** 最近一次发布任务（台账展示用）；无则 null。 */
+export function latestPublishTask(db: DatabaseSync, packageId: string): { id: string; status: string; createdAt: string; updatedAt: string } | null {
+  const row = db.prepare("SELECT id, status, created_at, updated_at FROM workflow_jobs WHERE kind='publish' AND idempotency_key=? ORDER BY created_at DESC LIMIT 1").get(`publish:${packageId}`) as
+    { id: string; status: string; created_at: string; updated_at: string } | undefined
+  return row ? { id: row.id, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at } : null
 }

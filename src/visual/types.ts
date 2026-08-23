@@ -159,6 +159,10 @@ export interface VisualStatusSnapshot {
       /** Full audit trail of the task (visual_asset_events). */
       events: VisualTaskEvent[]
     }>
+    /** M6.4 只读交付下载链接（最新 manifest 交付包；无则 null）。 */
+    deliveryLink: string | null
+    /** M6.6 最近发布任务台账（无则 null；只读展示，不自动发布）。 */
+    publishTask: { id: string; status: string; createdAt: string; updatedAt: string } | null
     readiness: {
       required: number
       queued: number

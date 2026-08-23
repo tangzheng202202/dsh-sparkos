@@ -426,6 +426,14 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
     <div class="modal-foot" id="deliveryDialogFoot"></div>
   </div>
 </div>
+<div id="publish-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="创建发布任务确认">
+  <div class="modal-backdrop" data-publish-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="publishDialogTitle">创建发布任务</div><button class="modal-close" data-publish-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="publishDialogBody"></div>
+    <div class="modal-foot" id="publishDialogFoot"></div>
+  </div>
+</div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <div id="visual-lightbox" class="visual-lightbox hidden" role="dialog" aria-modal="true" aria-label="视觉图片大图预览">
@@ -1092,6 +1100,10 @@ var BLOCKER_LABEL={
 };
 function blockerLabel(code){return BLOCKER_LABEL[code]||code;}
 function blockerChip(code,cls){return '<span class="'+(cls||'blocker-chip')+'">'+esc(blockerLabel(code))+'</span>';}
+function publishStatusLabel(status){
+  var m={queued:'排队中',running:'进行中',waiting_approval:'待确认',succeeded:'已完成',failed:'失败',cancelled:'已取消'};
+  return m[status]||status;
+}
 function renderPublish(){
   var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
   var h=[flowBar('publish')];
@@ -1139,6 +1151,12 @@ function renderPublish(){
       if(rd.deliveryReady){h.push('<button type="button" class="btn btn-retry" data-delivery-action="production" data-package="'+esc(b.packageId)+'">生成生产交付包</button>');}
       else{h.push('<button type="button" class="btn btn-retry" data-delivery-action="production" data-package="'+esc(b.packageId)+'" disabled title="'+(rd.testOnly?'测试图片（stub）不可生产交付':'需非 stub 图片且契约完整')+'">生成生产交付包</button>');}
       h.push('</div>');
+      // M6.6 受控发布任务创建：仅创建台账，不自动发布
+      if(rd.readyForPublication&&!rd.testOnly){
+        h.push('<div class="vis-actions" style="margin-top:6px"><button type="button" class="btn btn-approve" data-publish-action="'+esc(b.packageId)+'">创建发布任务</button>'+(b.publishTask?'<span class="dim">发布任务：#'+esc(b.publishTask.id)+' · '+esc(publishStatusLabel(b.publishTask.status))+'</span>':'')+'</div>');
+      }else if(b.publishTask){
+        h.push('<div class="vis-status" style="margin-top:6px"><span class="dim">发布任务：#'+esc(b.publishTask.id)+' · '+esc(publishStatusLabel(b.publishTask.status))+'</span></div>');
+      }
       if(all.length){
         h.push('<details class="tech"><summary>技术详情 · 原始阻塞码（'+all.length+'）</summary><div class="tech-body">'+all.map(function(x){return '<div class="mono">'+esc(x)+'</div>';}).join('')+'</div></details>');
       }
@@ -1870,6 +1888,96 @@ async function submitDelivery(){
     handleDeliveryError(err);
   }
 }
+
+/* ============ M6.6 受控发布任务创建（台账，不自动发布） ============ */
+var publishDialog={packageId:null,batch:null,lastFocus:null,busy:false};
+function openPublishDialog(packageId,trigger){
+  var b=batchForPackage(packageId);
+  if(!b)return;
+  var rd=b.readiness||{};
+  if(!rd.readyForPublication||rd.testOnly){
+    showToast('当前不满足发布就绪条件，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  publishDialog.packageId=packageId;publishDialog.batch=b;
+  publishDialog.lastFocus=trigger||document.activeElement;publishDialog.busy=false;
+  renderPublishDialog();
+  var dlg=$('publish-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-publish-close]');if(close)close.focus();
+}
+function renderPublishDialog(){
+  var d=publishDialog;var b=d.batch;var rd=b.readiness||{};
+  $('publishDialogTitle').textContent='创建发布任务';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>packageId</b><span class="mono">'+esc(b.packageId)+'</span></div><div><b>就绪状态</b><span class="badge badge-green">可发布（人工操作）</span></div>');
+  var platformNames={wechat:'微信公众号',telegram:'Telegram',x:'X',xiaohongshu:'小红书'};
+  var readyRows=Object.keys(rd.readyByPlatform||{}).map(function(p){return (rd.readyByPlatform[p]?'<span class="ok-chip">'+platformNames[p]+'</span>':'<span class="blocker-chip">'+platformNames[p]+'</span>');}).join(' ');
+  h.push('<div><b>平台就绪</b>'+readyRows+'</div>');
+  if(b.publishTask)h.push('<div><b>已有发布任务</b>#'+esc(b.publishTask.id)+' · '+esc(b.publishTask.status)+'</div>');
+  h.push('</div>');
+  h.push('<div class="modal-warn">本操作只创建发布任务（可追溯台账），<b>不会自动发布到任何平台</b>；请人工在对应平台后台完成实际发布，发布后可在增长分析中记录真实数据。</div>');
+  h.push('<div class="modal-err" id="publishDialogErr"></div>');
+  $('publishDialogBody').innerHTML=h.join('');
+  $('publishDialogFoot').innerHTML='<button type="button" class="btn btn-ghost" data-publish-cancel>取消</button><button type="button" class="btn btn-retry" data-publish-confirm>确认创建发布任务</button>';
+}
+function closePublishDialog(){
+  if(!publishDialog.packageId)return;
+  var dlg=$('publish-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!draftDialog.packageId&&!reviseDialog.packageId&&!deliveryDialog.packageId)document.body.classList.remove('modal-open');
+  var last=publishDialog.lastFocus;
+  publishDialog.packageId=null;publishDialog.batch=null;publishDialog.lastFocus=null;publishDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showPublishDialogError(msg){var e=$('publishDialogErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setPublishBusy(busy,label){
+  publishDialog.busy=busy;
+  var dlg=$('publish-dialog');
+  var btn=dlg.querySelector('[data-publish-confirm]');
+  var cancel=dlg.querySelector('[data-publish-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handlePublishError(err){
+  var code=err&&err.code;
+  var msg=err&&err.message||'请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='publish-not-ready'){msg='发布未就绪：'+(err.message||'');needsRefresh=true;}
+  else if(code==='not-found'){msg='视觉批次不存在，可能已变化，正在刷新';needsRefresh=true;}
+  else if(code==='conflict'||code==='invalid-state'){msg='状态已变化，正在刷新';needsRefresh=true;}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showPublishDialogError(msg);
+  if(needsRefresh&&publishDialog.packageId){refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});}
+}
+async function submitPublish(){
+  if(!publishDialog.packageId||publishDialog.busy)return;
+  var d=publishDialog;
+  var errEl=$('publishDialogErr');if(errEl)errEl.classList.remove('show');
+  setPublishBusy(true,'正在创建发布任务');
+  try{
+    var resp=await fetch('/sparkos/publish',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var created=!!(json.value&&json.value.created);
+    closePublishDialog();
+    showToast(created?'发布任务已创建（仅台账，不自动发布）':'发布任务已存在','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已创建，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setPublishBusy(false);
+    handlePublishError(err);
+  }
+}
 /* ============ M6.2 只读轮询（仅 GET；页面隐藏/离开视觉页停止；单包单轮询器；网络错误退避） ============ */
 var visualPoller={timers:{},delayMs:6000,maxDelayMs:30000};
 /* 测试钩子：允许 DOM 回归测试在隔离 fixture 中调节轮询节奏（生产数据不依赖它）。 */
@@ -2024,6 +2132,12 @@ function visActions(t,a){
     var delb=t.closest('[data-delivery-backdrop]');if(delb){closeDeliveryDialog();return;}
     var delcancel=t.closest('[data-delivery-cancel]');if(delcancel){closeDeliveryDialog();return;}
     var delconfirm=t.closest('[data-delivery-confirm]');if(delconfirm){submitDelivery();return;}
+    // M6.6 受控发布任务创建
+    var pub=t.closest('[data-publish-action]');if(pub){openPublishDialog(pub.getAttribute('data-publish-action'),pub);return;}
+    var pubc=t.closest('[data-publish-close]');if(pubc){closePublishDialog();return;}
+    var pubb=t.closest('[data-publish-backdrop]');if(pubb){closePublishDialog();return;}
+    var pubcancel=t.closest('[data-publish-cancel]');if(pubcancel){closePublishDialog();return;}
+    var pubconfirm=t.closest('[data-publish-confirm]');if(pubconfirm){submitPublish();return;}
     // 审核中心精确导航：前往具体对象
     var gv=t.closest('[data-goto-visual]');if(gv){navigate('visual');setTimeout(function(){var card=document.querySelector('[data-vis-task="'+gv.getAttribute('data-goto-visual')+'"]');if(card){card.scrollIntoView({block:'center'});card.style.outline='2px solid var(--orange)';setTimeout(function(){card.style.outline='';},1600);}},80);return;}
     var gc=t.closest('[data-goto-creation]');if(gc){state.filters.creation.packageId=gc.getAttribute('data-goto-creation');navigate('creation');setTimeout(function(){setHashParams({pkg:state.filters.creation.packageId});},80);return;}
@@ -2049,6 +2163,7 @@ function visActions(t,a){
       if($('draft-decision-dialog')&&!$('draft-decision-dialog').classList.contains('hidden')){ev.preventDefault();closeDraftDecisionDialog();return;}
       if($('draft-revise-dialog')&&!$('draft-revise-dialog').classList.contains('hidden')){ev.preventDefault();closeDraftReviseDialog();return;}
       if($('delivery-dialog')&&!$('delivery-dialog').classList.contains('hidden')){ev.preventDefault();closeDeliveryDialog();return;}
+      if($('publish-dialog')&&!$('publish-dialog').classList.contains('hidden')){ev.preventDefault();closePublishDialog();return;}
     }
     if(visualLightbox.index>=0){
       if(ev.key==='ArrowLeft'){ev.preventDefault();stepVisualLightbox(-1);return;}

@@ -33,6 +33,7 @@ import type {
 import { VisualPipelineError } from './errors.ts'
 import {
   attemptApproval,
+  latestPublishTask,
   latestRetryRequestForTask,
   logicalTaskState,
   markRetryRequestClaimed,
@@ -971,6 +972,8 @@ export function visualStatus(db: DatabaseSync, packageId?: string): VisualStatus
         ...batchFromRow(row), status: aggregate.status, approvedCount: aggregate.approvedCount, requiredCount: aggregate.requiredCount,
         // M6.4 只读交付下载链接（最新 manifest 交付包；无则 null）
         deliveryLink: latestDeliveryLink(db, row.package_id),
+        // M6.6 最近发布任务台账（无则 null；只读展示，不自动发布）
+        publishTask: latestPublishTask(db, row.package_id),
         tasks,
         readiness: {
           required: aggregate.requiredCount,

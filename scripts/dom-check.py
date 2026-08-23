@@ -72,8 +72,8 @@ if os.path.exists(v2src):
     check2("v2 title and brand", "SparkOS 工作台 V2" in dom2 and "AI 编辑部" in dom2)
     check2("v2 sidebar 9 centers", all(x in dom2 for x in ["overview", "intel", "topics", "creation", "review", "visual", "publish", "growth", "system"]) and "data-nav=" in dom2)
     check2("v2 controlled-review declaration", "V2 受控操作" in dom2 and "视觉审核" in dom2 and "草稿审批" in dom2)
-    # M6.4：V2 允许的写端点为视觉 decision/retry、草稿 decision/revise 与交付 delivery（均仅在人工确认后 POST）
-    check2("v2 only controlled visual/draft/delivery write endpoints", "/sparkos/visual/decision" in dom2 and "/sparkos/visual/retry" in dom2 and "/sparkos/creation/decision" in dom2 and "/sparkos/creation/revise" in dom2 and "/sparkos/visual/delivery" in dom2 and all(x not in dom2 for x in ["/sparkos/visual/queue", "/sparkos/mutate", "/sparkos/editorial/decision", "data-editorial"]))
+    # M6.6：V2 允许的写端点为视觉 decision/retry、草稿 decision/revise、交付 delivery 与发布 publish（均仅在人工确认后 POST；publish 仅建台账）
+    check2("v2 only controlled visual/draft/delivery/publish write endpoints", "/sparkos/visual/decision" in dom2 and "/sparkos/visual/retry" in dom2 and "/sparkos/creation/decision" in dom2 and "/sparkos/creation/revise" in dom2 and "/sparkos/visual/delivery" in dom2 and "/sparkos/publish" in dom2 and all(x not in dom2 for x in ["/sparkos/visual/queue", "/sparkos/mutate", "/sparkos/editorial/decision", "data-editorial"]))
     check2("v2 no PUT/PATCH/DELETE and no native dialogs", '"PUT"' not in dom2 and "'PUT'" not in dom2 and '"PATCH"' not in dom2 and '"DELETE"' not in dom2 and 'window.open(' not in dom2 and 'alert(' not in dom2)
     check2("v2 lightbox with controlled urls", 'id="visual-lightbox"' in dom2 and 'ATTEMPT_ID_RE' in dom2 and '/sparkos/visual/asset?attemptId=' in dom2 and 'encodeURIComponent(attemptId)' in dom2)
     check2("v2 status color tokens", all(x in dom2 for x in ["--green", "--amber", "--red", "--blue", "--gray"]))

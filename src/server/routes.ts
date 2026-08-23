@@ -29,7 +29,7 @@ import { runIntelTick } from '../intel/tick.ts'
 import { listRuntimeDrafts, listVaultDrafts, readDraft } from '../daily.ts'
 import { openFactoryDatabase } from '../storage/database.ts'
 import { queueVisualBatch, readVisualAsset, visualStatus, VisualPipelineError } from '../visual/service.ts'
-import { decideVisualAttempt, requestVisualRetry, retryVisualTask } from '../visual/review.ts'
+import { createPublishTask, decideVisualAttempt, requestVisualRetry, retryVisualTask } from '../visual/review.ts'
 import { createVisualDelivery, listVisualDeliveries, readVisualDeliveryFile, readVisualDeliveryZip } from '../visual/delivery.ts'
 
 
@@ -242,6 +242,22 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
         const value = createVisualDelivery(db, { packageId: body.packageId, mode: body.mode })
         respondJson(res, value.created ? 201 : 200, { ok: true, value })
       } catch (error) { respondVisualError(res, error) } finally { db.close() }
+      return
+    }
+    // M6.6 受控发布任务创建：仅创建 kind='publish' 台账 job，绝不实际发布
+    if (req.method === 'POST' && path === '/sparkos/publish') {
+      let body: Record<string, unknown>
+      try { body = await readJsonBody(req) } catch {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
+        return
+      }
+      if (typeof body.packageId !== 'string' || Object.keys(body).some((key) => key !== 'packageId')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 packageId' } })
+        return
+      }
+      const db = openFactoryDatabase()
+      try { respondJson(res, 200, { ok: true, value: createPublishTask(db, body.packageId) }) }
+      catch (error) { respondVisualError(res, error) } finally { db.close() }
       return
     }
     if (req.method === 'GET' && path === '/sparkos/visual/deliveries') {
