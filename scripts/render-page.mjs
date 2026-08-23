@@ -121,6 +121,8 @@ if (fixtureRoot) {
       { id: 'ec-2222222222222222', rank: 2, topicKey: 't-2222222222222222', title: '策划卡主题乙', trendPattern: 'persistent', coreThesis: '核心判断乙', whyNow: '为什么现在乙', facts: ['事实乙'], evidence: [], counterArguments: [], knowledgeCards: [], platforms: ['xiaohongshu'], contentFormat: '图文', risks: [], verificationGrade: 'B', expectedValue: 7.2, decision: 'pending', decidedAt: null },
     ],
   }
+  // 任务记录：供总览「任务记录」中文状态映射测试
+  workbenchData.factory.database = { schemaVersion: 5, jobs: { succeeded: 3, waiting_approval: 1, failed: 1, cancelled: 1 }, path: '/tmp/sparkos-fixture.db' }
   workbenchData.clusters = {
     date: '20260822',
     items: [{

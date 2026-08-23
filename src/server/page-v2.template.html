@@ -8,8 +8,8 @@
 :root{
   /* 语义色 */
   --bg:#FBF6EF;--surface:#FFFFFF;--surface-2:#F7F0E3;--surface-3:#F1E8D8;
-  --ink:#2B241C;--ink-2:#52493B;--ink-3:#6E6150;
-  --line:#EADFCB;--line-strong:#D9C7A6;
+  --ink:#241E17;--ink-2:#463D30;--ink-3:#5C5142;
+  --line:#E2D4BA;--line-strong:#CCB78F;
   --accent:#E8563D;--accent-strong:#C9422C;--accent-soft:#FBE9E3;
   --success:#3E7D56;--success-soft:#E7F0EA;
   --warning:#A97B1F;--warning-soft:#F7EEDA;
@@ -385,13 +385,12 @@ function flowStages(){
   var pendingTopics=ed.filter(function(c){return !c.decision||c.decision==='pending';}).length;
   var pendingDrafts=drafts.filter(function(p){return p.status==='waiting_approval';}).length;
   var pendingVisual=0;vis.forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.state==='waiting_visual_approval')pendingVisual++;});});
-  var anyRejected=drafts.some(function(p){return p.status==='rejected';});
   var anyVisualRejected=vis.some(function(b){return b.status==='rejected';});
   var pubReady=vis.some(function(b){return b.readiness&&b.readiness.readyForPublication;});
   return [
     {id:'intel',name:'情报',status:srcs.length?(health==='red'?'blocked':health==='green'?'done':'running'):'empty',count:srcs.length,reason:health==='red'?'信源异常':'',title:health==='red'?'情报源异常':'情报源 '+(health==='green'?'正常':'待接入')},
     {id:'topics',name:'选题',status:ed.length?(pendingTopics?'running':'done'):'empty',count:ed.length,reason:'',title:ed.length?(pendingTopics?'策划卡待审批':'策划已完成'):'暂无策划卡'},
-    {id:'creation',name:'创作',status:drafts.length?(pendingDrafts?'running':(anyRejected?'blocked':'done')):'empty',count:drafts.length,reason:anyRejected?'存在已驳回包':'',title:anyRejected?'草稿存在驳回':'草稿 '+(pendingDrafts?'待审批':'已完成')},
+    {id:'creation',name:'创作',status:drafts.length?(pendingDrafts?'running':'done'):'empty',count:drafts.length,reason:'',title:'草稿 '+(pendingDrafts?'待审批':'已完成')},
     {id:'review',name:'审核',status:(pendingTopics||pendingDrafts)?'running':((ed.length||drafts.length)?'done':'empty'),count:pendingTopics+pendingDrafts,reason:'',title:'待审 '+(pendingTopics+pendingDrafts)+' 项'},
     {id:'visual',name:'视觉',status:vis.length?(pendingVisual?'running':(anyVisualRejected?'blocked':'done')):'empty',count:pendingVisual,reason:anyVisualRejected?'有图片被驳回':'',title:'图片 '+(pendingVisual?'待审核':'已完成')},
     {id:'publish',name:'发布准备',status:pubReady?'done':(vis.length?'blocked':'empty'),count:vis.length,reason:vis.length&&!pubReady?'存在发布阻塞':'',title:pubReady?'发布就绪（人工操作）':'发布存在阻塞'}
@@ -400,9 +399,9 @@ function flowStages(){
 function flowBar(current){
   var st=flowStages();
   var dot={done:'dot-green',running:'dot-blue',blocked:'dot-red',empty:'dot-gray'};
-  var name={done:'已完成',running:'进行中',blocked:'阻塞',empty:'未开始'};
+  var name={done:'已完成',running:'进行中',blocked:'阻塞',empty:'无任务'};
   return '<div class="flowbar" role="navigation" aria-label="内容生产流程">'+st.map(function(s){
-    return '<button type="button" class="flow-step'+(s.id===current?' current':'')+'" data-flow="'+s.id+'" title="'+esc(s.title||name[s.status])+'"><span class="fs-dot '+(dot[s.status]||'dot-gray')+'"></span>'+s.name+'<span class="fs-count">'+s.count+'</span>'+(s.reason?'<span class="fs-reason">'+esc(s.reason)+'</span>':'')+'</button>';
+    return '<button type="button" class="flow-step'+(s.id===current?' current':'')+'" data-flow="'+s.id+'" data-flow-status="'+s.status+'" title="'+esc(s.title||name[s.status])+'"><span class="fs-dot '+(dot[s.status]||'dot-gray')+'"></span>'+s.name+'<span class="fs-count">'+s.count+'</span>'+(s.reason?'<span class="fs-reason">'+esc(s.reason)+'</span>':'')+'</button>';
   }).join('')+'</div>';
 }
 function lineName(id){if(!id)return '—';var l=(D.lines||[]).filter(function(x){return x.id===id;})[0];return l?l.name:id;}
@@ -514,17 +513,17 @@ function renderOverview(){
   var todos=[];
   if(pendingVisual)todos.push({sev:0,type:'视觉',cls:'badge-orange',title:pendingVisual+' 张图片待审核',meta:'逐个放大查看后审批（V2 只读）',target:'visual'});
   if(pendingDrafts)todos.push({sev:1,type:'创作',cls:'badge-blue',title:pendingDrafts+' 个草稿包待审批',meta:'平台预览与事实边界（V2 只读）',target:'creation'});
-  if(blockers.length)todos.push({sev:2,type:'交付',cls:'badge-red',title:'发布准备存在 '+blockers.length+' 项阻塞',meta:blockers.slice(0,3).join('；')+(blockers.length>3?' 等':''),target:'publish'});
+  if(blockers.length)todos.push({sev:2,type:'交付',cls:'badge-red',title:'发布准备存在 '+blockers.length+' 项阻塞',meta:blockers.slice(0,3).map(function(x){return blockerLabel(x);}).join('；')+(blockers.length>3?' 等':''),target:'publish'});
   if(pendingTopics)todos.push({sev:3,type:'选题',cls:'badge-amber',title:pendingTopics+' 张策划卡待审批',meta:'A/B 证据闸门（V2 只读）',target:'topics'});
   if((d.distillQueue||[]).length)todos.push({sev:4,type:'蒸馏',cls:'badge-gray',title:(d.distillQueue||[]).length+' 条蒸馏候选待审',meta:'四红线由人工执行',target:'review'});
   if((d.writebackQueue||[]).length)todos.push({sev:5,type:'写回',cls:'badge-gray',title:(d.writebackQueue||[]).length+' 条待写回清单',meta:'人工核对后写回星火库',target:'review'});
   todos.sort(function(a,b){return a.sev-b.sev;});
   var flow=flowStages();
-  var fsName={done:{l:'已完成',c:'dot-green'},running:{l:'进行中',c:'dot-blue'},blocked:{l:'阻塞',c:'dot-red'},empty:{l:'未开始',c:'dot-gray'}};
+  var fsName={done:{l:'已完成',c:'dot-green'},running:{l:'进行中',c:'dot-blue'},blocked:{l:'阻塞',c:'dot-red'},empty:{l:'无任务',c:'dot-gray'}};
 
   // 第一行：五个关键指标（今日发生了什么 / 哪些值得做 / 等什么人工处理）
   var metrics=[
-    {label:'今日情报',value:d.events||0,sub:'runtime 事件累计',ic:'intel',target:'intel',cls:''},
+    {label:'事件账本',value:d.events||0,sub:'runtime events 累计（非今日新增）',ic:'intel',target:'intel',cls:''},
     {label:'A/B 级选题',value:abCount,sub:'策划卡证据等级',ic:'topics',target:'topics',cls:abCount?'':'dim-num'},
     {label:'待审草稿',value:pendingDrafts,sub:'工厂草稿包',ic:'creation',target:'creation',cls:pendingDrafts?'amber-num':''},
     {label:'待审图片',value:pendingVisual,sub:'视觉 attempt',ic:'visual',target:'visual',cls:pendingVisual?'amber-num':''},
@@ -568,15 +567,18 @@ function renderOverview(){
     });
   }
   h.push('</div>');
-  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'最近任务</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'任务记录</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
+  var jobName={queued:'排队中',running:'运行中',waiting_approval:'待审核',succeeded:'成功',failed:'失败',cancelled:'已取消'};
+  var jobBadge={queued:'badge-gray',running:'badge-blue',waiting_approval:'badge-amber',succeeded:'badge-green',failed:'badge-red',cancelled:'badge-gray'};
   var jobs=(fact.database&&fact.database.jobs)||{};
   var jobKeys=Object.keys(jobs);
   if(!jobKeys.length){h.push('<div class="dim">（暂无任务记录）</div>');}
   else{
     jobKeys.forEach(function(k){
-      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+esc(k)+'</div></div><span class="badge '+(k==='failed'?'badge-red':k==='waiting_approval'?'badge-amber':k==='succeeded'?'badge-green':'badge-gray')+'">'+jobs[k]+'</span></div>');
+      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+(jobName[k]||k)+'</div></div><span class="badge '+(jobBadge[k]||'badge-gray')+'">'+jobs[k]+'</span></div>');
     });
   }
+  h.push('<div class="hint">工作流任务（workflow job）记录，反映系统曾执行的任务状态，不等于当前待审核数量。</div>');
   h.push('</div>');
   h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('alert')+'系统提醒</div></div>');
   var alerts=[];

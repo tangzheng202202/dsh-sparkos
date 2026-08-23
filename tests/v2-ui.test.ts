@@ -65,6 +65,13 @@ interface InteractionResult {
   focusRestoredAfterDrawer: boolean
   techDetailsCollapsed: boolean
   noSamplePerf: boolean
+  overviewEventLedger: boolean
+  todoNoRawCodes: boolean
+  todoChineseLabels: boolean
+  jobRecords: boolean
+  jobChinese: boolean
+  flowCreationNotBlocked: boolean
+  metricCardsHashOnly: boolean
 }
 
 interface ResponsiveResult {
@@ -244,6 +251,34 @@ test('v2 growth never shows example/sample performance data', async () => {
   assert.equal(r.noSamplePerf, true)
 })
 
+// ---------- 验收收尾：总览统计口径 / 中文映射 / 路由跳转 / 流程语义 ----------
+test('v2 overview event metric is the cumulative ledger, labelled 事件账本', async () => {
+  const r = await interactionResult
+  assert.equal(r.overviewEventLedger, true)
+})
+
+test('v2 overview todo shows Chinese blocker labels, never raw codes', async () => {
+  const r = await interactionResult
+  assert.equal(r.todoNoRawCodes, true)
+  assert.equal(r.todoChineseLabels, true)
+})
+
+test('v2 overview 任务记录 uses Chinese statuses and is a job ledger, not pending count', async () => {
+  const r = await interactionResult
+  assert.equal(r.jobRecords, true)
+  assert.equal(r.jobChinese, true)
+})
+
+test('v2 flow creation stage is not blocked by rejected history', async () => {
+  const r = await interactionResult
+  assert.equal(r.flowCreationNotBlocked, true)
+})
+
+test('v2 metric cards navigate via hash only and never fetch', async () => {
+  const r = await interactionResult
+  assert.equal(r.metricCardsHashOnly, true)
+})
+
 // ---------- 响应式回归 ----------
 test('v2 responsive: no horizontal overflow at 1440/1920/1024/390', async () => {
   const r = await responsiveResult
@@ -384,6 +419,18 @@ function interactionHarness(): string {
     out.navItems=qa('.nav-item').length;
     out.hero=document.getElementById('view').textContent.indexOf('内容生产流程')>=0;
     out.overviewTodo=document.getElementById('view').textContent.indexOf('今日待办')>=0;
+    var ovText=document.getElementById('view').textContent;
+    out.overviewEventLedger=ovText.indexOf('事件账本')>=0&&ovText.indexOf('今日情报')<0;
+    out.todoNoRawCodes=ovText.indexOf('required-visual-assets-not-approved')<0&&ovText.indexOf('wechat-production-delivery-missing')<0&&ovText.indexOf('legacy-contract-v1')<0;
+    out.todoChineseLabels=ovText.indexOf('视觉资产未全部批准')>=0||ovText.indexOf('微信公众号生产交付包缺失')>=0;
+    out.jobRecords=ovText.indexOf('任务记录')>=0&&ovText.indexOf('workflow job')>=0;
+    out.jobChinese=ovText.indexOf('成功')>=0&&ovText.indexOf('已取消')>=0;
+    out.flowCreationNotBlocked=(function(){var s=q('.flow-step[data-flow="creation"]');return !!s&&s.getAttribute('data-flow-status')!=='blocked';})();
+    var mc=qa('.metric-card');
+    out.metricCardsHashOnly=(function(){var ok=mc.length===5;var tg=['intel','topics','creation','visual','publish'];for(var i=0;i<mc.length;i++){if(tg.indexOf(mc[i].getAttribute('data-goto'))<0)ok=false;}return ok;})();
+    if(mc.length===5){mc[4].click();await wait(80);}
+    out.metricCardsHashOnly=out.metricCardsHashOnly&&location.hash==='#/publish'&&fetches.length===0;
+    await hash('#/overview');
     qa('.nav-item').forEach(function(b){if(b.getAttribute('data-nav')==='intel')b.click();});
     await wait(70);
     out.intelNav=location.hash==='#/intel'&&document.getElementById('view').textContent.indexOf('Top 5')>=0;
