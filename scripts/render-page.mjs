@@ -1,6 +1,8 @@
 /**
  * 渲染工作台 HTML 到 /tmp/sparkos-wb.html（无宿主也可跑 DOM 检查）。
  * 用法：node --experimental-strip-types scripts/render-page.mjs [out.html]
+ *       node --experimental-strip-types scripts/render-page.mjs --v2 [out.html]  （V2 只读预览版）
+ * 默认渲染 V1 时，会顺带把 V2 渲染到 /tmp/sparkos-wb-v2.html 供 DOM 检查。
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -47,7 +49,10 @@ if (fixtureRoot) {
 }
 const { buildWorkbenchData } = await import('../src/server/data.ts')
 
-const out = process.argv[2] ?? '/tmp/sparkos-wb.html'
+const args = process.argv.slice(2)
+const v2 = args.includes('--v2')
+const positional = args.filter((a) => !a.startsWith('--'))
+const out = positional[0] ?? (v2 ? '/tmp/sparkos-wb-v2.html' : '/tmp/sparkos-wb.html')
 const workbenchData = buildWorkbenchData()
 if (fixtureRoot) {
   const shared = {
@@ -87,10 +92,50 @@ if (fixtureRoot) {
     tasks: [otherTask],
     readiness: { required: 1, queued: 0, generating: 0, waitingVisualApproval: 1, failed: 0, readyForVisualApproval: true, visualApproved: false, testOnly: false, deliveryReady: false, readyByPlatform: { wechat: true, telegram: true, x: true, xiaohongshu: true }, readyForPublication: false, blockers: [] },
   }] }
+  // V2 fixture：可解释排名 + 编辑策划 + 情报簇（抽屉/导航/详情测试）
+  const ranked = (id, rank, topic, grade) => ({
+    rank, topicKey: id, clusterId: 'c-20260822-' + String(rank).padStart(3, '0'), topic,
+    heatScore: 80 - rank * 5, overallScore: 75 - rank * 4, velocityScore: 60 - rank * 6, verificationGrade: grade,
+    eligibleForCreation: grade === 'A' || grade === 'B', mentionCount: 20 - rank * 2, sourceCount: 5 - rank,
+    consecutiveTopDays: Math.max(1, 5 - rank), breakdown: {}, evidenceUrls: ['https://example.com/a'], angleSuggestions: ['切入角度'], judgment: undefined,
+  })
+  workbenchData.factory.ranking = {
+    date: '2026-08-22', generatedAt: '2026-08-22T09:00:00Z',
+    top5: [ranked('t-1111111111111111', 1, '排位测试主题 A', 'A'), ranked('t-2222222222222222', 2, '排位测试主题 B', 'B'), ranked('t-3333333333333333', 3, '排位测试主题 C', 'C')],
+    rising: [ranked('t-4444444444444444', 1, '上升测试主题', 'B')],
+    persistent: [ranked('t-1111111111111111', 1, '排位测试主题 A', 'A')],
+    creationCandidates: [ranked('t-1111111111111111', 1, '排位测试主题 A', 'A')],
+    all: [ranked('t-1111111111111111', 1, '排位测试主题 A', 'A'), ranked('t-2222222222222222', 2, '排位测试主题 B', 'B')],
+  }
+  workbenchData.factory.editorial = {
+    id: 'er-2222222222222222', mode: 'midweek', periodStart: '2026-08-19', periodEnd: '2026-08-22',
+    status: 'pending_approval', generatedAt: '2026-08-22T08:00:00Z',
+    summary: { windowDays: 3, rankedTopics: 8, evidenceEligible: 3, selected: 2, note: 'V2 fixture' },
+    cards: [
+      { id: 'ec-1111111111111111', rank: 1, topicKey: 't-1111111111111111', title: '策划卡主题甲', trendPattern: 'accelerating', coreThesis: '核心判断甲', whyNow: '为什么现在甲', facts: ['事实甲一', '事实甲二'], evidence: [{ url: 'https://example.com/e1', claim: '证据甲', sourceType: 'official', verified: true }], counterArguments: ['反方甲'], knowledgeCards: ['obs/001'], platforms: ['wechat', 'x'], contentFormat: '深度文', risks: ['风险甲'], verificationGrade: 'A', expectedValue: 8.5, decision: 'pending', decidedAt: null },
+      { id: 'ec-2222222222222222', rank: 2, topicKey: 't-2222222222222222', title: '策划卡主题乙', trendPattern: 'persistent', coreThesis: '核心判断乙', whyNow: '为什么现在乙', facts: ['事实乙'], evidence: [], counterArguments: [], knowledgeCards: [], platforms: ['xiaohongshu'], contentFormat: '图文', risks: [], verificationGrade: 'B', expectedValue: 7.2, decision: 'pending', decidedAt: null },
+    ],
+  }
+  workbenchData.clusters = {
+    date: '20260822',
+    items: [{
+      clusterId: 'c-20260822-001', topicKey: 't-1111111111111111', date: '20260822', topic: '排位测试主题 A',
+      coreFacts: ['事实一', '事实二'], heat: 'high', novelty: 'medium', sourceCount: 2,
+      evidenceUrls: ['https://example.com/a', 'https://example.com/b'], knowledgeCards: ['obs/001'], credibility: 'high',
+      risks: ['风险一', '风险二'], platforms: ['wechat', 'x'], angleSuggestions: ['切入角度一'],
+      eventKeys: ['ev-20260822-1'], model: 'test-model',
+      judgment: { confirmedFacts: ['已确认一'], inferences: ['推断一'], editorialView: '编辑视角一', counterArguments: ['反方一'], uncertainties: ['不确定一'] },
+    }],
+  }
 }
 const data = JSON.stringify(workbenchData).replace(/</g, '\\u003c')
-const template = readFileSync(fileURLToPath(new URL('../src/server/page.template.html', import.meta.url)), 'utf8')
-const html = template.replace('<script>', '<script>window._embeddedDailyData = ' + data + ';</script>\n<script>')
-writeFileSync(out, html)
-console.log('rendered ' + out + ' (' + html.length + ' bytes)')
+function renderTemplate(templatePath, target) {
+  const template = readFileSync(fileURLToPath(new URL(templatePath, import.meta.url)), 'utf8')
+  const html = template.replace('<script>', '<script>window._embeddedDailyData = ' + data + ';</script>\n<script>')
+  writeFileSync(target, html)
+  console.log('rendered ' + target + ' (' + html.length + ' bytes)')
+}
+const templatePath = v2 ? '../src/server/page-v2.template.html' : '../src/server/page.template.html'
+renderTemplate(templatePath, out)
+if (!v2) renderTemplate('../src/server/page-v2.template.html', '/tmp/sparkos-wb-v2.html')
 if (fixtureRoot) rmSync(fixtureRoot, { recursive: true, force: true })

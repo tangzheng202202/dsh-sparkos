@@ -39,8 +39,9 @@ ${indent(inner, 4)}
 `
   writeFileSync('lib/client.js', wrapped)
   copyFileSync('src/server/page.template.html', 'lib/page.template.html')
+  copyFileSync('src/server/page-v2.template.html', 'lib/page-v2.template.html')
   rmSync('lib/client.tmp.js', { force: true })
-  console.log('built lib/index.js and lib/client.js')
+  console.log('built lib/index.js, lib/client.js and page templates')
 }
 
 function indent(source, spaces) {

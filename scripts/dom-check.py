@@ -60,5 +60,28 @@ check("lightbox hidden class wins inside dialog", '#visual-lightbox .hidden{disp
 check("lightbox same-tab original link", '在当前标签查看原图' in dom and 'data-lightbox-open-current' in dom and 'data-lightbox-error-current' in dom)
 check("lightbox single attempt validator", 'ATTEMPT_ID_RE' in dom and 'va-[a-f0-9]{20}' in dom and 'visualAssetUrl(attemptId)' in dom)
 check("lightbox anchors stopPropagation without preventDefault", 'closest("[data-lightbox-anchor]")' in dom)
+
+# ---- V2 只读预览版（render-page.mjs 顺带渲染到 /tmp/sparkos-wb-v2.html）----
+v2src = "/tmp/sparkos-wb-v2.html"
+if os.path.exists(v2src):
+    dom2 = open(v2src, encoding="utf8").read()
+    def check2(name, cond):
+        global ok
+        ok = ok and bool(cond)
+        print(("OK  " if cond else "MISS ") + "[v2] " + name)
+    check2("v2 title and brand", "SparkOS 工作台 V2" in dom2 and "AI 编辑部" in dom2)
+    check2("v2 sidebar 9 centers", all(x in dom2 for x in ["overview", "intel", "topics", "creation", "review", "visual", "publish", "growth", "system"]) and "data-nav=" in dom2)
+    check2("v2 read-only declaration", "只读预览版" in dom2 and "V2 只读预览" in dom2)
+    check2("v2 no write endpoints", all(x not in dom2 for x in ["/sparkos/visual/decision", "/sparkos/creation/decision", "/sparkos/visual/retry", "/sparkos/visual/delivery", "/sparkos/visual/queue", "/sparkos/mutate", "data-visual-decision", "data-draft-decision", "data-visual-queue"]))
+    check2("v2 no POST and no native dialogs", '"POST"' not in dom2 and "'POST'" not in dom2 and 'window.open(' not in dom2 and 'alert(' not in dom2)
+    check2("v2 lightbox with controlled urls", 'id="visual-lightbox"' in dom2 and 'ATTEMPT_ID_RE' in dom2 and '/sparkos/visual/asset?attemptId=' in dom2 and 'encodeURIComponent(attemptId)' in dom2)
+    check2("v2 status color tokens", all(x in dom2 for x in ["--green", "--amber", "--red", "--blue", "--gray"]))
+    check2("v2 responsive breakpoints", "max-width:1023px" in dom2 and "max-width:767px" in dom2)
+    check2("v2 preview-mode markers", "V2 预览模式" in dom2 and "发布仍需人工操作" in dom2)
+    check2("v2 inline svg icons", dom2.count("<svg") >= 3 and all(x in dom2 for x in ["intel:[", "visual:[", "growth:[", "system:["]))
+    check2("v2 reduced motion + focus visible", "prefers-reduced-motion" in dom2 and ":focus-visible" in dom2)
+    check2("v2 escape handled", "==='Escape'" in dom2 or "'Escape'" in dom2)
+else:
+    print("SKIP v2 checks (no /tmp/sparkos-wb-v2.html)")
 print("RESULT:", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)

@@ -208,6 +208,35 @@ test('POST /sparkos/editorial/decision：选题卡人工批准落 SQLite 审批�
   assert.equal(bad.out.status, 400)
 })
 
+test('GET /sparkos/app-v2：V2 只读预览版（GET 200 · 内嵌数据 · 仅读无写端点 · POST 404）', async () => {
+  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const res = mockRes()
+  await handleSparkosHttp(mockReq('GET', '/sparkos/app-v2'), res.res)
+  assert.equal(res.out.status, 200)
+  const html = res.out.body
+  assert.ok(html.includes('window._embeddedDailyData'), 'V2 注入同一数据范式')
+  assert.ok(html.includes('id="visual-lightbox"'), 'V2 复用受控 lightbox')
+  assert.ok(html.includes('data-nav="intel"') || html.includes("data-nav='intel'") || html.includes('data-nav'), 'V2 侧栏导航')
+  assert.ok(html.includes('只读预览版'), 'V2 只读声明')
+  // 只读边界：页面内不得出现任何写端点或审批标记
+  for (const forbidden of ['/sparkos/visual/decision', '/sparkos/creation/decision', '/sparkos/visual/retry', '/sparkos/visual/delivery', '/sparkos/visual/queue', '/sparkos/mutate', 'data-visual-decision', 'data-draft-decision']) {
+    assert.ok(!html.includes(forbidden), 'V2 页面不得包含写端点：' + forbidden)
+  }
+  assert.ok(!html.includes('"POST"') && !html.includes("'POST'"), 'V2 页面不得发起 POST')
+  // 与 V1 隔离：V2 不含 V1 的 nav-tab 标记；V1 不含 V2 标记
+  assert.ok(!html.includes('nav-tab'), 'V2 不含 V1 导航标记')
+  assert.ok(html.includes('data-nav='), 'V2 含 hash 路由导航')
+  const v1 = mockRes()
+  await handleSparkosHttp(mockReq('GET', '/sparkos/app'), v1.res)
+  assert.equal(v1.out.status, 200)
+  assert.ok(v1.out.body.includes('nav-tab'), 'V1 保持不变')
+  assert.ok(!v1.out.body.includes('data-nav='), 'V1 不含 V2 导航标记')
+  // 只读：POST /sparkos/app-v2 一律 404
+  const post = mockRes()
+  await handleSparkosHttp(mockReq('POST', '/sparkos/app-v2'), post.res)
+  assert.equal(post.out.status, 404)
+})
+
 test('404：未知路径返回 not-found', async () => {
   const { handleSparkosHttp } = await import('../src/server/routes.ts')
   const res = mockRes()

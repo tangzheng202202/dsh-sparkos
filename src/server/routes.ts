@@ -1,6 +1,7 @@
 /**
  * 工作台 web 半：宿主 webServer 路由。
  * GET  /sparkos/            → 9 tab 工作台 HTML（_embeddedDailyData 注入范式）
+ * GET  /sparkos/app-v2      → V2 只读预览版工作台（同一数据注入范式，仅 GET，不执行任何写操作）
  * GET  /sparkos/data        → 工作台数据 JSON（含 intel 报告）
  * GET  /sparkos/intel       → 情报指挥所数据端点（健康 + 最近 run + archive 计数）
  * POST /sparkos/intel/tick  → 手动触发一轮 ingest（不自动融合）
@@ -35,6 +36,11 @@ import { createVisualDelivery, listVisualDeliveries, readVisualDeliveryFile, rea
 /** 工作台模板：运行时读取（esbuild 打包时 build.mjs 会拷贝一份到 lib/）。 */
 function loadTemplate(): string {
   return readFileSync(fileURLToPath(new URL('./page.template.html', import.meta.url)), 'utf8')
+}
+
+/** V2 只读预览版模板（同一注入范式）。 */
+function loadV2Template(): string {
+  return readFileSync(fileURLToPath(new URL('./page-v2.template.html', import.meta.url)), 'utf8')
 }
 
 function respondJson(res: import('node:http').ServerResponse, status: number, body: unknown): void {
@@ -75,6 +81,17 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
     if (req.method === 'GET' && (path === '/sparkos' || path === '/sparkos/app')) {
       const data = JSON.stringify(buildWorkbenchData()).replace(/</g, '\\u003c')
       const html = loadTemplate().replace(
+        '<script>',
+        `<script>window._embeddedDailyData = ${data};</script>\n<script>`,
+      )
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(html)
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/app-v2') {
+      // V2 只读预览版：仅 GET；同源数据注入；不注册任何写路由
+      const data = JSON.stringify(buildWorkbenchData()).replace(/</g, '\u003c')
+      const html = loadV2Template().replace(
         '<script>',
         `<script>window._embeddedDailyData = ${data};</script>\n<script>`,
       )
