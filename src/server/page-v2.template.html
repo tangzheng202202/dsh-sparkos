@@ -361,7 +361,7 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
       <div><div class="brand-name">SparkOS</div><div class="brand-sub">AI 编辑部 · V2 预览</div></div>
     </div>
     <nav class="nav" id="nav"></nav>
-    <div class="nav-status-card"><b><span class="dot dot-blue"></span>V2 受控操作 · 仅开放视觉审核与按意见重试</b>视觉图片可人工批准/驳回；被驳回图片可按意见创建重试任务（不会在浏览器中直接生图）。选题、草稿、交付与发布未开放，请前往原版工作台。</div>
+    <div class="nav-status-card"><b><span class="dot dot-blue"></span>V2 受控操作 · 已开放视觉审核/重试与草稿审批/修订</b>视觉图片可批准/驳回、被驳回可按意见重试；草稿包可批准/驳回、被驳回可按意见创建修订版。选题、交付与发布未开放，请前往原版工作台。</div>
   </aside>
   <div class="main">
     <header class="topbar">
@@ -369,7 +369,7 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
       <div class="topbar-title" id="topbarTitle"></div>
       <div class="topbar-sub" id="topbarSub"></div>
       <div class="topbar-meta">
-        <span class="pill pill-blue">V2 受控操作 · 仅开放视觉审核与按意见重试</span>
+        <span class="pill pill-blue">V2 受控操作 · 视觉审核/重试 + 草稿审批/修订</span>
         <span class="hide-sm" id="topbarTime"></span>
         <span class="pill pill-gray hide-sm" id="topbarHealth"></span>
       </div>
@@ -400,6 +400,22 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
     <div class="modal-head"><div class="modal-title" id="retryDialogTitle">按意见重试</div><button class="modal-close" data-retry-close type="button" aria-label="关闭">✕</button></div>
     <div class="modal-body" id="retryDialogBody"></div>
     <div class="modal-foot" id="retryDialogFoot"></div>
+  </div>
+</div>
+<div id="draft-decision-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="草稿审批确认">
+  <div class="modal-backdrop" data-draft-decision-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="draftDecisionTitle">草稿审批</div><button class="modal-close" data-draft-decision-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="draftDecisionBody"></div>
+    <div class="modal-foot" id="draftDecisionFoot"></div>
+  </div>
+</div>
+<div id="draft-revise-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="按意见修订确认">
+  <div class="modal-backdrop" data-draft-revise-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="draftReviseTitle">按意见修订</div><button class="modal-close" data-draft-revise-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="draftReviseBody"></div>
+    <div class="modal-foot" id="draftReviseFoot"></div>
   </div>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -822,7 +838,7 @@ function openTopicDrawer(cardId){
 function renderCreation(){
   var drafts=(D.factory&&D.factory.drafts)||[];
   var h=[flowBar('creation')];
-  if(!drafts.length){h.push(empty('暂无草稿包','批准编辑选题后由 agent 创建草稿包；V2 只读预览，不执行审批。','creation'));return h.join('');}
+  if(!drafts.length){h.push(empty('暂无草稿包','批准编辑选题后由 agent 创建草稿包；V2 已开放草稿审批与按意见修订。','creation'));return h.join('');}
   var requestedId=state.filters.creation.packageId;
   var curId=requestedId;
   if(!curId||!drafts.some(function(p){return p.id===curId;})){curId=drafts[0].id;}
@@ -868,6 +884,15 @@ function renderCreation(){
   if(cur.parentReviewNote)h.push('<div><b>父驳回意见</b>'+esc(cur.parentReviewNote)+'</div>');
   if(cur.reviewNote)h.push('<div><b>审核意见</b>'+esc(cur.reviewNote)+'</div>');
   h.push('</div>');
+  // M6.3 受控审批/修订入口：操作入口放在卡片主体，不在列表行内
+  var draftActs=[];
+  if(cur.status==='waiting_approval'){
+    draftActs.push('<button type="button" class="btn btn-approve" data-draft-decision="approved" data-package="'+esc(cur.id)+'">批准草稿</button>');
+    draftActs.push('<button type="button" class="btn btn-reject" data-draft-decision="rejected" data-package="'+esc(cur.id)+'">驳回草稿</button>');
+  }else if(cur.status==='rejected'){
+    draftActs.push('<button type="button" class="btn btn-retry" data-draft-revise="'+esc(cur.id)+'">按意见修订</button>');
+  }
+  if(draftActs.length){h.push('<div class="vis-actions" style="margin-top:12px">'+draftActs.join('')+'</div>');}
   if(cur.validation&&cur.validation.errors&&cur.validation.errors.length){h.push('<h4>校验错误</h4><ul>'+cur.validation.errors.map(function(e){return '<li style="color:var(--red)">'+esc(e)+'</li>';}).join('')+'</ul>');}
   h.push('<h4>产物（'+(cur.artifacts||[]).length+'）</h4>');
   if((cur.artifacts||[]).length){h.push('<table class="attempt-list"><thead><tr><th>文件</th><th>格式</th><th>字节</th></tr></thead><tbody>'+cur.artifacts.map(function(a){return '<tr><td class="mono">'+esc(a.relativePath.split('/').pop())+'</td><td>'+esc(a.format)+'</td><td>'+a.bytes+'</td></tr>';}).join('')+'</tbody></table>');}
@@ -921,7 +946,7 @@ function applyReviewFilters(){
   var list=$('reviewList');
   if(!list)return;
   if(!filtered.length){list.innerHTML=empty('没有匹配的待审项','调整筛选条件或搜索词后重试。','filter');return;}
-  list.innerHTML='<div class="dim" style="margin-bottom:8px">共 '+filtered.length+' 项待处理 · 决策按钮已禁用（V2 只读）</div>'+filtered.map(function(it){
+  list.innerHTML='<div class="dim" style="margin-bottom:8px">共 '+filtered.length+' 项待处理 · 在对应中心处理（视觉→视觉中心，草稿→创作中心）</div>'+filtered.map(function(it){
     var sevDot=it.sev===0?'<span class="dot dot-red"></span>':it.sev===1?'<span class="dot dot-amber"></span>':'<span class="dot dot-gray"></span>';
     var gotoAttr=it.key==='visual'?' data-goto-visual="'+esc(it.id)+'"':it.key==='draft'?' data-goto-creation="'+esc(it.id)+'"':it.key==='topic'?' data-goto-topic="'+esc(it.id)+'"':' data-goto="'+it.target+'"';
     var riskHtml=it.risk?'<div class="todo-meta" style="color:var(--danger)">风险：'+esc(it.risk)+'</div>':'';
@@ -932,7 +957,7 @@ function renderReview(){
   var f=state.filters.review;
   var h=[flowBar('review')];
   h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('review')+'审核中心 · 编辑待办箱</div><span class="pill pill-orange">V2 预览模式</span></div>');
-  h.push('<div class="notice warn">'+icon('alert')+'<span class="n-text">本页为受控预览：审批、驳回与按意见重试已开放；选题、草稿、交付与发布操作未启用，请前往原版工作台 /sparkos/app 执行。</span></div>');
+  h.push('<div class="notice warn">'+icon('alert')+'<span class="n-text">本页为受控预览：视觉审批/重试与草稿审批/修订已开放；选题、交付与发布操作未启用，请前往原版工作台 /sparkos/app 执行。</span></div>');
   var all=reviewItems();
   var totalC=all.length;
   var cTopic=all.filter(function(x){return x.key==='topic';}).length;
@@ -1332,6 +1357,13 @@ async function refreshVisual(packageId){
   D.factory=D.factory||{};D.factory.visual=D.factory.visual||{batches:[]};
   D.factory.visual.batches=kept.concat(fresh);
 }
+/* M6.3：草稿决策/修订后只读重读工作台数据（GET /sparkos/data，不产生 POST）。 */
+async function refreshWorkbenchData(){
+  var resp=await fetch('/sparkos/data');
+  var json=await resp.json();
+  if(!resp.ok||!json||!json.ok)throw new Error('刷新工作台数据失败');
+  D=json.value;
+}
 function openVisualReviewDialog(attemptId,decision,trigger){
   var found=visualTaskForAttempt(attemptId);
   if(!found)return;
@@ -1549,6 +1581,181 @@ async function submitVisualRetry(){
     handleRetryError(err);
   }
 }
+/* ============ M6.3 草稿包受控审批与修订（正式对话框，不用 window.confirm/prompt） ============ */
+var draftDialog={packageId:null,decision:null,pack:null,lastFocus:null,busy:false};
+var reviseDialog={packageId:null,pack:null,lastFocus:null,busy:false};
+function draftForId(id){var f=null;(D.factory&&D.factory.drafts||[]).forEach(function(p){if(p.id===id)f=p;});return f;}
+function openDraftDecisionDialog(packageId,decision,trigger){
+  var p=draftForId(packageId);
+  if(!p)return;
+  if(p.status!=='waiting_approval'){
+    showToast('该草稿包当前不可审批，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  draftDialog.packageId=packageId;draftDialog.decision=decision;draftDialog.pack=p;
+  draftDialog.lastFocus=trigger||document.activeElement;draftDialog.busy=false;
+  renderDraftDecisionDialog();
+  var dlg=$('draft-decision-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-draft-decision-close]');if(close)close.focus();
+}
+function renderDraftDecisionDialog(){
+  var d=draftDialog;var p=d.pack;
+  var approve=d.decision==='approved';
+  $('draftDecisionTitle').textContent=approve?'批准草稿':'驳回草稿';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>packageId</b><span class="mono">'+esc(p.id)+'</span></div><div><b>版本</b>v'+esc(String(p.revision))+'</div>');
+  h.push('<div><b>标题</b>'+esc(p.title||'—')+'</div><div><b>状态</b>'+esc(p.status)+'</div>');
+  if(p.cardId)h.push('<div><b>选题卡</b><span class="mono">'+esc(p.cardId)+'</span></div>');
+  h.push('</div>');
+  if(p.validation&&p.validation.errors&&p.validation.errors.length){h.push('<div class="modal-warn">校验错误 '+p.validation.errors.length+' 项：'+p.validation.errors.slice(0,3).map(function(e){return esc(e);}).join('；')+'</div>');}
+  h.push('<div style="margin-top:12px"><label for="draft-decision-note" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">'+(approve?'审核意见（可选）':'驳回意见（必填）')+'</label><textarea id="draft-decision-note" class="modal-note" maxlength="2000" placeholder="'+(approve?'可填写备注，留空也可以':'请说明需要修改的内容')+'"></textarea></div>');
+  h.push('<div class="modal-warn">'+(approve?'批准草稿不会自动创建视觉任务或发布，视觉中心仍需人工审核图片。':'驳回后需填写意见；可在“按意见修订”中基于意见创建不可覆盖的修订版。')+'</div>');
+  h.push('<div class="modal-err" id="draftDecisionErr"></div>');
+  $('draftDecisionBody').innerHTML=h.join('');
+  $('draftDecisionFoot').innerHTML='<button type="button" class="btn btn-ghost" data-draft-decision-cancel>取消</button><button type="button" class="btn '+(approve?'btn-approve':'btn-reject')+'" data-draft-decision-confirm>'+(approve?'确认批准草稿':'确认驳回草稿')+'</button>';
+}
+function closeDraftDecisionDialog(){
+  if(!draftDialog.packageId)return;
+  var dlg=$('draft-decision-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!reviseDialog.packageId)document.body.classList.remove('modal-open');
+  var last=draftDialog.lastFocus;
+  draftDialog.packageId=null;draftDialog.decision=null;draftDialog.pack=null;draftDialog.lastFocus=null;draftDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showDraftDecisionError(msg){var e=$('draftDecisionErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setDraftDecisionBusy(busy,label){
+  draftDialog.busy=busy;
+  var dlg=$('draft-decision-dialog');
+  var btn=dlg.querySelector('[data-draft-decision-confirm]');
+  var cancel=dlg.querySelector('[data-draft-decision-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleDraftDecisionError(err){
+  var code=err&&err.code;
+  var msg=err&&err.message||'请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='invalid-state'){msg='草稿包状态已变化，正在刷新';needsRefresh=true;}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showDraftDecisionError(msg);
+  if(needsRefresh&&draftDialog.packageId){refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});}
+}
+async function submitDraftDecision(){
+  if(!draftDialog.packageId||draftDialog.busy)return;
+  var d=draftDialog;
+  var noteEl=$('draft-decision-note');var note=noteEl?noteEl.value.trim():'';
+  if(d.decision==='rejected'&&!note){showDraftDecisionError('驳回草稿必须填写审核意见');if(noteEl)noteEl.focus();return;}
+  if(note.length>2000){showDraftDecisionError('意见不能超过 2000 字');return;}
+  var errEl=$('draftDecisionErr');if(errEl)errEl.classList.remove('show');
+  setDraftDecisionBusy(true,'提交中…');
+  try{
+    var resp=await fetch('/sparkos/creation/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId,decision:d.decision,note:note})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var approved=d.decision==='approved';
+    closeDraftDecisionDialog();
+    showToast(approved?'草稿已批准':'草稿已驳回','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已提交，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setDraftDecisionBusy(false);
+    handleDraftDecisionError(err);
+  }
+}
+function openDraftReviseDialog(packageId,trigger){
+  var p=draftForId(packageId);
+  if(!p)return;
+  if(p.status!=='rejected'){
+    showToast('该草稿包当前不可修订，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  reviseDialog.packageId=packageId;reviseDialog.pack=p;
+  reviseDialog.lastFocus=trigger||document.activeElement;reviseDialog.busy=false;
+  renderDraftReviseDialog();
+  var dlg=$('draft-revise-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-draft-revise-close]');if(close)close.focus();
+}
+function renderDraftReviseDialog(){
+  var d=reviseDialog;var p=d.pack;
+  $('draftReviseTitle').textContent='按意见修订';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>packageId</b><span class="mono">'+esc(p.id)+'</span></div><div><b>当前版本</b>v'+esc(String(p.revision))+'</div>');
+  h.push('<div><b>标题</b>'+esc(p.title||'—')+'</div>');
+  h.push('<div><b>下一版本</b>v'+esc(String(Number(p.revision)+1))+'（全新草稿，不覆盖原版）</div>');
+  h.push('</div>');
+  if(p.reviewNote)h.push('<div class="vis-note-box"><span class="vn-label">驳回意见全文：</span>'+esc(p.reviewNote)+'</div>');
+  else if(p.parentReviewNote)h.push('<div class="vis-note-box"><span class="vn-label">父驳回意见：</span>'+esc(p.parentReviewNote)+'</div>');
+  h.push('<div class="modal-warn">本操作创建不可覆盖的修订版（v'+esc(String(Number(p.revision)+1))+'），原草稿产物与意见全部保留；新版本需重新审批，之后才能进入视觉任务。</div>');
+  h.push('<div class="modal-err" id="draftReviseErr"></div>');
+  $('draftReviseBody').innerHTML=h.join('');
+  $('draftReviseFoot').innerHTML='<button type="button" class="btn btn-ghost" data-draft-revise-cancel>取消</button><button type="button" class="btn btn-retry" data-draft-revise-confirm>确认创建修订版</button>';
+}
+function closeDraftReviseDialog(){
+  if(!reviseDialog.packageId)return;
+  var dlg=$('draft-revise-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!draftDialog.packageId)document.body.classList.remove('modal-open');
+  var last=reviseDialog.lastFocus;
+  reviseDialog.packageId=null;reviseDialog.pack=null;reviseDialog.lastFocus=null;reviseDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showDraftReviseError(msg){var e=$('draftReviseErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setDraftReviseBusy(busy,label){
+  reviseDialog.busy=busy;
+  var dlg=$('draft-revise-dialog');
+  var btn=dlg.querySelector('[data-draft-revise-confirm]');
+  var cancel=dlg.querySelector('[data-draft-revise-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleDraftReviseError(err){
+  var code=err&&err.code;
+  var msg=err&&err.message||'请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='invalid-state'){msg='草稿包状态已变化，正在刷新';needsRefresh=true;}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showDraftReviseError(msg);
+  if(needsRefresh&&reviseDialog.packageId){refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});}
+}
+async function submitDraftRevise(){
+  if(!reviseDialog.packageId||reviseDialog.busy)return;
+  var d=reviseDialog;
+  var errEl=$('draftReviseErr');if(errEl)errEl.classList.remove('show');
+  setDraftReviseBusy(true,'正在创建修订版');
+  try{
+    var resp=await fetch('/sparkos/creation/revise',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var created=!!(json.value&&json.value.created);
+    closeDraftReviseDialog();
+    showToast(created?'修订版已创建，等待重新审批':'修订版已存在','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已提交，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setDraftReviseBusy(false);
+    handleDraftReviseError(err);
+  }
+}
 /* ============ M6.2 只读轮询（仅 GET；页面隐藏/离开视觉页停止；单包单轮询器；网络错误退避） ============ */
 var visualPoller={timers:{},delayMs:6000,maxDelayMs:30000};
 /* 测试钩子：允许 DOM 回归测试在隔离 fixture 中调节轮询节奏（生产数据不依赖它）。 */
@@ -1686,6 +1893,17 @@ function visActions(t,a){
     var vrfr=t.closest('[data-visual-refresh]');if(vrfr){manualRefreshVisual();return;}
     var ah=t.closest('[data-attempt-history]');if(ah){openVisualAttemptDrawer(ah.getAttribute('data-attempt-history'));return;}
     var cp=t.closest('[data-copy]');if(cp){copyTechId(cp);return;}
+    // M6.3 草稿受控审批/修订
+    var dd=t.closest('[data-draft-decision]');if(dd){openDraftDecisionDialog(dd.getAttribute('data-package'),dd.getAttribute('data-draft-decision'),dd);return;}
+    var ddc=t.closest('[data-draft-decision-close]');if(ddc){closeDraftDecisionDialog();return;}
+    var ddb=t.closest('[data-draft-decision-backdrop]');if(ddb){closeDraftDecisionDialog();return;}
+    var ddcancel=t.closest('[data-draft-decision-cancel]');if(ddcancel){closeDraftDecisionDialog();return;}
+    var ddconfirm=t.closest('[data-draft-decision-confirm]');if(ddconfirm){submitDraftDecision();return;}
+    var dr=t.closest('[data-draft-revise]');if(dr){openDraftReviseDialog(dr.getAttribute('data-draft-revise'),dr);return;}
+    var drc=t.closest('[data-draft-revise-close]');if(drc){closeDraftReviseDialog();return;}
+    var drb=t.closest('[data-draft-revise-backdrop]');if(drb){closeDraftReviseDialog();return;}
+    var drcancel=t.closest('[data-draft-revise-cancel]');if(drcancel){closeDraftReviseDialog();return;}
+    var drconfirm=t.closest('[data-draft-revise-confirm]');if(drconfirm){submitDraftRevise();return;}
     // 审核中心精确导航：前往具体对象
     var gv=t.closest('[data-goto-visual]');if(gv){navigate('visual');setTimeout(function(){var card=document.querySelector('[data-vis-task="'+gv.getAttribute('data-goto-visual')+'"]');if(card){card.scrollIntoView({block:'center'});card.style.outline='2px solid var(--orange)';setTimeout(function(){card.style.outline='';},1600);}},80);return;}
     var gc=t.closest('[data-goto-creation]');if(gc){state.filters.creation.packageId=gc.getAttribute('data-goto-creation');navigate('creation');setTimeout(function(){setHashParams({pkg:state.filters.creation.packageId});},80);return;}
@@ -1708,6 +1926,8 @@ function visActions(t,a){
       if(visualLightbox.index>=0){ev.preventDefault();closeVisualLightbox();return;}
       if(drawer.open){ev.preventDefault();closeDrawer();return;}
       if($('retry-dialog')&&!$('retry-dialog').classList.contains('hidden')){ev.preventDefault();closeRetryDialog();return;}
+      if($('draft-decision-dialog')&&!$('draft-decision-dialog').classList.contains('hidden')){ev.preventDefault();closeDraftDecisionDialog();return;}
+      if($('draft-revise-dialog')&&!$('draft-revise-dialog').classList.contains('hidden')){ev.preventDefault();closeDraftReviseDialog();return;}
     }
     if(visualLightbox.index>=0){
       if(ev.key==='ArrowLeft'){ev.preventDefault();stepVisualLightbox(-1);return;}
