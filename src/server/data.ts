@@ -4,7 +4,8 @@
  * @module dsh-sparkos/src/server/data
  */
 
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync } from 'node:fs'
+import { atomicWriteJson } from '../storage/atomic.ts'
 import path from 'node:path'
 import { TIMELINE_DATA, VAULT_ROOT } from '../vault.ts'
 import { buildIntelReport, latestFusion } from '../intel/report.ts'
@@ -91,8 +92,7 @@ function appendWriteback(entry: WorkbenchData['writebackQueue'][number]): void {
   const file = path.join(VAULT_ROOT, 'state', 'writeback_queue.json')
   const all = loadWritebackQueue().filter((e) => e.file !== entry.file)
   all.push(entry)
-  mkdirSync(path.dirname(file), { recursive: true })
-  writeFileSync(file, JSON.stringify(all, null, 2) + '\n')
+  atomicWriteJson(file, all)
 }
 
 /** 采纳后建议写回星火库的目标目录（按 front-matter kind 提示）。 */
@@ -220,8 +220,7 @@ export function reviewDistill(file: string, action: 'adopt' | 'ignore'): { entry
   const reviewed = readJsonIf<WorkbenchData['distillReviewed']>(reviewedFile, { approved: [], rejected: [] })
   const list = action === 'adopt' ? reviewed.approved : reviewed.rejected
   if (!list.includes(file)) list.push(file)
-  mkdirSync(stateDir, { recursive: true })
-  writeFileSync(reviewedFile, JSON.stringify(reviewed, null, 2) + '\n')
+  atomicWriteJson(reviewedFile, reviewed)
   if (action === 'adopt' && entry) {
     appendWriteback({
       file,
@@ -240,8 +239,7 @@ export function recordDecision(kind: string, id: string, action: 'adopt' | 'igno
   const all = readJsonIf<WorkbenchData['decisions']>(file, [])
   const entry = { at: new Date().toISOString(), kind, id, action, note }
   all.push(entry)
-  mkdirSync(stateDir, { recursive: true })
-  writeFileSync(file, JSON.stringify(all, null, 2) + '\n')
+  atomicWriteJson(file, all)
   return entry
 }
 

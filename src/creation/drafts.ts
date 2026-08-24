@@ -5,7 +5,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { editorialCardById } from '../editorial/planner.ts'
@@ -465,7 +465,7 @@ function artifactContents(submission: DraftSubmission): Record<string, { platfor
   }
 }
 
-function sha256(content: string): string {
+function sha256(content: string | Uint8Array): string {
   return createHash('sha256').update(content).digest('hex')
 }
 
@@ -475,12 +475,12 @@ function writeArtifacts(packageId: string, submission: DraftSubmission, now: Dat
   const target = path.join(VAULT_ROOT, relativeDir)
   const contents = artifactContents(submission)
   if (existsSync(target)) {
-    const existing = readFileSync(path.join(target, 'package.json'), 'utf8')
-    if (sha256(existing) !== sha256(contents['package.json'].content)) throw new Error('草稿产物目录已存在且内容不同，拒绝覆盖：' + relativeDir)
+    // 产物完整性：目录已存在时校验全部允许文件（8 个），不能只比较 package.json。
+    verifyArtifactDir(target, relativeDir, packageId, contents)
   } else {
     const parent = path.dirname(target)
     mkdirSync(parent, { recursive: true })
-    const staging = path.join(parent, `.${packageId}-${randomUUID()}.tmp`)
+    const staging = path.join(parent, '.' + packageId + '-' + randomUUID() + '.tmp')
     mkdirSync(staging, { recursive: true })
     try {
       for (const [file, spec] of Object.entries(contents)) writeFileSync(path.join(staging, file), spec.content, 'utf8')
@@ -498,6 +498,52 @@ function writeArtifacts(packageId: string, submission: DraftSubmission, now: Dat
     relativePath: path.join(relativeDir, file), sha256: sha256(spec.content), bytes: Buffer.byteLength(spec.content),
   }))
   return { dir: relativeDir, artifacts }
+}
+
+/**
+ * 校验已存在的产物目录与将要写入的内容完全一致：
+ * - 全部 8 个允许文件（7 个产物 + manifest.json），一个不能多、一个不能少；
+ * - manifest 覆盖关系（声明的文件集合 = 7 个产物）、SHA、bytes 逐项比对；
+ * - 拒绝 symlink、目录越界（realpath 逃逸 VAULT）、任一内容变化。
+ */
+function verifyArtifactDir(target: string, relativeDir: string, packageId: string, contents: Record<string, { platform: string; format: string; content: string }>): void {
+  const fail = (reason: string): never => { throw new Error('草稿产物目录完整性校验失败（' + reason + '），拒绝复用：' + relativeDir) }
+  const rootReal = realpathSync(VAULT_ROOT)
+  const targetReal = realpathSync(target)
+  if (targetReal !== realpathSync(path.resolve(VAULT_ROOT, relativeDir)) || !targetReal.startsWith(rootReal + path.sep)) fail('目录 realpath 越界')
+  if (lstatSync(target).isSymbolicLink()) fail('目录是 symlink')
+  const present = readdirSync(target)
+  const expectedFiles = [...Object.keys(contents), 'manifest.json']
+  const extra = present.filter((file) => !expectedFiles.includes(file))
+  if (extra.length > 0) fail('存在未声明文件：' + extra.join(', '))
+  const missing = expectedFiles.filter((file) => !present.includes(file))
+  if (missing.length > 0) fail('缺失文件：' + missing.join(', '))
+  // manifest 结构与覆盖关系
+  const manifest: { packageId?: unknown; artifacts?: unknown } = (() => {
+    try {
+      return JSON.parse(readFileSync(path.join(target, 'manifest.json'), 'utf8')) as { packageId?: unknown; artifacts?: unknown }
+    } catch {
+      return fail('manifest.json 不可解析')
+    }
+  })()
+  if (manifest.packageId !== packageId) fail('manifest packageId 不匹配')
+  const declared = Array.isArray(manifest.artifacts) ? manifest.artifacts as Array<{ file?: unknown; sha256?: unknown; bytes?: unknown }> : []
+  const declaredFiles = declared.map((item) => String(item.file))
+  const contentFiles = Object.keys(contents)
+  if (declaredFiles.length !== contentFiles.length || contentFiles.some((file, index) => declaredFiles[index] !== file)) fail('manifest 未完整覆盖 7 个产物文件')
+  for (const item of declared) {
+    const file = String(item.file)
+    const info = lstatSync(path.join(target, file))
+    if (!info.isFile() || info.isSymbolicLink()) fail('产物不是普通文件：' + file)
+    const data = readFileSync(path.join(target, file))
+    if (String(item.bytes) !== String(data.byteLength)) fail('manifest bytes 不匹配：' + file)
+    if (item.sha256 !== sha256(data)) fail('manifest SHA 不匹配：' + file)
+  }
+  // 逐文件内容与将写入内容一致（含 package.json 在内的全部产物）
+  for (const [file, spec] of Object.entries(contents)) {
+    const data = readFileSync(path.join(target, file))
+    if (sha256(data) !== sha256(spec.content) || data.byteLength !== Buffer.byteLength(spec.content)) fail('内容与本次提交不一致：' + file)
+  }
 }
 
 export function submitDraftPackage(db: DatabaseSync, submission: DraftSubmission, now = new Date()): { package: DraftPackage; validation: DraftValidation } {
@@ -518,8 +564,10 @@ export function submitDraftPackage(db: DatabaseSync, submission: DraftSubmission
   if (job.status === 'failed') job = transitionJob(db, job.id, 'queued', { note: 'valid resubmission retry', now })
   if (job.status === 'queued') job = startJob(db, job.id, 'sparkos-content-inline', now)
   if (job.status !== 'running') throw new Error('草稿生成任务当前状态不可提交：' + job.status)
+  let writtenThisCall: { dir: string } | null = null
   try {
     const written = writeArtifacts(current.id, submission, now, current.createdAt)
+    writtenThisCall = { dir: written.dir }
     db.exec('BEGIN IMMEDIATE')
     try {
       db.prepare(`
@@ -543,6 +591,13 @@ export function submitDraftPackage(db: DatabaseSync, submission: DraftSubmission
     }
     transitionJob(db, job.id, 'waiting_approval', { output: { packageId: current.id, artifacts: written.artifacts.length }, now })
   } catch (error) {
+    // 可恢复语义：数据库失败后不得遗留会被错误复用的半成品目录。
+    // 本次调用新建的目录（DB 回滚后磁盘上没有任何权威记录）直接清理；
+    // 早前调用成功落库的目录不动（writeArtifacts 复用路径会做完整性校验）。
+    if (writtenThisCall !== null) {
+      const absoluteDir = path.join(VAULT_ROOT, writtenThisCall.dir)
+      rmSync(absoluteDir, { recursive: true, force: true })
+    }
     transitionJob(db, job.id, 'failed', { error: error instanceof Error ? error.message : String(error), now })
     db.prepare(`UPDATE draft_packages SET status='validation_failed', validation_json=?, updated_at=? WHERE id=?`)
       .run(JSON.stringify({ ...validation, ok: false, errors: [...validation.errors, 'artifact-write: ' + (error instanceof Error ? error.message : String(error))] }), at, current.id)
@@ -574,15 +629,34 @@ export function decideDraftPackage(db: DatabaseSync, packageId: string, decision
   return packageById(db, packageId)!
 }
 
+/**
+ * 读取草稿产物：SQLite 是唯一权威（sha256/bytes），响应前校验普通文件、realpath、
+ * SHA 与大小；篡改后抛出明确完整性错误（调用方 422），绝不继续预览可疑内容。
+ */
 export function readDraftArtifact(db: DatabaseSync, packageId: string, file: string): { content: Buffer; format: string; platform: string } | null {
   if (!/^dp-[a-f0-9]{16}$/.test(packageId) || !/^[a-z0-9][a-z0-9._-]{1,80}$/i.test(file)) return null
   const rows = db.prepare(`
-    SELECT platform, format, relative_path FROM draft_artifacts WHERE package_id = ?
-  `).all(packageId) as Array<{ platform: string; format: string; relative_path: string }>
+    SELECT platform, format, relative_path, sha256, bytes FROM draft_artifacts WHERE package_id = ?
+  `).all(packageId) as Array<{ platform: string; format: string; relative_path: string; sha256: string; bytes: number }>
   const row = rows.find((item) => path.basename(item.relative_path) === file)
   if (!row) return null
   const root = path.resolve(VAULT_ROOT)
   const absolute = path.resolve(VAULT_ROOT, row.relative_path)
   if (!absolute.startsWith(root + path.sep)) return null
-  try { return { content: readFileSync(absolute), format: row.format, platform: row.platform } } catch { return null }
+  let info
+  let real: string
+  let data: Buffer
+  try {
+    info = lstatSync(absolute)
+    real = realpathSync(absolute)
+    data = readFileSync(absolute)
+  } catch {
+    throw new Error('draft-artifact-integrity: 产物文件不可读：' + row.relative_path)
+  }
+  if (!info.isFile() || info.isSymbolicLink()) throw new Error('draft-artifact-integrity: 产物必须是普通文件（拒绝 symlink）：' + row.relative_path)
+  const rootReal = realpathSync(root)
+  if (real !== realpathSync(absolute) || !real.startsWith(rootReal + path.sep)) throw new Error('draft-artifact-integrity: 产物 realpath 越界：' + row.relative_path)
+  if (data.byteLength !== Number(row.bytes)) throw new Error('draft-artifact-integrity: 产物大小与数据库记录不一致：' + row.relative_path)
+  if (sha256(data) !== row.sha256) throw new Error('draft-artifact-integrity: 产物 SHA-256 与数据库记录不一致：' + row.relative_path)
+  return { content: data, format: row.format, platform: row.platform }
 }

@@ -367,7 +367,14 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       const { readDraftArtifact } = await import('../creation/drafts.ts')
       const db = openFactoryDatabase()
       try {
-        const artifact = readDraftArtifact(db, packageId, file)
+        let artifact: { content: Buffer; format: string; platform: string } | null
+        try {
+          artifact = readDraftArtifact(db, packageId, file)
+        } catch (integrityError) {
+          // 篡改/损坏：明确完整性错误，不再继续预览
+          respondJson(res, 422, { ok: false, error: { code: 'artifact-integrity-failed', message: integrityError instanceof Error ? integrityError.message : String(integrityError) } })
+          return
+        }
         if (!artifact) {
           respondJson(res, 404, { ok: false, error: { code: 'not-found', message: 'draft artifact' } })
           return

@@ -711,6 +711,58 @@ function signatureMediaType(data: Uint8Array): string | null {
   return null
 }
 
+/**
+ * 从图片实际字节解析真实像素尺寸（不信附件 ref 声明）：
+ * PNG IHDR / JPEG SOF 扫描 / WebP VP8(+) 块。失败返回 null。
+ */
+export function parseImagePixels(data: Uint8Array): { width: number; height: number } | null {
+  if (data.length >= 24 && Buffer.from(data.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    // PNG: IHDR 大端 width@16 height@20
+    const pbuf = Buffer.from(data)
+    return { width: pbuf.readUInt32BE(16), height: pbuf.readUInt32BE(20) }
+  }
+  if (data.length >= 4 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) {
+    // JPEG: 扫描段找 SOF0/1/2/3/5/6/7/9/10/11/13/14/15
+    const jbuf = Buffer.from(data)
+    let offset = 2
+    while (offset + 9 < data.length) {
+      if (data[offset] !== 0xff) { offset += 1; continue }
+      const marker = data[offset + 1]
+      if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd9)) { offset += 2; continue }
+      const length = jbuf.readUInt16BE(offset + 2)
+      if ((marker >= 0xc0 && marker <= 0xcf) && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { height: jbuf.readUInt16BE(offset + 5), width: jbuf.readUInt16BE(offset + 7) }
+      }
+      offset += 2 + length
+    }
+    return null
+  }
+  if (data.length >= 30 && Buffer.from(data.subarray(0, 4)).toString('ascii') === 'RIFF'
+    && Buffer.from(data.subarray(8, 12)).toString('ascii') === 'WEBP') {
+    const chunk = Buffer.from(data.subarray(12, 16)).toString('ascii')
+    if (chunk === 'VP8 ') {
+      // lossy: frame tag 之后的 14 字节处起 14bit 宽/高（little-endian 3 字节）
+      const w = data[26]! | ((data[27]! & 0x3f) << 8)
+      const h = data[28]! | ((data[29]! & 0x3f) << 8)
+      return { width: w, height: h }
+    }
+    if (chunk === 'VP8L') {
+      // lossless: signature 0x2f 后 14bit 宽 (w-1) / 14bit 高 (h-1)
+      const b0 = data[21]!, b1 = data[22]!, b2 = data[23]!, b3 = data[24]!
+      const width = 1 + (b0 | ((b1 & 0x3f) << 8))
+      const height = 1 + ((b1 >> 6) | (b2 << 2) | ((b3 & 0x0f) << 10))
+      return { width, height }
+    }
+    if (chunk === 'VP8X') {
+      // extended: 24bit canvas 宽/高各减 1，little-endian，位于 24/27
+      const width = 1 + (data[24]! | (data[25]! << 8) | (data[26]! << 16))
+      const height = 1 + (data[27]! | (data[28]! << 8) | (data[29]! << 16))
+      return { width, height }
+    }
+  }
+  return null
+}
+
 function verifiedImage(input: SubmittedAttachmentRef, stored: StoredImageAttachment, task: TaskRow): { data: Buffer; sha: string; mediaType: 'image/png' | 'image/jpeg' | 'image/webp'; extension: 'png' | 'jpg' | 'webp'; validation: Record<string, unknown> } {
   const ref = stored.ref
   const declaredMatches = ref.attachmentId === input.attachmentId
@@ -729,6 +781,13 @@ function verifiedImage(input: SubmittedAttachmentRef, stored: StoredImageAttachm
   if (data.byteLength !== ref.bytes) throw new VisualPipelineError('attachment-metadata-mismatch', '附件字节数与实际数据不一致')
   if (data.byteLength > MAX_IMAGE_BYTES) throw new VisualPipelineError('image-too-large', '图片超过 5MiB 上限')
   if (ref.width * ref.height > MAX_IMAGE_PIXELS) throw new VisualPipelineError('pixel-limit', '图片解码像素超过 40M 上限')
+  // 真实像素三方一致：实际字节解析出的尺寸 = 附件 ref 声明 = 任务目标规格（不信任何单方声明）
+  const actual = parseImagePixels(data)
+  if (actual === null) throw new VisualPipelineError('attachment-invalid', '无法从图片字节解析真实像素尺寸')
+  if (actual.width !== ref.width || actual.height !== ref.height) {
+    throw new VisualPipelineError('pixel-mismatch', `附件 ref 声明 ${ref.width}x${ref.height}，实际字节解码 ${actual.width}x${actual.height}`)
+  }
+  if (actual.width * actual.height > MAX_IMAGE_PIXELS) throw new VisualPipelineError('pixel-limit', '图片实际解码像素超过 40M 上限')
   if (ref.width !== task.target_width || ref.height !== task.target_height) {
     throw new VisualPipelineError('dimension-mismatch', `图片必须为 ${task.target_width}x${task.target_height}，实际 ${ref.width}x${ref.height}`)
   }
@@ -746,6 +805,7 @@ function verifiedImage(input: SubmittedAttachmentRef, stored: StoredImageAttachm
       bytes: data.byteLength,
       width: ref.width,
       height: ref.height,
+      actualPixels: { width: actual.width, height: actual.height, verifiedAgainst: ['image-bytes', 'attachment-ref', 'task-target'] },
       pixels: ref.width * ref.height,
       sha256: sha,
       limits: { maxBytes: MAX_IMAGE_BYTES, maxPixels: MAX_IMAGE_PIXELS },

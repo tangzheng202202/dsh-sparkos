@@ -357,12 +357,14 @@ test('三、replace_stub_with_production：显式 purpose + 人工确认 + 审�
     (e) => e instanceof VisualPipelineError && e.code === 'replace-stub-requires-production',
   )
   // 5) 真实 Provider 提交恢复正轨
-  const real = await submitClaim(item.db, next, 'openai', 3)
-  assert.equal(real.taskState ?? visualStatus(item.db, pkg).batches[0].tasks[0].state, 'waiting_visual_approval')
+  await submitClaim(item.db, next, 'openai', 3)
+  const afterState = visualStatus(item.db, pkg).batches[0].tasks.find((t) => t.id === rejected.task.id)
+  assert.ok(afterState)
+  assert.equal(afterState!.state, 'waiting_visual_approval', 'state=' + String(afterState?.state))
   // 6) 旧 attempt/approval/event 全保留
   const task = visualStatus(item.db, pkg).batches[0].tasks[0]
   assert.equal(task.attempts.length, 2)
-  assert.equal(task.attempts[0]!.approval.decision, 'rejected')
+  assert.equal(task.attempts[0]?.approval?.decision, 'rejected', String(task.attempts[0]?.approval?.decision))
   const events = item.db.prepare('SELECT to_state FROM visual_asset_events WHERE task_id=? ORDER BY id').all(rejected.task.id) as Array<{ to_state: string }>
   assert.equal(events.filter((e) => e.to_state === 'retry').length, 1)
   item.db.close()

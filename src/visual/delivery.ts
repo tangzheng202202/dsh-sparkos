@@ -298,13 +298,17 @@ export function createVisualDelivery(
     try { return (JSON.parse(row.manifest_json) as { fingerprint?: unknown }).fingerprint === fingerprint } catch { return false }
   })
   if (existing) {
-    const artifacts = (db.prepare('SELECT * FROM visual_delivery_artifacts WHERE package_id=? AND version=? ORDER BY relative_path').all(input.packageId, existing.version) as unknown as DeliveryRow[]).map(rowFromDb)
+    // 幂等复用前重新校验全部磁盘文件与数据库 SHA/bytes；文件损坏时不得返回 created=false 成功。
+    const rows = db.prepare('SELECT * FROM visual_delivery_artifacts WHERE package_id=? AND version=? ORDER BY relative_path').all(input.packageId, existing.version) as unknown as DeliveryRow[]
+    for (const row of rows) safeVaultFile(row.relative_path, row.sha256, Number(row.bytes))
+    const artifacts = rows.map(rowFromDb)
     return { delivery: rowFromDb(existing), artifacts, created: false }
   }
   const versionRow = db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM visual_delivery_artifacts WHERE package_id=?').get(input.packageId) as { version: number }
   const version = Number(versionRow.version) + 1
   const deliveryId = `vd-${sha256(`${input.packageId}:${version}:${fingerprint}`).slice(0, 20)}`
-  const testOnly = input.mode === 'preview' && stub
+  // preview 交付无论 provider 是否 stub 一律标记 testOnly（TEST ONLY 横幅 + 不可发布）。
+  const testOnly = input.mode === 'preview' || stub
   const generatedAt = latestDeterministicTime(source, assets)
   const files = new Map<string, Buffer>()
   const byId = new Map(assets.map((asset) => [asset.plan.id, asset]))
@@ -337,7 +341,7 @@ export function createVisualDelivery(
     .sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0)
   const manifest: DeliveryManifest = {
     deliveryId, packageId: input.packageId, batchId: source.batchId, version, mode: input.mode, fingerprint, generatedAt,
-    testOnly, readyForPublication: input.mode === 'production', legacyContract: xhs.legacy, missingSlots: xhs.missing, files: initialFiles,
+    testOnly, readyForPublication: input.mode === 'production' && !testOnly, legacyContract: xhs.legacy, missingSlots: xhs.missing, files: initialFiles,
   }
   files.set('manifest.json', json(manifest))
   const zipName = `visual-delivery-v${String(version).padStart(3, '0')}.zip`
