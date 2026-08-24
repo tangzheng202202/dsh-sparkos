@@ -126,16 +126,38 @@ function artifactFingerprint(artifacts: Array<{ relativePath: string }>): Record
 }
 
 function rasterBytes(width: number, height: number, mediaType: string = 'image/png', size = 64): Buffer {
-  const data = Buffer.alloc(size)
+  // 结构完整的测试图字节：PNG 带合法 IHDR chunk；JPEG 带 SOF0；WebP 带 VP8L（签名 0x2f + 尺寸位）。
+  // GIF/SVG 与 size 参数保留：仅用于"签名与 MIME 不符/超限"等拒绝路径。
   if (mediaType === 'image/png') {
-    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(data)
-    data.writeUInt32BE(width, 16)
-    data.writeUInt32BE(height, 20)
-  } else if (mediaType === 'image/jpeg') {
-    Buffer.from([0xff, 0xd8, 0xff, 0xe0]).copy(data)
-  } else if (mediaType === 'image/webp') {
-    data.write('RIFF', 0, 'ascii'); data.write('WEBP', 8, 'ascii')
-  } else if (mediaType === 'image/gif') {
+    const chunk = Buffer.alloc(21)
+    chunk.writeUInt32BE(13, 0)
+    chunk.write('IHDR', 4, 'ascii')
+    chunk.writeUInt32BE(width, 8); chunk.writeUInt32BE(height, 12)
+    chunk[16] = 8; chunk[17] = 2; chunk[18] = 0; chunk[19] = 0; chunk[20] = 0
+    const base = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk, Buffer.alloc(4)])
+    // size 参数保留 oversize 语义：请求大于最小结构时补零到目标尺寸
+    return size > base.length ? Buffer.concat([base, Buffer.alloc(size - base.length)]) : base
+  }
+  const data = Buffer.alloc(size)
+  if (mediaType === 'image/jpeg') {
+    const sof = Buffer.alloc(10)
+    sof[0] = 0xff; sof[1] = 0xc0
+    sof.writeUInt16BE(8, 2); sof[4] = 8
+    sof.writeUInt16BE(height, 5); sof.writeUInt16BE(width, 7); sof[9] = 1
+    return Buffer.concat([Buffer.from([0xff, 0xd8]), sof, Buffer.from([0xff, 0xd9])])
+  }
+  if (mediaType === 'image/webp') {
+    const out = Buffer.alloc(30)
+    out.write('RIFF', 0, 'ascii'); out.writeUInt32LE(18, 4); out.write('WEBP', 8, 'ascii')
+    out.write('VP8L', 12, 'ascii'); out.writeUInt32LE(6, 16)
+    out[20] = 0x2f
+    out[21] = (width - 1) & 0xff
+    out[22] = (((width - 1) >> 8) & 0x3f) | ((((height - 1) & 0x3) << 6))
+    out[23] = ((height - 1) >> 2) & 0xff
+    out[24] = (((height - 1) >> 10) & 0x0f)
+    return out
+  }
+  if (mediaType === 'image/gif') {
     data.write('GIF89a', 0, 'ascii')
   } else if (mediaType === 'image/svg+xml') {
     data.write('<svg xmlns="http://www.w3.org/2000/svg">', 0, 'utf8')

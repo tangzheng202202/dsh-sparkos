@@ -96,10 +96,13 @@ function fixture(options: { dbPath?: string } = {}) {
 }
 
 function png(width: number, height: number): Buffer {
-  const data = Buffer.alloc(64)
-  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(data)
-  data.writeUInt32BE(width, 16); data.writeUInt32BE(height, 20)
-  return data
+  // 结构完整的 minimal PNG：签名 + IHDR chunk（长度 13 / 类型 IHDR / 尺寸 / CRC）
+  const chunk = Buffer.alloc(21)
+  chunk.writeUInt32BE(13, 0)
+  chunk.write('IHDR', 4, 'ascii')
+  chunk.writeUInt32BE(width, 8); chunk.writeUInt32BE(height, 12)
+  chunk[16] = 8; chunk[17] = 2; chunk[18] = 0; chunk[19] = 0
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk, Buffer.alloc(4)])
 }
 
 function attachment(data: Buffer, width: number, height: number) {

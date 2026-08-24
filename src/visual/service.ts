@@ -715,23 +715,40 @@ function signatureMediaType(data: Uint8Array): string | null {
  * 从图片实际字节解析真实像素尺寸（不信附件 ref 声明）：
  * PNG IHDR / JPEG SOF 扫描 / WebP VP8(+) 块。失败返回 null。
  */
+/**
+ * 从图片实际字节解析真实像素尺寸（不信附件 ref 声明）：PNG IHDR / JPEG SOF 扫描 / WebP VP8(+) 块。
+ * 结构化校验：PNG 必须 IHDR chunk（长度 13、类型 IHDR、尺寸 > 0）；JPEG 段长合法；
+ * WebP 校验 RIFF 尺寸、chunk 载荷长度、VP8 start code / VP8L signature / VP8X 头。
+ * 伪造或畸形头部一律返回 null。
+ */
 export function parseImagePixels(data: Uint8Array): { width: number; height: number } | null {
-  if (data.length >= 24 && Buffer.from(data.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
-    // PNG: IHDR 大端 width@16 height@20
+  const sane = (width: number, height: number): { width: number; height: number } | null =>
+    (Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0
+      && width <= MAX_IMAGE_PIXELS && height <= MAX_IMAGE_PIXELS) ? { width, height } : null
+  if (data.length >= 33 && Buffer.from(data.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    // PNG: 8 字节签名后第一个 chunk 必须是 IHDR（长度 13、类型 "IHDR"），IHDR 数据在 offset 16/20
     const pbuf = Buffer.from(data)
-    return { width: pbuf.readUInt32BE(16), height: pbuf.readUInt32BE(20) }
+    const chunkLength = pbuf.readUInt32BE(8)
+    const chunkType = pbuf.subarray(12, 16).toString('ascii')
+    if (chunkLength !== 13 || chunkType !== 'IHDR') return null
+    if (data.length < 8 + 4 + 4 + 13 + 4) return null // 不完整的 IHDR（不含 CRC）
+    return sane(pbuf.readUInt32BE(16), pbuf.readUInt32BE(20))
   }
   if (data.length >= 4 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) {
-    // JPEG: 扫描段找 SOF0/1/2/3/5/6/7/9/10/11/13/14/15
+    // JPEG: 扫描段找 SOF0/1/2/3/5/6/7/9/10/11/13/14/15；段长必须 ≥2 且不越过缓冲区
     const jbuf = Buffer.from(data)
     let offset = 2
     while (offset + 9 < data.length) {
       if (data[offset] !== 0xff) { offset += 1; continue }
-      const marker = data[offset + 1]
+      const marker = data[offset + 1]!
       if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd9)) { offset += 2; continue }
+      if (marker === 0x00 || marker === 0xff) { offset += 1; continue }
+      if (offset + 4 > data.length) return null
       const length = jbuf.readUInt16BE(offset + 2)
+      if (length < 2 || offset + 2 + length > data.length) return null // 畸形段长
       if ((marker >= 0xc0 && marker <= 0xcf) && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
-        return { height: jbuf.readUInt16BE(offset + 5), width: jbuf.readUInt16BE(offset + 7) }
+        if (length < 7) return null // SOF 至少含 precision+height+width+components
+        return sane(jbuf.readUInt16BE(offset + 7), jbuf.readUInt16BE(offset + 5))
       }
       offset += 2 + length
     }
@@ -739,30 +756,33 @@ export function parseImagePixels(data: Uint8Array): { width: number; height: num
   }
   if (data.length >= 30 && Buffer.from(data.subarray(0, 4)).toString('ascii') === 'RIFF'
     && Buffer.from(data.subarray(8, 12)).toString('ascii') === 'WEBP') {
-    const chunk = Buffer.from(data.subarray(12, 16)).toString('ascii')
+    const wbuf = Buffer.from(data)
+    const riffSize = wbuf.readUInt32LE(4)
+    if (riffSize < 4 || 8 + riffSize > data.length) return null // RIFF 尺寸越界
+    const chunk = wbuf.subarray(12, 16).toString('ascii')
+    const chunkSize = wbuf.readUInt32LE(16)
+    if (20 + chunkSize > data.length) return null // chunk 载荷越界
     if (chunk === 'VP8 ') {
-      // lossy: frame tag 之后的 14 字节处起 14bit 宽/高（little-endian 3 字节）
-      const w = data[26]! | ((data[27]! & 0x3f) << 8)
-      const h = data[28]! | ((data[29]! & 0x3f) << 8)
-      return { width: w, height: h }
+      // lossy: 帧标签 3 字节后必须紧跟 VP8 start code 0x9d 0x01 0x2a；宽/高为 14bit LE
+      if (chunkSize < 10) return null
+      if (data[23] !== 0x9d || data[24] !== 0x01 || data[25] !== 0x2a) return null
+      return sane(data[26]! | ((data[27]! & 0x3f) << 8), data[28]! | ((data[29]! & 0x3f) << 8))
     }
     if (chunk === 'VP8L') {
-      // lossless: signature 0x2f 后 14bit 宽 (w-1) / 14bit 高 (h-1)
+      // lossless: signature 必须是 0x2f；其后 14bit 宽(w-1)/高(h-1)
+      if (chunkSize < 5) return null
+      if (data[20] !== 0x2f) return null
       const b0 = data[21]!, b1 = data[22]!, b2 = data[23]!, b3 = data[24]!
-      const width = 1 + (b0 | ((b1 & 0x3f) << 8))
-      const height = 1 + ((b1 >> 6) | (b2 << 2) | ((b3 & 0x0f) << 10))
-      return { width, height }
+      return sane(1 + (b0 | ((b1 & 0x3f) << 8)), 1 + ((b1 >> 6) | (b2 << 2) | ((b3 & 0x0f) << 10)))
     }
     if (chunk === 'VP8X') {
-      // extended: 24bit canvas 宽/高各减 1，little-endian，位于 24/27
-      const width = 1 + (data[24]! | (data[25]! << 8) | (data[26]! << 16))
-      const height = 1 + (data[27]! | (data[28]! << 8) | (data[29]! << 16))
-      return { width, height }
+      // extended: chunk 大小必须为 10；24bit canvas 宽/高各减 1
+      if (chunkSize !== 10) return null
+      return sane(1 + (data[24]! | (data[25]! << 8) | (data[26]! << 16)), 1 + (data[27]! | (data[28]! << 8) | (data[29]! << 16)))
     }
   }
   return null
 }
-
 function verifiedImage(input: SubmittedAttachmentRef, stored: StoredImageAttachment, task: TaskRow): { data: Buffer; sha: string; mediaType: 'image/png' | 'image/jpeg' | 'image/webp'; extension: 'png' | 'jpg' | 'webp'; validation: Record<string, unknown> } {
   const ref = stored.ref
   const declaredMatches = ref.attachmentId === input.attachmentId

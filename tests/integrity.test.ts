@@ -15,6 +15,7 @@ import { after, test } from 'node:test'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { DraftSubmission } from '../src/creation/drafts.ts'
 import type { IntelCluster } from '../src/intel/cluster.ts'
 
@@ -221,10 +222,14 @@ test('3. 数据库提交失败后不遗留会被错误复用的半成品目录',
 const { parseImagePixels } = await import('../src/visual/service.ts')
 
 function pngBytes(width: number, height: number): Buffer {
-  const data = Buffer.alloc(64)
-  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(data)
-  data.writeUInt32BE(width, 16); data.writeUInt32BE(height, 20)
-  return data
+  // 结构完整的 minimal PNG（签名 + IHDR chunk）
+  const chunk = Buffer.alloc(21)
+  chunk.writeUInt32BE(13, 0)
+  chunk.write('IHDR', 4, 'ascii')
+  chunk.writeUInt32BE(width, 8); chunk.writeUInt32BE(height, 12)
+  // IHDR 余下字段（bitDepth/colorType/compression/filter）在高度之后：chunk 16..19
+  chunk[16] = 8; chunk[17] = 2; chunk[18] = 0; chunk[19] = 0
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk, Buffer.alloc(4)])
 }
 
 function jpegBytes(width: number, height: number): Buffer {
@@ -246,7 +251,7 @@ test('4a. parseImagePixels 从 PNG/JPEG 实际字节解析真实像素', () => {
 
 test('4b. 真实像素与附件 ref 不一致 → pixel-mismatch 拒绝（不信 attachments 声明）', async () => {
   const { submitVisualAttachment, claimVisualTask, queueVisualBatch, VisualPipelineError } = await import('../src/visual/service.ts')
-  type Reader = { readImage: (ref: unknown) => Promise<{ ref: unknown; data: Buffer }> }
+  type Reader = { readImage: (ref: unknown) => Promise<{ ref: ImageAttachmentRef; data: Buffer }> }
   const dbPath = path.join(root, 'pixel.db')
   const db = openFactoryDatabase({ path: dbPath })
   const { ensureDraftRequest: ensure, submitDraftPackage: submit, decideDraftPackage: decide } = await import('../src/creation/drafts.ts')
@@ -263,7 +268,7 @@ test('4b. 真实像素与附件 ref 不一致 → pixel-mismatch 拒绝（不信
   const claim = claimVisualTask(db, { packageId: approved.id }, new Date('2026-08-24T09:00:00Z'))!
   // 实际 PNG 是 900x383，但 ref 声明成 640x480（attachments 撒谎）
   const data = pngBytes(900, 383)
-  const lyingRef = { attachmentId: 'sha256:' + sha256(data), mediaType: 'image/png', bytes: data.byteLength, width: 640, height: 480, name: 'lie.png' }
+  const lyingRef = { attachmentId: 'sha256:' + sha256(data), mediaType: 'image/png', bytes: data.byteLength, width: 640, height: 480, name: 'lie.png' } as unknown as ImageAttachmentRef
   const reader: Reader = { readImage: async () => ({ ref: lyingRef, data }) }
   await assert.rejects(
     submitVisualAttachment(db, reader, { taskId: claim.task.id, attemptId: claim.attempt.id, leaseToken: claim.leaseToken, attachment: lyingRef as never, provider: 'openai', model: 'm', sourceTool: 'image_generate' }, { now: new Date('2026-08-24T09:00:30Z') }),
@@ -281,7 +286,7 @@ test('5+6. preview delivery（real provider）一律 testOnly+TEST ONLY；幂等
   const { ensureDraftRequest: ensure, submitDraftPackage: submit, decideDraftPackage: decide } = await import('../src/creation/drafts.ts')
   const { generateEditorialPlan: plan, decideEditorialCard: approve } = await import('../src/editorial/planner.ts')
   const { generateDailyRanking: rank } = await import('../src/intel/ranking.ts')
-  type Reader = { readImage: (ref: unknown) => Promise<{ ref: unknown; data: Buffer }> }
+  type Reader = { readImage: (ref: unknown) => Promise<{ ref: ImageAttachmentRef; data: Buffer }> }
   const dbPath = path.join(root, 'delivery.db')
   const db = openFactoryDatabase({ path: dbPath })
   rank(db, [intelCluster('992')], '2026-08-24')
@@ -298,7 +303,7 @@ test('5+6. preview delivery（real provider）一律 testOnly+TEST ONLY；幂等
     const claim = claimVisualTask(db, { packageId: approved.id }, new Date('2026-08-24T09:' + String(second).padStart(2, '0') + ':00Z'))
     if (!claim) break
     const data = pngBytes(claim.task.targetWidth, claim.task.targetHeight)
-    const ref = { attachmentId: 'sha256:' + sha256(data), mediaType: 'image/png', bytes: data.byteLength, width: claim.task.targetWidth, height: claim.task.targetHeight, name: 'g.png' }
+    const ref = { attachmentId: 'sha256:' + sha256(data), mediaType: 'image/png', bytes: data.byteLength, width: claim.task.targetWidth, height: claim.task.targetHeight, name: 'g.png' } as unknown as ImageAttachmentRef
     const reader: Reader = { readImage: async () => ({ ref, data }) }
     await submitVisualAttachment(db, reader, { taskId: claim.task.id, attemptId: claim.attempt.id, leaseToken: claim.leaseToken, attachment: ref as never, provider: 'openai', model: 'image-model', sourceTool: 'image_generate' }, { now: new Date('2026-08-24T09:' + String(second).padStart(2, '0') + ':10Z') })
     second += 1
@@ -359,4 +364,154 @@ test('7. atomicWriteFile：正常写入、失败清理临时文件、不留半�
   const before = statSync(target).mtimeMs
   atomicWriteFile(target, '{"a":3}\n')
   assert.ok(statSync(target).mtimeMs >= before)
+})
+
+/* ============ 追加：验收缺口回归 ============ */
+
+test('8a. manifest.json 本身是 symlink → 拒绝（全部 8 文件含 manifest 都不得跟随链接）', () => {
+  const item = fixture()
+  const ok = submitDraftPackage(item.db, item.submission, new Date('2026-08-24T08:00:00Z'))
+  const dir = path.join(vault, ok.package.artifactDir!)
+  const outside = path.join(root, 'evil-manifest.json')
+  writeFileSync(outside, JSON.stringify({ packageId: ok.package.id, artifacts: [] }))
+  const manifestPath = path.join(dir, 'manifest.json')
+  const backup = readFileSync(manifestPath)
+  unlinkSync(manifestPath)
+  symlinkSync(outside, manifestPath)
+  item.db.prepare("UPDATE draft_packages SET status='awaiting_generation', decided_at=NULL").run()
+  item.db.prepare('DELETE FROM draft_artifacts WHERE package_id=?').run()
+  item.db.prepare("UPDATE workflow_jobs SET status='queued' WHERE id=?").run(item.draft.jobId)
+  assert.throws(
+    () => submitDraftPackage(item.db, item.submission, new Date('2026-08-24T09:00:00Z')),
+    (e) => e instanceof Error && e.message.includes('产物不是普通文件：manifest.json'),
+    'symlink 的 manifest 必须在读取内容前被 lstat 拒绝',
+  )
+  // 还原后可正常复用
+  unlinkSync(manifestPath)
+  writeFileSync(manifestPath, backup)
+  item.db.prepare("UPDATE draft_packages SET status='awaiting_generation', decided_at=NULL").run()
+  item.db.prepare('DELETE FROM draft_artifacts WHERE package_id=?').run()
+  item.db.prepare("UPDATE workflow_jobs SET status='queued' WHERE id=?").run(item.draft.jobId)
+  const reused = submitDraftPackage(item.db, item.submission, new Date('2026-08-24T10:00:00Z'))
+  assert.equal(reused.package.status, 'waiting_approval')
+  item.db.close()
+})
+
+test('8b. DB 已提交后 transitionJob 失败 → 不得删除已落库目录（dbCommitted 保护）', async () => {
+  const item = fixture()
+  const { getJob } = await import('../src/storage/jobs.ts')
+  // 让 COMMIT 之后的 transitionJob 失败：在 workflow_job_events 上装触发器，
+  // 当 to_status='waiting_approval' 时 RAISE(ABORT) —— 精确模拟「产物事务已提交、后续转态失败」。
+  item.db.exec("CREATE TRIGGER fail_post_commit BEFORE INSERT ON workflow_job_events WHEN NEW.to_status='waiting_approval' BEGIN SELECT RAISE(ABORT, 'post-commit transition boom'); END")
+  assert.throws(() => submitDraftPackage(item.db, item.submission, new Date('2026-08-24T08:00:00Z')), /post-commit transition boom/)
+  const dirAbsolute = path.join(vault, 'drafts', 'factory', '2026-08-24', item.draft.id)
+  assert.equal(existsSync(dirAbsolute), true, 'DB 已提交的目录绝不能被清理')
+  // 且数据库行的确已落库指向该目录（半提交但自洽：artifact_dir 已写入）
+  const row = item.db.prepare('SELECT artifact_dir FROM draft_packages WHERE id=?').get(item.draft.id) as { artifact_dir: string | null }
+  assert.ok(row.artifact_dir, 'artifact_dir 已落库')
+  // 复用目录的后续校验也能通过（目录内容完好）
+  assert.equal(readdirSync(dirAbsolute).length, 8)
+  void getJob
+  item.db.close()
+})
+
+test('8c. 复用既有目录时任何失败都不得删除该目录', () => {
+  const item = fixture()
+  const ok = submitDraftPackage(item.db, item.submission, new Date('2026-08-24T08:00:00Z'))
+  const dirAbsolute = path.join(vault, ok.package.artifactDir!)
+  item.db.prepare("UPDATE draft_packages SET status='awaiting_generation', decided_at=NULL").run()
+  item.db.prepare('DELETE FROM draft_artifacts WHERE package_id=?').run()
+  item.db.prepare("UPDATE workflow_jobs SET status='succeeded' WHERE id=?").run(item.draft.jobId) // 复用路径 + COMMIT 后 transitionJob 失败
+  assert.throws(() => submitDraftPackage(item.db, item.submission, new Date('2026-08-24T09:00:00Z')), /transition|invalid job|不可提交/i)
+  assert.equal(existsSync(dirAbsolute), true, '复用的既有目录绝不能被删除')
+  item.db.close()
+})
+
+test('8d. delivery 文件缺失 → 统一 artifact-integrity-failed（不再抛原生 ENOENT）', async () => {
+  const { createVisualDelivery, readVisualDeliveryFile, listVisualDeliveries } = await import('../src/visual/delivery.ts')
+  const { claimVisualTask, submitVisualAttachment, visualStatus, VisualPipelineError } = await import('../src/visual/service.ts')
+  const { decideVisualAttempt } = await import('../src/visual/review.ts')
+  const { ensureDraftRequest: ensure, submitDraftPackage: submit, decideDraftPackage: decide } = await import('../src/creation/drafts.ts')
+  const { generateEditorialPlan: plan, decideEditorialCard: approve } = await import('../src/editorial/planner.ts')
+  const { generateDailyRanking: rank } = await import('../src/intel/ranking.ts')
+  type Reader = { readImage: (ref: unknown) => Promise<{ ref: ImageAttachmentRef; data: Buffer }> }
+  const dbPath = path.join(root, 'missing.db')
+  const db = openFactoryDatabase({ path: dbPath })
+  rank(db, [intelCluster('993')], '2026-08-24')
+  const p = plan(db, 'weekly', '2026-08-24')
+  approve(db, p.cards[0].id, 'approved')
+  const draft = ensure(db, p.cards[0].id).package
+  const submitted = submit(db, validSubmission(draft.id), new Date('2026-08-24T08:00:00Z'))
+  assert.equal(submitted.validation.ok, true, submitted.validation.errors.join(';'))
+  const approved = decide(db, draft.id, 'approved', undefined, new Date('2026-08-24T08:01:00Z'))
+  const { queueVisualBatch } = await import('../src/visual/service.ts')
+  queueVisualBatch(db, approved.id, new Date('2026-08-24T08:02:00Z'))
+  let second = 1
+  while (true) {
+    const claim = claimVisualTask(db, { packageId: approved.id }, new Date('2026-08-24T09:' + String(second).padStart(2, '0') + ':00Z'))
+    if (!claim) break
+    const data = pngBytes(claim.task.targetWidth, claim.task.targetHeight)
+    const ref = { attachmentId: 'sha256:' + sha256(data), mediaType: 'image/png', bytes: data.byteLength, width: claim.task.targetWidth, height: claim.task.targetHeight, name: 'g.png' } as unknown as ImageAttachmentRef
+    const reader: Reader = { readImage: async () => ({ ref, data }) }
+    await submitVisualAttachment(db, reader, { taskId: claim.task.id, attemptId: claim.attempt.id, leaseToken: claim.leaseToken, attachment: ref as never, provider: 'openai', model: 'image-model', sourceTool: 'image_generate' }, { now: new Date('2026-08-24T09:' + String(second).padStart(2, '0') + ':10Z') })
+    second += 1
+  }
+  for (const task of visualStatus(db, approved.id).batches[0].tasks) {
+    const attempt = task.attempts.find((a) => a.attemptNo === task.currentAttempt)!
+    decideVisualAttempt(db, { attemptId: attempt.id, decision: 'approved' })
+  }
+  const delivery = createVisualDelivery(db, { packageId: approved.id, mode: 'preview' }, new Date('2026-08-24T10:00:00Z'))
+  // 删除交付文件：读取必须得到结构化 artifact-integrity-failed（422），不是 ENOENT
+  const target = readVisualDeliveryFile(db, delivery.delivery.id, 'provenance.json')
+  unlinkSync(path.join(vault, target.relativePath))
+  assert.throws(
+    () => readVisualDeliveryFile(db, delivery.delivery.id, 'provenance.json'),
+    (e) => e instanceof VisualPipelineError && e.code === 'artifact-integrity-failed' && e.httpStatus === 422,
+    '缺失文件必须归一化为 artifact-integrity-failed',
+  )
+  // 幂等复用同样报完整性错误而非成功
+  assert.throws(
+    () => createVisualDelivery(db, { packageId: approved.id, mode: 'preview' }, new Date('2026-08-24T11:00:00Z')),
+    (e) => e instanceof VisualPipelineError && e.code === 'artifact-integrity-failed',
+  )
+  void listVisualDeliveries
+  db.close()
+})
+
+test('8e. 畸形 PNG/WebP/JPEG 头部不得通过真实像素检查', async () => {
+  const { parseImagePixels } = await import('../src/visual/service.ts')
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+  // PNG 魔数对但 IHDR chunk 长度不是 13
+  const badLen = Buffer.alloc(33); sig.copy(badLen); badLen.writeUInt32BE(12, 8); badLen.write('IHDR', 12, 'ascii')
+  assert.equal(parseImagePixels(badLen), null, 'IHDR 长度错误必须拒绝')
+  // PNG 魔数对但 chunk 类型不是 IHDR
+  const badType = Buffer.alloc(33); sig.copy(badType); badType.writeUInt32BE(13, 8); badType.write('IDAT', 12, 'ascii')
+  assert.equal(parseImagePixels(badType), null, '首 chunk 非 IHDR 必须拒绝')
+  // PNG 尺寸为 0
+  const zero = Buffer.alloc(33); sig.copy(zero); zero.writeUInt32BE(13, 8); zero.write('IHDR', 12, 'ascii'); zero.writeUInt32BE(0, 16)
+  assert.equal(parseImagePixels(zero), null, '0 尺寸必须拒绝')
+  // PNG 截断（不足 33 字节）
+  const trunc = pngBytes(900, 383).subarray(0, 20)
+  assert.equal(parseImagePixels(trunc), null, '截断 PNG 必须拒绝')
+  // WebP RIFF/WEBP 魔数对但 RIFF size 越界
+  const riffBad = Buffer.alloc(30); riffBad.write('RIFF', 0, 'ascii'); riffBad.writeUInt32LE(9999, 4); riffBad.write('WEBP', 8, 'ascii'); riffBad.write('VP8X', 12, 'ascii')
+  assert.equal(parseImagePixels(riffBad), null, 'RIFF size 越界必须拒绝')
+  // VP8 chunk 但 start code 错误
+  const vp8Bad = Buffer.alloc(40); vp8Bad.write('RIFF', 0, 'ascii'); vp8Bad.writeUInt32LE(28, 4); vp8Bad.write('WEBP', 8, 'ascii'); vp8Bad.write('VP8 ', 12, 'ascii'); vp8Bad.writeUInt32LE(20, 16); vp8Bad[23] = 0x00; vp8Bad[24] = 0x01; vp8Bad[25] = 0x2a
+  assert.equal(parseImagePixels(vp8Bad), null, 'VP8 start code 错误必须拒绝')
+  // VP8L signature 错误
+  const vp8lBad = Buffer.alloc(30); vp8lBad.write('RIFF', 0, 'ascii'); vp8lBad.writeUInt32LE(18, 4); vp8lBad.write('WEBP', 8, 'ascii'); vp8lBad.write('VP8L', 12, 'ascii'); vp8lBad.writeUInt32LE(6, 16); vp8lBad[20] = 0x2e
+  assert.equal(parseImagePixels(vp8lBad), null, 'VP8L signature 错误必须拒绝')
+  // VP8X chunk 大小不是 10
+  const vp8xBad = Buffer.alloc(30); vp8xBad.write('RIFF', 0, 'ascii'); vp8xBad.writeUInt32LE(18, 4); vp8xBad.write('WEBP', 8, 'ascii'); vp8xBad.write('VP8X', 12, 'ascii'); vp8xBad.writeUInt32LE(9, 16)
+  assert.equal(parseImagePixels(vp8xBad), null, 'VP8X 大小错误必须拒绝')
+  // 合法 VP8X 对照：仍可解析
+  const vp8xOk = Buffer.alloc(30); vp8xOk.write('RIFF', 0, 'ascii'); vp8xOk.writeUInt32LE(18, 4); vp8xOk.write('WEBP', 8, 'ascii'); vp8xOk.write('VP8X', 12, 'ascii'); vp8xOk.writeUInt32LE(10, 16)
+  vp8xOk[24] = 99; vp8xOk[27] = 99 // 100x100
+  assert.deepEqual(parseImagePixels(vp8xOk), { width: 100, height: 100 })
+  // JPEG SOF 段长越界
+  const jBad = Buffer.alloc(30); jBad[0] = 0xff; jBad[1] = 0xd8; jBad[2] = 0xff; jBad[3] = 0xc0; jBad.writeUInt16BE(9999, 4)
+  assert.equal(parseImagePixels(jBad), null, 'JPEG 段长越界必须拒绝')
+  // JPEG 合成对照仍通过
+  assert.deepEqual(parseImagePixels(jpegBytes(320, 240)), { width: 320, height: 240 })
 })

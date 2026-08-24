@@ -469,15 +469,17 @@ function sha256(content: string | Uint8Array): string {
   return createHash('sha256').update(content).digest('hex')
 }
 
-function writeArtifacts(packageId: string, submission: DraftSubmission, now: Date, folderDate: string): { dir: string; artifacts: DraftArtifact[] } {
+function writeArtifacts(packageId: string, submission: DraftSubmission, now: Date, folderDate: string): { dir: string; artifacts: DraftArtifact[]; created: boolean } {
   const date = folderDate.slice(0, 10)
   const relativeDir = path.join('drafts', 'factory', date, packageId)
   const target = path.join(VAULT_ROOT, relativeDir)
   const contents = artifactContents(submission)
+  let created = false
   if (existsSync(target)) {
     // 产物完整性：目录已存在时校验全部允许文件（8 个），不能只比较 package.json。
     verifyArtifactDir(target, relativeDir, packageId, contents)
   } else {
+    created = true
     const parent = path.dirname(target)
     mkdirSync(parent, { recursive: true })
     const staging = path.join(parent, '.' + packageId + '-' + randomUUID() + '.tmp')
@@ -497,7 +499,7 @@ function writeArtifacts(packageId: string, submission: DraftSubmission, now: Dat
     id: randomUUID(), platform: spec.platform, format: spec.format,
     relativePath: path.join(relativeDir, file), sha256: sha256(spec.content), bytes: Buffer.byteLength(spec.content),
   }))
-  return { dir: relativeDir, artifacts }
+  return { dir: relativeDir, artifacts, created }
 }
 
 /**
@@ -518,6 +520,12 @@ function verifyArtifactDir(target: string, relativeDir: string, packageId: strin
   if (extra.length > 0) fail('存在未声明文件：' + extra.join(', '))
   const missing = expectedFiles.filter((file) => !present.includes(file))
   if (missing.length > 0) fail('缺失文件：' + missing.join(', '))
+  // 全部 8 个文件（含 manifest.json 本身）先做 lstat 普通文件检查，再读取任何内容——
+  // symlink 的 manifest 不得被跟随。
+  for (const file of expectedFiles) {
+    const info = lstatSync(path.join(target, file))
+    if (!info.isFile() || info.isSymbolicLink()) fail('产物不是普通文件：' + file)
+  }
   // manifest 结构与覆盖关系
   const manifest: { packageId?: unknown; artifacts?: unknown } = (() => {
     try {
@@ -564,10 +572,13 @@ export function submitDraftPackage(db: DatabaseSync, submission: DraftSubmission
   if (job.status === 'failed') job = transitionJob(db, job.id, 'queued', { note: 'valid resubmission retry', now })
   if (job.status === 'queued') job = startJob(db, job.id, 'sparkos-content-inline', now)
   if (job.status !== 'running') throw new Error('草稿生成任务当前状态不可提交：' + job.status)
-  let writtenThisCall: { dir: string } | null = null
+  // 可恢复语义的精确条件：仅当「本次调用新建目录」且「数据库尚未提交」时才允许清理。
+  // 复用的既有目录（created=false）与已 COMMIT 的目录（dbCommitted=true）都是权威状态，绝不能删。
+  let createdDirThisCall: string | null = null
+  let dbCommitted = false
   try {
     const written = writeArtifacts(current.id, submission, now, current.createdAt)
-    writtenThisCall = { dir: written.dir }
+    if (written.created) createdDirThisCall = written.dir
     db.exec('BEGIN IMMEDIATE')
     try {
       db.prepare(`
@@ -585,17 +596,19 @@ export function submitDraftPackage(db: DatabaseSync, submission: DraftSubmission
         ON CONFLICT(subject_kind, subject_id) DO UPDATE SET decision='pending', note=NULL, decided_at=NULL
       `).run(randomUUID(), current.id, at)
       db.exec('COMMIT')
+      dbCommitted = true
     } catch (error) {
       db.exec('ROLLBACK')
       throw error
     }
     transitionJob(db, job.id, 'waiting_approval', { output: { packageId: current.id, artifacts: written.artifacts.length }, now })
   } catch (error) {
-    // 可恢复语义：数据库失败后不得遗留会被错误复用的半成品目录。
-    // 本次调用新建的目录（DB 回滚后磁盘上没有任何权威记录）直接清理；
-    // 早前调用成功落库的目录不动（writeArtifacts 复用路径会做完整性校验）。
-    if (writtenThisCall !== null) {
-      const absoluteDir = path.join(VAULT_ROOT, writtenThisCall.dir)
+    // 可恢复语义：仅清理「本次新建且未落库」的半成品目录。
+    // - 复用的既有目录（created=false）：本就是权威产物，校验已通过，不得删除；
+    // - DB 已 COMMIT 后的失败（如 transitionJob 出错）：SQLite 行已指向该目录，
+    //   删除会留下数据库指向不存在文件的状态，同样不得删除。
+    if (createdDirThisCall !== null && !dbCommitted) {
+      const absoluteDir = path.join(VAULT_ROOT, createdDirThisCall)
       rmSync(absoluteDir, { recursive: true, force: true })
     }
     transitionJob(db, job.id, 'failed', { error: error instanceof Error ? error.message : String(error), now })

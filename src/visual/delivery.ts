@@ -135,16 +135,28 @@ function ensureSafeDirectory(root: string, relative: string): string {
 }
 
 function safeVaultFile(relative: string, expectedSha: string, expectedBytes: number): Buffer {
-  if (path.isAbsolute(relative) || relative.includes('\0')) throw new VisualPipelineError('artifact-integrity-failed', '视觉文件路径不合法', 422)
+  const integrity = (reason: string): VisualPipelineError => new VisualPipelineError('artifact-integrity-failed', reason, 422)
+  if (path.isAbsolute(relative) || relative.includes('\0')) throw integrity('视觉文件路径不合法')
   const root = path.resolve(VAULT_ROOT)
   const absolute = path.resolve(root, relative)
-  if (!absolute.startsWith(root + path.sep)) throw new VisualPipelineError('artifact-integrity-failed', '视觉文件路径越界', 422)
-  const info = lstatSync(absolute)
-  if (!info.isFile() || info.isSymbolicLink() || !realpathSync(absolute).startsWith(realpathSync(root) + path.sep)) {
-    throw new VisualPipelineError('artifact-integrity-failed', '视觉文件必须是 VAULT 内普通文件', 422)
+  if (!absolute.startsWith(root + path.sep)) throw integrity('视觉文件路径越界')
+  // 文件系统原生错误（缺失/不可读/权限）统一归一化为 artifact-integrity-failed，不得把 ENOENT/EACCES 直接抛给调用方。
+  let info: ReturnType<typeof lstatSync>
+  let real: string
+  let rootReal: string
+  let data: Buffer
+  try {
+    info = lstatSync(absolute)
+    real = realpathSync(absolute)
+    rootReal = realpathSync(root)
+    data = readFileSync(absolute)
+  } catch {
+    throw integrity('视觉文件缺失或不可读：' + relative)
   }
-  const data = readFileSync(absolute)
-  if (data.byteLength !== expectedBytes || sha256(data) !== expectedSha) throw new VisualPipelineError('artifact-integrity-failed', '视觉文件哈希或大小不匹配', 422)
+  if (!info.isFile() || info.isSymbolicLink() || !real.startsWith(rootReal + path.sep)) {
+    throw integrity('视觉文件必须是 VAULT 内普通文件')
+  }
+  if (data.byteLength !== expectedBytes || sha256(data) !== expectedSha) throw integrity('视觉文件哈希或大小不匹配')
   return data
 }
 
