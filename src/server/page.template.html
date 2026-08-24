@@ -166,6 +166,11 @@ const CENTERS = [["today","今日中心",["brief"]],["intel","情报中心",["li
 
 // ---- helpers ----
 function esc(s){return String(s==null?"":s).split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;").split('"').join("&quot;").split("'").join("&#39;");}
+// 动态外链白名单：只允许 http/https 绝对地址；历史脏数据降级为普通转义文本（与服务端 isSafeExternalUrl 同一规则）
+function isSafeUrl(u){if(typeof u!=="string")return false;if(u===""||u.length>2048)return false;if(u!==u.trim())return false;if(/[\u0000-\u001f\u007f]/.test(u))return false;if(!/^https?:\/\//i.test(u))return false;try{var p=new URL(u);return p.protocol==="http:"||p.protocol==="https:";}catch(e){return false;}}
+function safeExtLink(u){return isSafeUrl(u)?"<a href=\""+esc(u)+"\" target=\"_blank\" rel=\"noopener noreferrer\">"+esc(u)+"</a>":"<span class=\"mono\">"+esc(u)+"</span>";}
+// 写端点请求包装：mutation POST 统一 application/json + CSRF token
+function apiFetch(url,opts){opts=opts||{};opts.headers=Object.assign({"content-type":"application/json","x-sparkos-csrf":(window._sparkosCsrf||"")},opts.headers||{});return fetch(url,opts);}
 function lineName(id){if(!id)return "—";var l=D.lines.find(function(x){return x.id===id;});return l?l.name:id;}
 function freshClass(h){if(h==null)return "badge-gray";if(h<=24)return "badge-green";if(h<=48)return "badge-amber";return "badge-red";}
 function freshLabel(h){if(h==null)return "fresh=?";return h+"h";}
@@ -195,7 +200,7 @@ nav.firstChild.classList.add("active");
 // ---- adopt/ignore helpers ----
 function decisionOf(kind,id){var ds=D.decisions||[];for(var i=ds.length-1;i>=0;i--){if(ds[i].kind===kind&&ds[i].id===id)return ds[i].action;}return null;}
 async function decide(kind,id,action,btn){btn.disabled=true;
-  try{var r=await fetch("/sparkos/mutate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:kind,id:id,action:action})});
+  try{var r=await apiFetch("/sparkos/mutate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:kind,id:id,action:action})});
     var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
     D.decisions.push(j.entry);btn.textContent=action==="adopt"?"已采纳 ✓":"已忽略 ✓";btn.classList.add("decided");
     if(kind==="topic")renderTopics();
@@ -312,7 +317,7 @@ function renderEditorial(){
   el.innerHTML="<div class=\"dim\" style=\"margin-bottom:8px\">"+esc(p.mode)+" · "+esc(p.periodStart)+".."+esc(p.periodEnd)+" · "+esc(p.status)+" · "+esc(p.summary.note)+"</div>"+cards;
   el.querySelectorAll("[data-editorial]").forEach(function(btn){btn.onclick=async function(){
     btn.disabled=true;btn.textContent="处理中…";
-    try{var r=await fetch("/sparkos/editorial/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cardId:btn.dataset.card,decision:btn.dataset.editorial})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
+    try{var r=await apiFetch("/sparkos/editorial/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({cardId:btn.dataset.card,decision:btn.dataset.editorial})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
       var card=p.cards.find(function(x){return x.id===btn.dataset.card;});if(card){card.decision=j.value.decision;card.decidedAt=j.value.decidedAt;}renderEditorial();
     }catch(e){btn.disabled=false;btn.textContent="重试";}
   };});
@@ -329,7 +334,7 @@ function visualResponseError(response,json){if(json&&json.error&&json.error.mess
 function applyVisualDecision(attemptId,decision,note,value){var found=visualTaskForAttempt(attemptId);if(!found)return;found.task.state=value&&value.taskState||decision;found.task.reviewNote=value&&value.note!=null?value.note:(decision==="rejected"?note:null);found.attempt.status=found.task.state;found.attempt.approval={decision:decision,note:found.task.reviewNote,decidedAt:new Date().toISOString()};if(value){found.batch.status=value.batchStatus||found.batch.status;found.batch.approvedCount=value.approvedCount==null?found.batch.approvedCount:value.approvedCount;found.batch.requiredCount=value.requiredCount==null?found.batch.requiredCount:value.requiredCount;}}
 async function submitVisualDecision(attemptId,decision,note){var ui=visualReviewState(attemptId);if(ui.busy)return;var clean=String(note||"").trim();if(decision==="rejected"&&!clean)return;ui.busy=true;ui.pendingDecision=decision;ui.error="";ui.message="";renderCreation();try{
   var body={attemptId:attemptId,decision:decision};if(decision==="rejected")body.note=clean;
-  var response=await fetch("/sparkos/visual/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});var json;
+  var response=await apiFetch("/sparkos/visual/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});var json;
   try{json=await response.json();}catch(parseError){throw new Error("服务器返回了无效 JSON");}
   if(!response.ok||!json||!json.ok)throw new Error(visualResponseError(response,json));
   applyVisualDecision(attemptId,decision,clean,json.value||{});ui.busy=false;ui.pendingDecision="";ui.open=false;ui.note="";ui.message=decision==="rejected"?"图片已驳回":"图片已批准";renderCreation();
@@ -353,7 +358,7 @@ function renderVisual(p){
   var deliveryUi=visualDeliveryUi[p.id];var deliveryFeedback=deliveryUi&&deliveryUi.error?"<div class=\"visual-feedback error\" role=\"alert\">"+esc(deliveryUi.error)+"</div>":deliveryUi&&deliveryUi.message?"<div class=\"visual-feedback success\" role=\"status\">"+esc(deliveryUi.message)+"</div>":"";
   return "<div class=\"visual-panel\"><div class=\"visual-progress\"><b>视觉审核 · "+esc(statusName[batch.status]||batch.status)+"</b><span>"+esc(batch.approvedCount)+" / "+esc(batch.requiredCount)+" 已批准</span>"+test+publish+"</div>"+blockers+"<div class=\"visual-grid\">"+cards+"</div><div style=\"margin-top:9px\">"+delivery+"</div>"+deliveryFeedback+"</div>";
 }
-async function refreshVisual(packageId){var r=await fetch("/sparkos/visual/status?packageId="+encodeURIComponent(packageId));var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"视觉状态读取失败");D.factory.visual=D.factory.visual||{batches:[]};D.factory.visual.batches=(D.factory.visual.batches||[]).filter(function(b){return b.packageId!==packageId;}).concat(j.value.batches||[]);}
+async function refreshVisual(packageId){var r=await apiFetch("/sparkos/visual/status?packageId="+encodeURIComponent(packageId));var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"视觉状态读取失败");D.factory.visual=D.factory.visual||{batches:[]};D.factory.visual.batches=(D.factory.visual.batches||[]).filter(function(b){return b.packageId!==packageId;}).concat(j.value.batches||[]);}
 function renderCreation(){
   var el=document.getElementById("creationBody");var ps=D.factory&&D.factory.drafts||[];
   if(!ps.length){el.innerHTML="<div class=\"empty\">暂无工厂草稿包 · 批准编辑选题后自动创建任务；agent 用 sparkos_run draft payload.pending=true 领取契约</div>";return;}
@@ -372,20 +377,20 @@ function renderCreation(){
     var input=window.prompt("请输入驳回草稿的审核意见（必填）");if(input===null||!input.trim())return;note=input.trim();
   }btn.disabled=true;btn.textContent="处理中…";try{
     var body={packageId:btn.dataset.package,decision:decision};if(note)body.note=note;
-    var r=await fetch("/sparkos/creation/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
+    var r=await apiFetch("/sparkos/creation/decision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
     var item=ps.find(function(x){return x.id===btn.dataset.package;});if(item){item.status=j.value.status;item.reviewNote=j.value.reviewNote;item.parentReviewNote=j.value.parentReviewNote;item.decidedAt=j.value.decidedAt;}renderCreation();
   }catch(e){btn.disabled=false;btn.textContent="重试";}};});
   el.querySelectorAll("[data-draft-revise]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;btn.textContent="创建中…";try{
-    var r=await fetch("/sparkos/creation/revise",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.draftRevise})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
+    var r=await apiFetch("/sparkos/creation/revise",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.draftRevise})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
     ps.unshift({id:j.value.id,cardId:j.value.cardId,revision:j.value.revision,parentPackageId:j.value.parentPackageId,status:j.value.status,title:j.value.request&&j.value.request.sourceCard?j.value.request.sourceCard.title:j.value.id,validation:j.value.validation,assetCount:0,artifacts:[],reviewNote:j.value.reviewNote,parentReviewNote:j.value.parentReviewNote,createdAt:j.value.createdAt,updatedAt:j.value.updatedAt,decidedAt:null});renderCreation();
   }catch(e){btn.disabled=false;btn.textContent="重试";}};});
-  el.querySelectorAll("[data-visual-queue]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var r=await fetch("/sparkos/visual/queue",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.visualQueue})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(btn.dataset.visualQueue);renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
+  el.querySelectorAll("[data-visual-queue]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var r=await apiFetch("/sparkos/visual/queue",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:btn.dataset.visualQueue})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(btn.dataset.visualQueue);renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
   el.querySelectorAll("[data-visual-decision]").forEach(function(btn){btn.onclick=function(){var attemptId=btn.dataset.attempt,decision=btn.dataset.visualDecision;if(decision==="rejected"){var ui=visualReviewState(attemptId);if(ui.busy)return;ui.open=true;ui.error="";ui.message="";renderCreation();return;}submitVisualDecision(attemptId,"approved","");};});
   el.querySelectorAll("[data-visual-note]").forEach(function(input){input.oninput=function(){var ui=visualReviewState(input.dataset.visualNote);ui.note=input.value;var confirm=input.parentNode.querySelector("[data-visual-reject-confirm]");if(confirm)confirm.disabled=ui.busy||!ui.note.trim();};});
   el.querySelectorAll("[data-visual-reject-confirm]").forEach(function(btn){btn.onclick=function(){var ui=visualReviewState(btn.dataset.visualRejectConfirm);submitVisualDecision(btn.dataset.visualRejectConfirm,"rejected",ui.note);};});
   el.querySelectorAll("[data-visual-reject-cancel]").forEach(function(btn){btn.onclick=function(){var ui=visualReviewState(btn.dataset.visualRejectCancel);if(ui.busy)return;ui.open=false;ui.note="";ui.error="";ui.message="";renderCreation();};});
-  el.querySelectorAll("[data-visual-retry]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var batch; (D.factory.visual.batches||[]).forEach(function(b){if((b.tasks||[]).some(function(t){return t.id===btn.dataset.visualRetry;}))batch=b;});var r=await fetch("/sparkos/visual/retry",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({taskId:btn.dataset.visualRetry})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(batch.packageId);renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
-  el.querySelectorAll("[data-visual-delivery]").forEach(function(btn){btn.onclick=async function(){var packageId=btn.dataset.package;visualDeliveryUi[packageId]={message:"处理中…",error:""};renderCreation();try{var r=await fetch("/sparkos/visual/delivery",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:packageId,mode:btn.dataset.visualDelivery})});var j;try{j=await r.json();}catch(parseError){throw new Error("服务器返回了无效 JSON");}if(!r.ok||!j||!j.ok)throw new Error(visualResponseError(r,j));await refreshVisual(packageId);var batch=visualBatchFor(packageId);batch.deliveryLink="/sparkos/visual/download?deliveryId="+encodeURIComponent(j.value.delivery.id);visualDeliveryUi[packageId]={message:"交付包已生成："+j.value.delivery.id,error:""};renderCreation();}catch(e){visualDeliveryUi[packageId]={message:"",error:e&&e.message?String(e.message):"交付包生成失败"};renderCreation();}};});
+  el.querySelectorAll("[data-visual-retry]").forEach(function(btn){btn.onclick=async function(){btn.disabled=true;try{var batch; (D.factory.visual.batches||[]).forEach(function(b){if((b.tasks||[]).some(function(t){return t.id===btn.dataset.visualRetry;}))batch=b;});var r=await apiFetch("/sparkos/visual/retry",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({taskId:btn.dataset.visualRetry})});var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");await refreshVisual(batch.packageId);renderCreation();}catch(e){btn.disabled=false;btn.textContent="重试";}};});
+  el.querySelectorAll("[data-visual-delivery]").forEach(function(btn){btn.onclick=async function(){var packageId=btn.dataset.package;visualDeliveryUi[packageId]={message:"处理中…",error:""};renderCreation();try{var r=await apiFetch("/sparkos/visual/delivery",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:packageId,mode:btn.dataset.visualDelivery})});var j;try{j=await r.json();}catch(parseError){throw new Error("服务器返回了无效 JSON");}if(!r.ok||!j||!j.ok)throw new Error(visualResponseError(r,j));await refreshVisual(packageId);var batch=visualBatchFor(packageId);batch.deliveryLink="/sparkos/visual/download?deliveryId="+encodeURIComponent(j.value.delivery.id);visualDeliveryUi[packageId]={message:"交付包已生成："+j.value.delivery.id,error:""};renderCreation();}catch(e){visualDeliveryUi[packageId]={message:"",error:e&&e.message?String(e.message):"交付包生成失败"};renderCreation();}};});
   el.querySelectorAll("[data-visual-thumb]").forEach(function(btn){btn.onclick=function(){openVisualLightbox(btn.dataset.visualThumb,btn);};});
 }
 // ---- M5A visual lightbox（页面内大图预览 · 不触达任何审批 API）----
@@ -532,7 +537,7 @@ function renderDrafts(){
       var pre=btn.parentNode.querySelector(".draft-full");
       if(pre.style.display==="block"){pre.style.display="none";btn.textContent="查看全文";return;}
       btn.disabled=true;btn.textContent="读取中…";
-      try{var r=await fetch("/sparkos/draft?file="+encodeURIComponent(d.file));var j=await r.json();
+      try{var r=await apiFetch("/sparkos/draft?file="+encodeURIComponent(d.file));var j=await r.json();
         if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
         pre.textContent=j.value.content||"(空文件)";pre.style.display="block";btn.textContent="收起";
       }catch(e){btn.textContent="重试";}
@@ -556,7 +561,7 @@ function renderDistill(){
 }
 async function distillDecide(btn){
   btn.disabled=true;btn.textContent="…";
-  try{var r=await fetch("/sparkos/mutate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"distill",id:btn.dataset.id,action:btn.dataset.action})});
+  try{var r=await apiFetch("/sparkos/mutate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"distill",id:btn.dataset.id,action:btn.dataset.action})});
     var j=await r.json();
     if(!j.ok){btn.textContent="✗ "+(j.error&&j.error.code==="red-line"?"红线拦截":"失败");btn.disabled=false;return;}
     if(btn.dataset.action==="adopt"){D.distillReviewed.approved.push(btn.dataset.id);D.writebackQueue=D.writebackQueue||[];D.writebackQueue.push({file:btn.dataset.id,at:new Date().toISOString(),dir:"runtime",target:"spark-notes/（人工核对后写入）",content:""});}
@@ -580,7 +585,7 @@ function renderWriteback(){
   });
   el.querySelectorAll("[data-wb-remove]").forEach(function(btn){
     btn.onclick=async function(){var e=D.writebackQueue[Number(btn.dataset.wbRemove)];btn.disabled=true;
-      try{var r=await fetch("/sparkos/writeback/remove",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({file:e.file})});
+      try{var r=await apiFetch("/sparkos/writeback/remove",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({file:e.file})});
         var j=await r.json();if(!j.ok)throw new Error(j.error&&j.error.message||"失败");
         D.writebackQueue=j.value;renderWriteback();
       }catch(err){btn.disabled=false;btn.textContent="重试";}};

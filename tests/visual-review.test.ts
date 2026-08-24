@@ -341,7 +341,7 @@ test('delivery output refuses a symlinked allowed-directory ancestor', async () 
 interface HttpResult { status: number; headers: Record<string, string>; body: Buffer }
 async function http(method: string, url: string, body?: unknown): Promise<HttpResult> {
   const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]) as unknown as IncomingMessage
-  Object.assign(req, { method, url })
+  Object.assign(req, { method, url, headers: method === 'POST' ? { 'content-type': 'application/json' } : {} })
   const result: HttpResult = { status: 0, headers: {}, body: Buffer.alloc(0) }
   const res = {
     writeHead(status: number, headers: Record<string, string>) { result.status = status; result.headers = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value)])) },

@@ -166,7 +166,8 @@ if (fixtureRoot) {
     }],
   }
 }
-const data = JSON.stringify(workbenchData).replace(/</g, '\\u003c')
+const { escapeJsonForScript } = await import('../src/server/security.ts')
+const data = escapeJsonForScript(workbenchData)
 function renderTemplate(templatePath, target) {
   const template = readFileSync(fileURLToPath(new URL(templatePath, import.meta.url)), 'utf8')
   const html = template.replace('<script>', '<script>window._embeddedDailyData = ' + data + ';</script>\n<script>')

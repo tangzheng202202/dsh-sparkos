@@ -395,7 +395,7 @@ interface MockResponse {
 async function http(method: string, url: string, body?: unknown): Promise<MockResponse> {
   const payload = body === undefined ? [] : [Buffer.from(JSON.stringify(body))]
   const req = Readable.from(payload) as unknown as IncomingMessage
-  Object.assign(req, { method, url })
+  Object.assign(req, { method, url, headers: method === 'POST' ? { 'content-type': 'application/json' } : {} })
   const result: MockResponse = { status: 0, headers: {}, body: Buffer.alloc(0) }
   const res = {
     writeHead(status: number, headers: Record<string, string>) { result.status = status; result.headers = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value)])) },

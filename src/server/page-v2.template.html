@@ -461,6 +461,11 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
 'use strict';
 var $ = function(id){return document.getElementById(id);};
 var esc = function(s){return String(s==null?'':s).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;').split('"').join('&quot;').split("'").join('&#39;');};
+// 动态外链白名单：只允许 http/https 绝对地址；历史脏数据降级为普通转义文本（与服务端 isSafeExternalUrl 同一规则）
+function isSafeUrl(u){if(typeof u!=="string")return false;if(u===""||u.length>2048)return false;if(u!==u.trim())return false;if(/[\u0000-\u001f\u007f]/.test(u))return false;if(!/^https?:\/\//i.test(u))return false;try{var p=new URL(u);return p.protocol==="http:"||p.protocol==="https:";}catch(e){return false;}}
+function safeExtLink(u){return isSafeUrl(u)?"<a href=\""+esc(u)+"\" target=\"_blank\" rel=\"noopener noreferrer\">"+esc(u)+"</a>":"<span class=\"mono\">"+esc(u)+"</span>";}
+// 写端点请求包装：mutation POST 统一 application/json + CSRF token
+function apiFetch(url,opts){opts=opts||{};opts.headers=Object.assign({"content-type":"application/json","x-sparkos-csrf":(window._sparkosCsrf||"")},opts.headers||{});return fetch(url,opts);}
 function fmtISO(iso){if(!iso)return '—';var d=new Date(iso);if(isNaN(d.getTime()))return esc(iso);var p=function(n){return (n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}
 function safeDecode(v){try{return decodeURIComponent(v);}catch(e){return v;}}
 var ICONS={
@@ -531,13 +536,14 @@ function boot(){
   // 无内嵌数据：显示加载态并经 GET /sparkos/data 兜底（只读）
   var view=$('view');
   view.innerHTML='<div class="empty">'+icon('clock')+'<div>正在加载工作台数据…</div></div>';
-  fetch('/sparkos/data').then(function(r){return r.json();}).then(function(j){
+  apiFetch('/sparkos/data').then(function(r){return r.json();}).then(function(j){
     if(j&&j.ok&&j.value){D=j.value;renderRouter();}
     else{renderFatal('数据端点返回异常：'+(j&&j.error&&j.error.message?j.error.message:'未知错误'));}
   }).catch(function(e){renderFatal('无法读取 /sparkos/data：'+String(e&&e.message||e));});
 }
 function renderFatal(msg){
-  $('view').innerHTML='<div class="card"><div class="card-head"><div class="card-title">'+icon('alert')+'数据不可用</div></div><div class="empty">'+icon('alert')+'<div>'+esc(msg||'工作台数据缺失')+'</div><div class="empty-note">请刷新页面重试；若持续失败，请检查插件服务是否正常，或打开原版工作台 <a href="/sparkos/app">/sparkos/app</a> 对照。</div><div style="margin-top:12px"><button type="button" class="btn btn-ghost" onclick="location.reload()">重新加载</button></div></div></div>';
+  $('view').innerHTML='<div class="card"><div class="card-head"><div class="card-title">'+icon('alert')+'数据不可用</div></div><div class="empty">'+icon('alert')+'<div>'+esc(msg||'工作台数据缺失')+'</div><div class="empty-note">请刷新页面重试；若持续失败，请检查插件服务是否正常，或打开原版工作台 <a href="/sparkos/app">/sparkos/app</a> 对照。</div><div style="margin-top:12px"><button type="button" class="btn btn-ghost" data-reload-page>重新加载</button></div></div></div>';
+  var rb=$('view').querySelector('[data-reload-page]');if(rb){rb.onclick=function(){location.reload();};}
 }
 
 /* ============ router ============ */
@@ -774,7 +780,7 @@ function openIntelDrawer(topicKey){
       if(j.uncertainties&&j.uncertainties.length){h.push('<h4>不确定性</h4><ul>'+j.uncertainties.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
     }
     if(cluster.risks&&cluster.risks.length){h.push('<h4 style="color:var(--red)">风险</h4><ul>'+cluster.risks.map(function(x){return '<li style="color:var(--red)">'+esc(x)+'</li>';}).join('')+'</ul>');}
-    if(cluster.evidenceUrls&&cluster.evidenceUrls.length){h.push('<h4>来源</h4><div class="evidence-list">'+cluster.evidenceUrls.map(function(u){return '<div>'+icon('ext')+' <a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(u)+'</a></div>';}).join('')+'</div>');}
+    if(cluster.evidenceUrls&&cluster.evidenceUrls.length){h.push('<h4>来源</h4><div class="evidence-list">'+cluster.evidenceUrls.map(function(u){return '<div>'+icon('ext')+' '+safeExtLink(u)+'</div>';}).join('')+'</div>');}
     if(cluster.angleSuggestions&&cluster.angleSuggestions.length){h.push('<h4>选题角度</h4><div class="kv">'+esc(cluster.angleSuggestions.join('；'))+'</div>');}
     if((cluster.evidence||[]).length){h.push('<h4>证据明细</h4><ul>'+cluster.evidence.map(function(e){return '<li>'+esc(e.claim||'')+' <span class="mono">'+esc(e.url)+'</span> <span class="badge '+(e.verified?'badge-green':'badge-gray')+'">'+(e.verified?'已核实':'未核实')+'</span>'+(e.contradicts?' <span class="badge badge-red">矛盾</span>':'')+'</li>';}).join('')+'</ul>');}
     h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body"><div>clusterId：<span class="mono">'+esc(cluster.clusterId)+'</span></div><div>topicKey：<span class="mono">'+esc(cluster.topicKey||'—')+'</span></div><div>日期：'+esc(cluster.date)+' · 事件：'+esc((cluster.eventKeys||[]).join(', ')||'—')+' · 模型：'+esc(cluster.model||'—')+'</div></div></details>');
@@ -799,7 +805,7 @@ function intelClusterBody(c){
     if(j.editorialView){h.push('<h4>编辑视角</h4><div class="kv">'+esc(j.editorialView)+'</div>');}
   }
   if(c.risks&&c.risks.length){h.push('<h4 style="color:var(--red)">风险</h4><ul>'+c.risks.map(function(x){return '<li style="color:var(--red)">'+esc(x)+'</li>';}).join('')+'</ul>');}
-  if(c.evidenceUrls&&c.evidenceUrls.length){h.push('<h4>来源</h4><div class="evidence-list">'+c.evidenceUrls.map(function(u){return '<div>'+icon('ext')+' <a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(u)+'</a></div>';}).join('')+'</div>');}
+  if(c.evidenceUrls&&c.evidenceUrls.length){h.push('<h4>来源</h4><div class="evidence-list">'+c.evidenceUrls.map(function(u){return '<div>'+icon('ext')+' '+safeExtLink(u)+'</div>';}).join('')+'</div>');}
   if(c.angleSuggestions&&c.angleSuggestions.length){h.push('<h4>选题角度</h4><div class="kv">'+esc(c.angleSuggestions.join('；'))+'</div>');}
   h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body"><div>clusterId：<span class="mono">'+esc(c.clusterId)+'</span> <button type="button" class="copy-btn" data-copy="'+esc(c.clusterId)+'">复制</button></div><div>topicKey：<span class="mono">'+esc(c.topicKey||'—')+'</span></div><div>日期：'+esc(c.date)+' · 模型：'+esc(c.model||'—')+'</div></div></details>');
   return h.join('');
@@ -1382,7 +1388,7 @@ function showToast(msg,type){
   toastTimer=setTimeout(function(){t.classList.remove('show');},2600);
 }
 async function refreshVisual(packageId){
-  var resp=await fetch('/sparkos/visual/status?packageId='+encodeURIComponent(packageId));
+  var resp=await apiFetch('/sparkos/visual/status?packageId='+encodeURIComponent(packageId));
   var json=await resp.json();
   if(!resp.ok||!json||!json.ok)throw new Error('刷新视觉状态失败');
   var fresh=json.value.batches||[];
@@ -1392,7 +1398,7 @@ async function refreshVisual(packageId){
 }
 /* M6.3：草稿决策/修订后只读重读工作台数据（GET /sparkos/data，不产生 POST）。 */
 async function refreshWorkbenchData(){
-  var resp=await fetch('/sparkos/data');
+  var resp=await apiFetch('/sparkos/data');
   var json=await resp.json();
   if(!resp.ok||!json||!json.ok)throw new Error('刷新工作台数据失败');
   D=json.value;
@@ -1480,7 +1486,7 @@ async function submitVisualReview(){
   var errEl=$('reviewDialogErr');if(errEl)errEl.classList.remove('show');
   setReviewBusy(true,'提交中…');
   try{
-    var resp=await fetch('/sparkos/visual/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({attemptId:d.attemptId,decision:d.decision,note:note})});
+    var resp=await apiFetch('/sparkos/visual/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({attemptId:d.attemptId,decision:d.decision,note:note})});
     var json=null;try{json=await resp.json();}catch(e){json=null;}
     if(!resp.ok||!json||!json.ok){
       var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
@@ -1596,7 +1602,7 @@ async function submitVisualRetry(){
   try{
     var payload={packageId:b.packageId,taskId:t.id,currentAttemptId:a.id,assetId:t.assetId,idempotencyKey:'retry:'+t.id+':'+a.id};
     if(sup)payload.supplementaryInstruction=sup;
-    var resp=await fetch('/sparkos/visual/retry',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    var resp=await apiFetch('/sparkos/visual/retry',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     var json=null;try{json=await resp.json();}catch(e){json=null;}
     if(!resp.ok||!json||!json.ok){
       var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
@@ -1688,7 +1694,7 @@ async function submitDraftDecision(){
   var errEl=$('draftDecisionErr');if(errEl)errEl.classList.remove('show');
   setDraftDecisionBusy(true,'提交中…');
   try{
-    var resp=await fetch('/sparkos/creation/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId,decision:d.decision,note:note})});
+    var resp=await apiFetch('/sparkos/creation/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId,decision:d.decision,note:note})});
     var json=null;try{json=await resp.json();}catch(e){json=null;}
     if(!resp.ok||!json||!json.ok){
       var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
@@ -1771,7 +1777,7 @@ async function submitDraftRevise(){
   var errEl=$('draftReviseErr');if(errEl)errEl.classList.remove('show');
   setDraftReviseBusy(true,'正在创建修订版');
   try{
-    var resp=await fetch('/sparkos/creation/revise',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId})});
+    var resp=await apiFetch('/sparkos/creation/revise',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId})});
     var json=null;try{json=await resp.json();}catch(e){json=null;}
     if(!resp.ok||!json||!json.ok){
       var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
@@ -1868,7 +1874,7 @@ async function submitDelivery(){
   var errEl=$('deliveryDialogErr');if(errEl)errEl.classList.remove('show');
   setDeliveryBusy(true,'正在生成交付包');
   try{
-    var resp=await fetch('/sparkos/visual/delivery',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId,mode:d.mode})});
+    var resp=await apiFetch('/sparkos/visual/delivery',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId,mode:d.mode})});
     var json=null;try{json=await resp.json();}catch(e){json=null;}
     if(!resp.ok||!json||!json.ok){
       var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
@@ -1960,7 +1966,7 @@ async function submitPublish(){
   var errEl=$('publishDialogErr');if(errEl)errEl.classList.remove('show');
   setPublishBusy(true,'正在创建发布任务');
   try{
-    var resp=await fetch('/sparkos/publish',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId})});
+    var resp=await apiFetch('/sparkos/publish',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId})});
     var json=null;try{json=await resp.json();}catch(e){json=null;}
     if(!resp.ok||!json||!json.ok){
       var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));

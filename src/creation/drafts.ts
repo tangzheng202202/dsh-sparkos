@@ -12,6 +12,7 @@ import { editorialCardById } from '../editorial/planner.ts'
 import type { EditorialCard } from '../editorial/planner.ts'
 import { VAULT_ROOT } from '../vault.ts'
 import { createJob, getJob, startJob, transitionJob } from '../storage/jobs.ts'
+import { isSafeExternalUrl } from '../server/security.ts'
 
 export const CREATION_CONTRACT_VERSION = 2
 export type DraftPackageStatus = 'awaiting_generation' | 'validation_failed' | 'waiting_approval' | 'approved' | 'rejected'
@@ -330,7 +331,10 @@ export function validateDraftSubmission(submission: DraftSubmission, card: Edito
     if (claim.kind !== 'fact' && claim.kind !== 'inference' && claim.kind !== 'opinion') errors.push(`factClaims[${index}].kind 不合法`)
     const urls = Array.isArray(claim.evidenceUrls) ? claim.evidenceUrls : []
     if (claim.kind === 'fact' && urls.length === 0) errors.push(`factClaims[${index}] 事实缺少证据 URL`)
-    for (const url of urls) if (!knownEvidence.has(url)) errors.push(`factClaims[${index}] 使用了选题卡之外的证据：${url}`)
+    for (const url of urls) {
+      if (!isSafeExternalUrl(url)) errors.push(`factClaims[${index}] 证据 URL 必须是 http/https 绝对地址：${url}`)
+      else if (!knownEvidence.has(url)) errors.push(`factClaims[${index}] 使用了选题卡之外的证据：${url}`)
+    }
   }
   const variants = submission.variants
   const rawWechatBlocks = Array.isArray(variants?.wechat?.blocks) ? variants.wechat.blocks : []

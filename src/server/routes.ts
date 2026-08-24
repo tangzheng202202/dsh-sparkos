@@ -30,6 +30,7 @@ import { listRuntimeDrafts, listVaultDrafts, readDraft } from '../daily.ts'
 import { openFactoryDatabase } from '../storage/database.ts'
 import { queueVisualBatch, readVisualAsset, visualStatus, VisualPipelineError } from '../visual/service.ts'
 import { createPublishTask, decideVisualAttempt, requestVisualRetry, retryVisualTask } from '../visual/review.ts'
+import { checkMutationRequest, cspWithNonce, escapeJsonForScript, issueCsrfToken, newCspNonce } from './security.ts'
 import { createVisualDelivery, listVisualDeliveries, readVisualDeliveryFile, readVisualDeliveryZip } from '../visual/delivery.ts'
 
 
@@ -56,6 +57,27 @@ function respondVisualError(res: import('node:http').ServerResponse, error: unkn
   respondJson(res, status, { ok: false, error: { code, message } })
 }
 
+/**
+ * 工作台页面渲染（V1/V2 共用）：唯一安全序列化 escapeJsonForScript + 每请求 CSP nonce
+ * + 内嵌 CSRF token（同源页面可读，跨站页面不可读取）。历史脏 URL 由前端降级为普通文本。
+ */
+function renderWorkbenchPage(res: import('node:http').ServerResponse, template: string): void {
+  const nonce = newCspNonce()
+  const csrfToken = issueCsrfToken()
+  const data = escapeJsonForScript(buildWorkbenchData())
+  const scriptOpen = '<script nonce="' + nonce + '">'
+  const html = template
+    .replaceAll('<script>', scriptOpen)
+    .replace(scriptOpen, scriptOpen + 'window._embeddedDailyData = ' + data + ';window._sparkosCsrf = "' + csrfToken + '";</script>\n' + scriptOpen)
+  res.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-security-policy': cspWithNonce(nonce),
+    'x-content-type-options': 'nosniff',
+    'cache-control': 'private, no-store',
+  })
+  res.end(html)
+}
+
 /** 请求体上限 256KB（防内存滥用）。 */
 const MAX_BODY_BYTES = 256 * 1024
 
@@ -78,25 +100,24 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
   const url = new URL(req.url ?? '/', 'http://dsh-sparkos.local')
   const path = url.pathname.replace(/\/+$/, '') || '/sparkos'
   try {
+    // 写端点统一安全边界：全部 mutation POST 必须过 content-type / 同源 / CSRF 三重守卫
+    const rejection = checkMutationRequest(req)
+    if (rejection !== null) {
+      respondJson(res, rejection.status, { ok: false, error: { code: rejection.code, message: rejection.message } })
+      return
+    }
+    if (req.method === 'GET' && path === '/sparkos/csrf') {
+      // CSRF token 签发端点（同源页面可用；响应不可缓存）
+      respondJson(res, 200, { ok: true, value: { token: issueCsrfToken() } })
+      return
+    }
     if (req.method === 'GET' && (path === '/sparkos' || path === '/sparkos/app')) {
-      const data = JSON.stringify(buildWorkbenchData()).replace(/</g, '\\u003c')
-      const html = loadTemplate().replace(
-        '<script>',
-        `<script>window._embeddedDailyData = ${data};</script>\n<script>`,
-      )
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      res.end(html)
+      renderWorkbenchPage(res, loadTemplate())
       return
     }
     if (req.method === 'GET' && path === '/sparkos/app-v2') {
-      // V2 只读预览版：仅 GET；同源数据注入；不注册任何写路由
-      const data = JSON.stringify(buildWorkbenchData()).replace(/</g, '\u003c')
-      const html = loadV2Template().replace(
-        '<script>',
-        `<script>window._embeddedDailyData = ${data};</script>\n<script>`,
-      )
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      res.end(html)
+      // V2 只读预览版：仅 GET；同一安全序列化与 CSP 注入范式；不注册任何写路由
+      renderWorkbenchPage(res, loadV2Template())
       return
     }
     if (req.method === 'GET' && path === '/sparkos/data') {

@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import path from 'node:path'
 import type { IntelConfig } from './ingest.ts'
 import type { FusionItem } from './fusion.ts'
+import { isSafeExternalUrl } from '../server/security.ts'
 
 export type Level = 'low' | 'medium' | 'high'
 
@@ -128,6 +129,19 @@ export function validateCluster(c: Partial<IntelCluster>): string[] {
   }
   if (c.topicKey !== undefined && !/^t-[a-z0-9][a-z0-9._-]{2,80}$/i.test(c.topicKey)) errs.push('topicKey 必须形如 t-<稳定主题键>')
   if (c.evidence !== undefined && !Array.isArray(c.evidence)) errs.push('evidence 必须是数组')
+  // P0：动态外链只允许 http/https 绝对地址（evidenceUrls 与 evidence[].url 双入口）
+  if (Array.isArray(c.evidenceUrls)) {
+    for (const [index, url] of c.evidenceUrls.entries()) {
+      if (!isSafeExternalUrl(url)) errs.push(`evidenceUrls[${index}] 必须是 http/https 绝对地址`)
+    }
+  }
+  if (Array.isArray(c.evidence)) {
+    for (const [index, item] of c.evidence.entries()) {
+      if (item !== null && typeof item === 'object' && 'url' in item && !isSafeExternalUrl((item as { url?: unknown }).url)) {
+        errs.push(`evidence[${index}].url 必须是 http/https 绝对地址`)
+      }
+    }
+  }
   for (const k of ['sourceAuthorityScore', 'audienceFitScore'] as const) {
     if (c[k] !== undefined && (typeof c[k] !== 'number' || c[k]! < 0 || c[k]! > 100)) errs.push(k + ' 必须是 0-100')
   }

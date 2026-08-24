@@ -42,6 +42,7 @@ function mockReq(method: string, url: string, body?: unknown) {
   return {
     method,
     url,
+    headers: method === 'POST' ? { 'content-type': 'application/json' } : {},
     [Symbol.asyncIterator]() {
       return {
         next: async () => (i < chunks.length ? { value: chunks[i++], done: false } : { value: undefined, done: true }),
