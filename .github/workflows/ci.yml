@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 22.13
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13'
+          cache: npm
+
+      - name: Install Chrome & Python for DOM checks
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable python3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit & integration tests
+        run: npm test
+
+      - name: Type check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: DOM checks (Chrome + Python)
+        run: npm run test:dom
+
+      - name: Dependency audit
+        run: npm audit

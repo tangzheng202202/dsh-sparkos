@@ -2,7 +2,11 @@
 """Chrome headless DOM 渲染检查（工作台升级后断言集：真实每日产物渲染）。"""
 import subprocess, sys, os
 
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+CHROME = os.environ.get("SPARKOS_TEST_CHROME") or (
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    if os.path.exists("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    else "/usr/bin/google-chrome"
+)
 src = sys.argv[1] if len(sys.argv) > 1 else "/tmp/sparkos-wb.html"
 if not os.path.exists(CHROME):
     print("SKIP: Chrome not found at " + CHROME)
@@ -61,7 +65,7 @@ check("lightbox same-tab original link", '在当前标签查看原图' in dom an
 check("lightbox single attempt validator", 'ATTEMPT_ID_RE' in dom and 'va-[a-f0-9]{20}' in dom and 'visualAssetUrl(attemptId)' in dom)
 check("lightbox anchors stopPropagation without preventDefault", 'closest("[data-lightbox-anchor]")' in dom)
 
-# ---- V2 只读预览版（render-page.mjs 顺带渲染到 /tmp/sparkos-wb-v2.html）----
+# ---- V2 受控工作台（render-page.mjs 顺带渲染到 /tmp/sparkos-wb-v2.html）----
 v2src = "/tmp/sparkos-wb-v2.html"
 if os.path.exists(v2src):
     dom2 = open(v2src, encoding="utf8").read()

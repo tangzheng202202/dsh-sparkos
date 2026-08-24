@@ -209,7 +209,7 @@ test('POST /sparkos/editorial/decision：选题卡人工批准落 SQLite 审批�
   assert.equal(bad.out.status, 400)
 })
 
-test('GET /sparkos/app-v2：V2 只读预览版（GET 200 · 内嵌数据 · 仅读无写端点 · POST 404）', async () => {
+test('GET /sparkos/app-v2：V2 受控工作台（GET 200 · 内嵌数据 · 仅含六类受控 POST · 无其它写端点）', async () => {
   const { handleSparkosHttp } = await import('../src/server/routes.ts')
   const res = mockRes()
   await handleSparkosHttp(mockReq('GET', '/sparkos/app-v2'), res.res)

@@ -1,17 +1,22 @@
 /**
- * SparkOS 工作台 V2 只读预览版回归测试：
- * - 真实 Chrome headless 交互（导航/hash/前进后退/抽屉/lightbox/筛选/只读零请求/XSS）
+ * SparkOS 工作台 V2 回归测试（受控写操作版，非只读）：
+ * - 真实 Chrome headless 交互（导航/hash/前进后退/抽屉/lightbox/筛选/初始零主动请求/XSS）
+ * - 页面包含六类受控 POST（视觉 decision/retry、草稿 decision/revise、delivery、publish 台账），
+ *   仅在人工确认对话框提交时发送（受控写交互另有 v2-retry/v2-creation/v2-delivery/v2-publish 套件覆盖）
  * - 四个视口尺寸（1440 / 1920 / 1024 / 390）无横向溢出、响应式折叠与首屏待办可见
  * 数据来自 render-page.mjs --v2 的隔离 fixture，不读取生产 VAULT。
  */
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+const CHROME = process.env.SPARKOS_TEST_CHROME
+  ?? (existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
+    ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    : '/usr/bin/google-chrome')
 
 interface InteractionResult {
   error?: string

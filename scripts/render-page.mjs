@@ -1,7 +1,7 @@
 /**
  * 渲染工作台 HTML 到 /tmp/sparkos-wb.html（无宿主也可跑 DOM 检查）。
  * 用法：node --experimental-strip-types scripts/render-page.mjs [out.html]
- *       node --experimental-strip-types scripts/render-page.mjs --v2 [out.html]  （V2 只读预览版）
+ *       node --experimental-strip-types scripts/render-page.mjs --v2 [out.html]  （V2 受控工作台）
  * 默认渲染 V1 时，会顺带把 V2 渲染到 /tmp/sparkos-wb-v2.html 供 DOM 检查。
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'

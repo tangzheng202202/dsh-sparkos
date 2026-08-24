@@ -11,15 +11,7 @@
     "esModuleInterop": true,
     "allowImportingTsExtensions": true,
     "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@deepseek-ai/cordis": ["../../cow/apps/dsh/vendor/cordis"],
-      "@deepseek-ai/dsh-tools": ["../../cow/apps/dsh/packages/core/tools"],
-      "@deepseek-ai/dsh-settings": ["../../cow/apps/dsh/packages/settings/settings"],
-      "@deepseek-ai/dsh-credentials": ["../../cow/apps/dsh/packages/credentials/credentials"],
-      "@deepseek-ai/dsh-attachment": ["../../cow/apps/dsh/packages/attachment/attachment"],
-      "@deepseek-ai/dsh-host-webserver": ["../../cow/apps/dsh/packages/host/webserver"]
-    }
+    "baseUrl": "."
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

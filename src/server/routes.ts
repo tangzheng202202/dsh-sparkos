@@ -1,7 +1,7 @@
 /**
  * 工作台 web 半：宿主 webServer 路由。
  * GET  /sparkos/            → 9 tab 工作台 HTML（_embeddedDailyData 注入范式）
- * GET  /sparkos/app-v2      → V2 只读预览版工作台（同一数据注入范式，仅 GET，不执行任何写操作）
+ * GET  /sparkos/app-v2      → V2 工作台（同一数据注入范式；页面含受控写操作：视觉 decision/retry、草稿 decision/revise、delivery、publish，均经人工确认 + CSRF）
  * GET  /sparkos/data        → 工作台数据 JSON（含 intel 报告）
  * GET  /sparkos/intel       → 情报指挥所数据端点（健康 + 最近 run + archive 计数）
  * POST /sparkos/intel/tick  → 手动触发一轮 ingest（不自动融合）
@@ -39,7 +39,7 @@ function loadTemplate(): string {
   return readFileSync(fileURLToPath(new URL('./page.template.html', import.meta.url)), 'utf8')
 }
 
-/** V2 只读预览版模板（同一注入范式）。 */
+/** V2 工作台模板（受控写操作版：含视觉/草稿/交付/发布台账的人工确认 POST）。 */
 function loadV2Template(): string {
   return readFileSync(fileURLToPath(new URL('./page-v2.template.html', import.meta.url)), 'utf8')
 }
@@ -116,7 +116,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'GET' && path === '/sparkos/app-v2') {
-      // V2 只读预览版：仅 GET；同一安全序列化与 CSP 注入范式；不注册任何写路由
+      // V2 工作台：GET 页面；同一安全序列化与 CSP 注入范式；页面内的受控 POST 走下方各写路由（人工确认 + CSRF）
       renderWorkbenchPage(res, loadV2Template())
       return
     }
