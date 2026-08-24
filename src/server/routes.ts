@@ -232,18 +232,20 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
         catch (error) { respondVisualError(res, error) } finally { db.close() }
         return
       }
-      const allowed = ['packageId', 'taskId', 'currentAttemptId', 'assetId', 'idempotencyKey', 'supplementaryInstruction']
+      const allowed = ['packageId', 'taskId', 'currentAttemptId', 'assetId', 'idempotencyKey', 'supplementaryInstruction', 'purpose', 'humanConfirmation']
       if (keys.some((key) => !allowed.includes(key))
         || typeof body.packageId !== 'string' || typeof body.taskId !== 'string'
         || typeof body.currentAttemptId !== 'string' || typeof body.assetId !== 'string'
         || typeof body.idempotencyKey !== 'string'
-        || (body.supplementaryInstruction !== undefined && typeof body.supplementaryInstruction !== 'string')) {
-        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 packageId、taskId、currentAttemptId、assetId、idempotencyKey 和可选 supplementaryInstruction' } })
+        || (body.supplementaryInstruction !== undefined && typeof body.supplementaryInstruction !== 'string')
+        || (body.purpose !== undefined && body.purpose !== 'reject_rerun' && body.purpose !== 'replace_stub_with_production')
+        || (body.humanConfirmation !== undefined && typeof body.humanConfirmation !== 'string')) {
+        respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许 packageId、taskId、currentAttemptId、assetId、idempotencyKey、可选 supplementaryInstruction/purpose/humanConfirmation' } })
         return
       }
       const db = openFactoryDatabase()
       try {
-        respondJson(res, 200, { ok: true, value: requestVisualRetry(db, body as { packageId: string; taskId: string; currentAttemptId: string; assetId: string; idempotencyKey: string; supplementaryInstruction?: string }) })
+        respondJson(res, 200, { ok: true, value: requestVisualRetry(db, body as { packageId: string; taskId: string; currentAttemptId: string; assetId: string; idempotencyKey: string; supplementaryInstruction?: string; purpose?: 'reject_rerun' | 'replace_stub_with_production'; humanConfirmation?: string }) })
       } catch (error) { respondVisualError(res, error) } finally { db.close() }
       return
     }

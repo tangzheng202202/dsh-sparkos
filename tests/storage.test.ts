@@ -17,10 +17,10 @@ test('SQLite migration is idempotent and creates the factory schema', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'sparkos-db-'))
   const file = path.join(root, 'sparkos.db')
   const first = openFactoryDatabase({ path: file })
-  assert.equal(databaseHealth(first, file).schemaVersion, 6)
+  assert.equal(databaseHealth(first, file).schemaVersion, 7)
   first.close()
   const second = openFactoryDatabase({ path: file })
-  assert.equal(databaseHealth(second, file).schemaVersion, 6)
+  assert.equal(databaseHealth(second, file).schemaVersion, 7)
   const tables = second.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
   assert.ok(tables.some((row) => row.name === 'workflow_jobs'))
   assert.ok(tables.some((row) => row.name === 'topic_rank_snapshots'))

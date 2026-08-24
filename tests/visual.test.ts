@@ -177,7 +177,7 @@ test('schema v3 through v5 migration is additive, idempotent, and preserves v1/v
   legacy.close()
   for (let pass = 0; pass < 2; pass += 1) {
     const db = openFactoryDatabase({ path: file })
-    assert.equal(databaseHealth(db, file).schemaVersion, 6)
+    assert.equal(databaseHealth(db, file).schemaVersion, 7)
     assert.deepEqual((db.prepare('SELECT id, status FROM draft_packages ORDER BY id').all() as Array<{ id: string; status: string }>).map((row) => ({ ...row })), [
       { id: 'dp-1111111111111111', status: 'rejected' },
       { id: 'dp-2222222222222222', status: 'approved' },

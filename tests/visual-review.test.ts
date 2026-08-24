@@ -175,7 +175,7 @@ test('schema v4 to v6 is additive and idempotent without changing five existing 
   raw.close()
   for (let pass = 0; pass < 2; pass += 1) {
     const migrated = openFactoryDatabase({ path: file })
-    assert.equal(databaseHealth(migrated, file).schemaVersion, 6)
+    assert.equal(databaseHealth(migrated, file).schemaVersion, 7)
     assert.deepEqual(migrated.prepare('SELECT id, task_id, attempt_no, status, imported_sha256 FROM visual_asset_attempts ORDER BY id').all(), before)
     assert.equal(Number((migrated.prepare('SELECT COUNT(*) AS count FROM visual_delivery_artifacts').get() as { count: number }).count), 0)
     assert.ok(migrated.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='visual_retry_requests'").get(), 'v6 visual_retry_requests 表已创建')
@@ -188,7 +188,7 @@ test('only the current waiting attempt can be reviewed; decisions are validated,
   const first = claimVisualTask(item.db, { packageId: item.package.id }, new Date('2026-08-23T12:00:00Z'))!
   failVisualTask(item.db, { taskId: first.task.id, attemptId: first.attempt.id, leaseToken: first.leaseToken, code: 'retry', message: 'first failed', retryable: true }, new Date('2026-08-23T12:00:10Z'))
   const second = claimVisualTask(item.db, { packageId: item.package.id }, new Date('2026-08-23T12:01:00Z'))!
-  const submitted = await submitClaim(item.db, second, 'stub', 1)
+  const submitted = await submitClaim(item.db, second, 'openai', 1)
   assert.throws(() => decideVisualAttempt(item.db, { attemptId: first.attempt.id, decision: 'approved' }), visualError('not-current-attempt'))
   assert.throws(() => decideVisualAttempt(item.db, { attemptId: second.attempt.id, decision: 'rejected', note: '  ' }), visualError('review-note-required'))
   const note = '<img src=x onerror=reviewAttack()> 请调整构图'
@@ -200,6 +200,10 @@ test('only the current waiting attempt can be reviewed; decisions are validated,
   const old = { sha: sha256(readFileSync(oldFile)), mtime: String(statSync(oldFile, { bigint: true }).mtimeNs) }
   const retry = retryVisualTask(item.db, second.task.id)
   assert.equal(retry.previousNote, note)
+  // 统一重试：legacy 路径同样创建 visual_retry_requests 审计记录
+  const audit = item.db.prepare('SELECT purpose, idempotency_key FROM visual_retry_requests WHERE task_id=?').get(second.task.id) as { purpose: string; idempotency_key: string }
+  assert.equal(audit.purpose, 'reject_rerun')
+  assert.equal(audit.idempotency_key, 'auto:' + second.task.id + ':' + second.attempt.id)
   const third = claimVisualTask(item.db, { packageId: item.package.id }, new Date('2026-08-23T12:02:00Z'))!
   assert.equal(third.attempt.attemptNo, 3)
   assert.equal(third.previousNote, note)
@@ -360,7 +364,8 @@ test('HTTP review/delivery endpoints persist state and page source contains esca
   assert.equal((await http('POST', '/sparkos/visual/decision', { attemptId: first.id, decision: 'rejected' })).status, 400)
   assert.equal((await http('POST', '/sparkos/visual/decision', { attemptId: first.id, decision: 'rejected', note: '<script>reviewXss()</script>' })).status, 200)
   const retry = await http('POST', '/sparkos/visual/retry', { taskId: status.tasks[0].id })
-  assert.equal(retry.status, 200)
+  assert.equal(retry.status, 409, 'stub 测试图不得经 legacy 路径重试（统一资格门）')
+  assert.match(retry.body.toString('utf8'), /stub-cannot-retry/)
   const db = openFactoryDatabase()
   const stored = db.prepare("SELECT decision, note FROM approvals WHERE subject_kind='visual_attempt' AND subject_id=?").get(first.id) as { decision: string; note: string }
   assert.equal(stored.decision, 'rejected'); assert.equal(stored.note, '<script>reviewXss()</script>')

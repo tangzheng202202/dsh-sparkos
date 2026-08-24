@@ -860,6 +860,15 @@ export async function submitVisualAttachment(
     if (existingAttempt.status !== 'waiting_visual_approval') throw new VisualPipelineError('invalid-state', 'attempt 已有附件但状态不完整', 409)
     return submissionResult(existingTask, existingAttempt)
   }
+  // 统一重试的正式替换路径：purpose=replace_stub_with_production 的重试要求新提交
+  // 必须来自真实 Provider；仍是 stub 则直接拒绝（生产闸门同样继续拒绝 stub）。
+  if (input.provider === 'stub') {
+    const { latestRetryRequestForTask } = await import('./review.ts')
+    const retryRequest = latestRetryRequestForTask(db, input.taskId)
+    if (retryRequest !== null && (retryRequest as { purpose?: string }).purpose === 'replace_stub_with_production') {
+      throw new VisualPipelineError('replace-stub-requires-production', '该任务按人工确认进入 replace_stub_with_production 重试，新提交不得再使用 stub 测试图', 422)
+    }
+  }
   const now = options.now ?? new Date()
   activeLease(db, input.taskId, input.attemptId, input.leaseToken, now)
   if (attachments === undefined) throw new VisualPipelineError('attachment-service-unavailable', 'DSH attachments 服务不可用，无法回读视觉附件', 503)

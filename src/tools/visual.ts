@@ -174,7 +174,7 @@ export function registerVisualTools(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'sparkos_visual_retry',
-    description: '仅将已被人工驳回且带审核意见的视觉任务转入 retry。不能批准图片；旧图片、attempt 和 approval 全部保留。',
+    description: '仅将已被人工驳回且带审核意见的视觉任务转入 retry（与 HTTP 受控重试同一后端状态机：资格门、visual_retry_requests 审计、幂等键、并发冲突保护）。不能批准图片；旧图片、attempt 和 approval 全部保留；stub 测试图需人工走 replace_stub_with_production 流程。',
     parameters: {
       taskId: { type: 'string', required: true, description: '已被人工驳回的视觉任务 ID（vt-...）' },
     },

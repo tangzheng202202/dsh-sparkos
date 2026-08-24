@@ -138,7 +138,7 @@ export function transitionJob(db: DatabaseSync, id: string, to: JobStatus, opts:
   const at = (opts.now ?? new Date()).toISOString()
   db.exec('BEGIN IMMEDIATE')
   try {
-    db.prepare(`
+    const updated = db.prepare(`
       UPDATE workflow_jobs
       SET status = ?, output_json = ?, error = ?, worker_id = ?, lease_expires_at = ?, updated_at = ?
       WHERE id = ? AND status = ?
@@ -152,6 +152,8 @@ export function transitionJob(db: DatabaseSync, id: string, to: JobStatus, opts:
       id,
       current.status,
     )
+    // 条件 UPDATE 必须检查 changes：并发状态下 changes=0 时不得写入虚假 event。
+    if (Number(updated.changes) !== 1) throw new Error(`job transition conflict: ${id} ${current.status} -> ${to}`)
     addEvent(db, id, current.status, to, opts.note ?? null, at)
     db.exec('COMMIT')
   } catch (error) {
@@ -165,9 +167,10 @@ export function claimNextJob(db: DatabaseSync, workerId: string, now = new Date(
   const nowIso = now.toISOString()
   db.exec('BEGIN IMMEDIATE')
   try {
+    // 发布台账（kind='publish'，含历史 job）绝不进入可执行队列；Worker 只领取真实工作流任务。
     const row = db.prepare(`
       SELECT * FROM workflow_jobs
-      WHERE status = 'queued' AND run_after <= ? AND attempts < max_attempts
+      WHERE status = 'queued' AND run_after <= ? AND attempts < max_attempts AND kind != 'publish'
       ORDER BY priority DESC, created_at ASC
       LIMIT 1
     `).get(nowIso) as JobRow | undefined
@@ -176,11 +179,12 @@ export function claimNextJob(db: DatabaseSync, workerId: string, now = new Date(
       return null
     }
     const lease = new Date(now.getTime() + Math.max(1, leaseSeconds) * 1000).toISOString()
-    db.prepare(`
+    const updated = db.prepare(`
       UPDATE workflow_jobs
       SET status = 'running', attempts = attempts + 1, worker_id = ?, lease_expires_at = ?, updated_at = ?
       WHERE id = ? AND status = 'queued'
     `).run(workerId, lease, nowIso, row.id)
+    if (Number(updated.changes) !== 1) throw new Error('job claim conflict: ' + row.id)
     addEvent(db, row.id, 'queued', 'running', 'claimed by ' + workerId, nowIso)
     db.exec('COMMIT')
     return getJob(db, row.id)
@@ -199,11 +203,12 @@ export function startJob(db: DatabaseSync, id: string, workerId: string, now = n
     const row = db.prepare("SELECT * FROM workflow_jobs WHERE id = ? AND status = 'queued'").get(id) as JobRow | undefined
     if (!row) throw new Error('queued job not found: ' + id)
     if (row.attempts >= row.max_attempts) throw new Error('job attempts exhausted: ' + id)
-    db.prepare(`
+    const updated = db.prepare(`
       UPDATE workflow_jobs
       SET status = 'running', attempts = attempts + 1, worker_id = ?, lease_expires_at = ?, updated_at = ?
       WHERE id = ? AND status = 'queued'
     `).run(workerId, lease, nowIso, id)
+    if (Number(updated.changes) !== 1) throw new Error('job start conflict: ' + id)
     addEvent(db, id, 'queued', 'running', 'started by ' + workerId, nowIso)
     db.exec('COMMIT')
   } catch (error) {

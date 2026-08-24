@@ -11,7 +11,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { envPath, VAULT_ROOT } from '../vault.ts'
 
-export const FACTORY_SCHEMA_VERSION = 6
+export const FACTORY_SCHEMA_VERSION = 7
 
 export function defaultFactoryDbPath(): string {
   return envPath('SPARKOS_DB_PATH', path.join(VAULT_ROOT, 'data', 'sparkos.db'))
@@ -368,6 +368,31 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
       ) STRICT;
       CREATE INDEX IF NOT EXISTS idx_visual_retry_requests_task
         ON visual_retry_requests(task_id, created_at DESC);
+    `,
+  },
+  {
+    version: 7,
+    sql: `
+      -- 语义收口（additive）：
+      -- 1) visual_retry_requests 增加 purpose / human_note：
+      --    reject_rerun（默认，按人工驳回意见重试）
+      --    replace_stub_with_production（人工确认把已驳回 stub 测试图替换为真实 Provider 图）
+      -- 2) publication_intents：发布台账专用表。发布记录绝不再进入 workflow_jobs 可执行队列；
+      --    历史 kind='publish' job 仅保留审计。UNIQUE(package_id) 保持同包幂等。
+      ALTER TABLE visual_retry_requests ADD COLUMN purpose TEXT NOT NULL DEFAULT 'reject_rerun';
+      ALTER TABLE visual_retry_requests ADD COLUMN human_note TEXT;
+
+      CREATE TABLE IF NOT EXISTS publication_intents (
+        id TEXT PRIMARY KEY,
+        package_id TEXT NOT NULL REFERENCES draft_packages(id),
+        readiness_json TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(package_id)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_publication_intents_package
+        ON publication_intents(package_id, created_at DESC);
     `,
   },
 ]

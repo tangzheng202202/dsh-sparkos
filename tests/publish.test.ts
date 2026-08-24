@@ -137,28 +137,30 @@ test('M6.6: 就绪包创建 kind=publish 台账 job，绝不实际发布；幂�
   await generateAll(item.db, pkg, 'openai')
   approveAll(item.db, pkg)
   createVisualDelivery(item.db, { packageId: pkg, mode: 'production' }, new Date('2026-08-23T11:00:00Z'))
+  // 语义收口：发布记录只进 publication_intents 台账，绝不创建可执行 workflow job
   const beforePublishJobs = Number(item.db.prepare("SELECT COUNT(*) AS count FROM workflow_jobs WHERE kind='publish'").get()!.count)
+  const beforeAllJobs = Number(item.db.prepare('SELECT COUNT(*) AS count FROM workflow_jobs').get()!.count)
   const result = createPublishTask(item.db, pkg, new Date('2026-08-23T12:00:00Z'))
   assert.equal(result.created, true)
-  assert.equal(result.status, 'queued')
+  assert.equal(result.status, 'recorded')
   assert.equal(result.readyForPublication, true)
-  assert.equal(Number(item.db.prepare("SELECT COUNT(*) AS count FROM workflow_jobs WHERE kind='publish'").get()!.count), beforePublishJobs + 1)
-  const job = item.db.prepare('SELECT kind, status, idempotency_key, input_json FROM workflow_jobs WHERE id=?').get(result.jobId) as { kind: string; status: string; idempotency_key: string | null; input_json: string }
-  assert.equal(job.kind, 'publish')
-  assert.equal(job.status, 'queued')
-  assert.equal(job.idempotency_key, 'publish:' + pkg)
-  assert.deepEqual(JSON.parse(job.input_json), { packageId: pkg })
-  // 幂等：同包重复请求返回同一任务
+  assert.equal(Number(item.db.prepare("SELECT COUNT(*) AS count FROM workflow_jobs WHERE kind='publish'").get()!.count), beforePublishJobs, '不得创建新的 publish workflow job')
+  assert.equal(Number(item.db.prepare('SELECT COUNT(*) AS count FROM workflow_jobs').get()!.count), beforeAllJobs, '不得创建任何 workflow job')
+  const intent = item.db.prepare('SELECT id, package_id FROM publication_intents WHERE id=?').get(result.intentId) as { id: string; package_id: string }
+  assert.equal(intent.package_id, pkg)
+  // 幂等：同包重复请求返回同一条台账记录
   const again = createPublishTask(item.db, pkg)
   assert.equal(again.created, false)
-  assert.equal(again.jobId, result.jobId)
-  // 绝不实际发布：job 保持 queued，无平台执行痕迹
-  assert.equal(Number(item.db.prepare("SELECT COUNT(*) AS count FROM workflow_jobs WHERE kind='publish' AND status='queued'").get()!.count), 1)
-  // visualStatus 展示最近发布任务
+  assert.equal(again.intentId, result.intentId)
+  assert.equal(Number(item.db.prepare('SELECT COUNT(*) AS count FROM publication_intents').get()!.count), 1)
+  // 台账不可被 Worker 领取
+  const { claimNextJob } = await import('../src/storage/jobs.ts')
+  assert.equal(claimNextJob(item.db, 'worker-publish-test'), null, 'claimNextJob 不得领取发布台账')
+  // visualStatus 展示最近发布记录
   const publishTask = visualStatus(item.db, pkg).batches[0].publishTask
   assert.ok(publishTask, 'publishTask 应展示')
-  assert.equal(publishTask.id, result.jobId)
-  assert.equal(publishTask.status, 'queued')
+  assert.equal(publishTask.id, result.intentId)
+  assert.equal(publishTask.status, 'recorded')
   item.db.close()
 })
 
@@ -198,13 +200,13 @@ test('M6.6: HTTP POST /sparkos/publish 受控端点（200/400/404/409，不自�
   // 就绪 200
   const ok = await http('POST', '/sparkos/publish', { packageId: pkg })
   assert.equal(ok.status, 200)
-  assert.equal((JSON.parse(ok.body.toString('utf8')) as { value: { status: string } }).value.status, 'queued')
+  assert.equal((JSON.parse(ok.body.toString('utf8')) as { value: { status: string } }).value.status, 'recorded')
   // 幂等重放 200
   const replay = await http('POST', '/sparkos/publish', { packageId: pkg })
   assert.equal(replay.status, 200)
   const db = openFactoryDatabase()
-  assert.equal(Number(db.prepare("SELECT COUNT(*) AS count FROM workflow_jobs WHERE kind='publish'").get()!.count), 1, '幂等：只创建一个发布任务')
-  assert.equal(Number(db.prepare("SELECT COUNT(*) AS count FROM workflow_jobs WHERE kind='publish' AND status='queued'").get()!.count), 1, '任务保持 queued，不自动发布')
+  assert.equal(Number(db.prepare('SELECT COUNT(*) AS count FROM publication_intents').get()!.count), 1, '幂等：只创建一条发布台账')
+  assert.equal(Number(db.prepare("SELECT COUNT(*) AS count FROM workflow_jobs WHERE kind='publish'").get()!.count), 0, '不得创建可执行 publish workflow job')
   db.close()
 })
 

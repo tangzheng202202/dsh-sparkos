@@ -410,7 +410,8 @@ test('HTTP: controlled retry schema, status codes and legacy taskId path', async
   const db2 = openFactoryDatabase()
   const legacy = await http('POST', '/sparkos/visual/retry', { taskId: task.id })
   db2.close()
-  assert.equal(legacy.status, 200)
+  assert.equal(legacy.status, 409, '任务已进入 retry 后 legacy taskId 不得再次重写状态')
+  assert.match(legacy.body.toString('utf8'), /invalid-state/)
   const db3 = openFactoryDatabase()
   const rows = db3.prepare('SELECT COUNT(*) AS count FROM visual_retry_requests').get() as { count: number }
   assert.equal(Number(rows.count), 1)
