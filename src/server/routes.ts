@@ -1,6 +1,6 @@
 /**
  * 工作台 web 半：宿主 webServer 路由。
- * GET  /sparkos/            → 9 tab 工作台 HTML（_embeddedDailyData 注入范式）
+ * GET  /sparkos/            → 统一工作台 HTML（默认 V2 受控模板；SPARKOS_LEGACY_V1=1 回滚旧 9-tab 模板）
  * GET  /sparkos/app-v2      → V2 工作台（同一数据注入范式；页面含受控写操作：视觉 decision/retry、草稿 decision/revise、delivery、publish，均经人工确认 + CSRF）
  * GET  /sparkos/data        → 工作台数据 JSON（含 intel 报告）
  * GET  /sparkos/intel       → 情报指挥所数据端点（健康 + 最近 run + archive 计数）
@@ -112,7 +112,9 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'GET' && (path === '/sparkos' || path === '/sparkos/app')) {
-      renderWorkbenchPage(res, loadTemplate())
+      // M7 统一工作台：/sparkos/app 默认渲染 V2 受控模板（V1 能力已并入）。
+      // 回滚开关：SPARKOS_LEGACY_V1=1 时恢复旧 V1 模板（仅排障用，写端点路由不变）。
+      renderWorkbenchPage(res, process.env.SPARKOS_LEGACY_V1 === '1' ? loadTemplate() : loadV2Template())
       return
     }
     if (req.method === 'GET' && path === '/sparkos/app-v2') {

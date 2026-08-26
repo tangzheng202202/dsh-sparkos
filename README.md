@@ -35,18 +35,21 @@ DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇�
 
 ## 工作台 UI
 
-- `/sparkos/app`：9-tab 工作台（V1，嵌入数据注入）
-- `/sparkos/app-v2`：V2 工作台（详见下节）——**受控写操作版**，并非只读
+- `/sparkos/app`：**统一工作台（V2 受控模板，已合并原 V1 能力）**；`SPARKOS_LEGACY_V1=1` 可回滚旧 9-tab 模板（仅排障）
+- `/sparkos/app-v2`：同一统一工作台（别名路由）
 - 两个页面共享同一安全序列化（`< > & U+2028 U+2029` 全转义）、每请求 CSP nonce、页面内嵌 CSRF token；全部 mutation POST 走统一 `apiFetch`（application/json + CSRF 头）
 
-### V2 受控操作（app-v2 包含的写端点）
+### V2 受控操作（统一工作台包含的写端点）
 
-V2 页面在只读渲染之外，提供以下受控 POST（全部经服务端安全边界：Content-Type 校验、Origin 同源校验、CSRF token）：
+统一工作台（/sparkos/app 与 /sparkos/app-v2）在只读渲染之外，提供以下受控 POST（全部经服务端安全边界：Content-Type 校验、Origin 同源校验、CSRF token；M7 起原 V1 独有能力已并入）：
 
-- `POST /sparkos/visual/decision` 批准/驳回图片（驳回必填意见）
-- `POST /sparkos/visual/retry` 受控视觉重试（含 `purpose=replace_stub_with_production` + 人工确认）
+- `POST /sparkos/editorial/decision` 选题卡人工审批（批准/驳回，驳回必填意见）
 - `POST /sparkos/creation/decision` 草稿包人工审批
 - `POST /sparkos/creation/revise` 创建不可覆盖修订版
+- `POST /sparkos/visual/decision` 批准/驳回图片（驳回必填意见）
+- `POST /sparkos/visual/retry` 受控视觉重试（含 `purpose=replace_stub_with_production` + 人工确认）
+- `POST /sparkos/mutate` 蒸馏候选采纳/驳回（kind=distill，四红线人工执行）
+- `POST /sparkos/writeback/remove` 待写回清单人工移除（星火库写入永远人工）
 - `POST /sparkos/visual/delivery` 生成 preview/production 交付包
 - `POST /sparkos/publish` 创建发布台账记录（仅台账，不自动发布）
 

@@ -358,10 +358,10 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="brand-mark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12a7 7 0 0 1 14 0"/><path d="M8.5 12a3.5 3.5 0 0 1 7 0"/><path d="M12 12l-3 9"/><path d="M12 12l3 9"/></svg></div>
-      <div><div class="brand-name">SparkOS</div><div class="brand-sub">AI 编辑部 · V2 预览</div></div>
+      <div><div class="brand-name">SparkOS</div><div class="brand-sub">AI 编辑部 · 统一工作台</div></div>
     </div>
     <nav class="nav" id="nav"></nav>
-    <div class="nav-status-card"><b><span class="dot dot-blue"></span>V2 受控操作 · 已开放视觉审核/重试与草稿审批/修订</b>视觉图片可批准/驳回、被驳回可按意见重试；草稿包可批准/驳回、被驳回可按意见创建修订版。选题、交付与发布未开放，请前往原版工作台。</div>
+    <div class="nav-status-card"><b><span class="dot dot-blue"></span>V2 受控操作 · 统一工作台（已合并原版）</b>已开放：选题审批、草稿审批/修订、视觉审核/受控重试、蒸馏采纳与待写回、交付包生成与发布台账。发布动作仍由人工在平台后台执行。</div>
   </aside>
   <div class="main">
     <header class="topbar">
@@ -369,7 +369,7 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
       <div class="topbar-title" id="topbarTitle"></div>
       <div class="topbar-sub" id="topbarSub"></div>
       <div class="topbar-meta">
-        <span class="pill pill-blue">V2 受控操作 · 视觉审核/重试 + 草稿审批/修订</span>
+        <span class="pill pill-blue">V2 受控操作 · 选题/草稿/视觉/蒸馏/交付/台账</span>
         <span class="hide-sm" id="topbarTime"></span>
         <span class="pill pill-gray hide-sm" id="topbarHealth"></span>
       </div>
@@ -408,6 +408,14 @@ select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;fo
     <div class="modal-head"><div class="modal-title" id="draftDecisionTitle">草稿审批</div><button class="modal-close" data-draft-decision-close type="button" aria-label="关闭">✕</button></div>
     <div class="modal-body" id="draftDecisionBody"></div>
     <div class="modal-foot" id="draftDecisionFoot"></div>
+  </div>
+</div>
+<div id="topic-decision-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="选题审批确认">
+  <div class="modal-backdrop" data-topic-decision-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="topicDecisionTitle">选题审批</div><button class="modal-close" data-topic-decision-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="topicDecisionBody"></div>
+    <div class="modal-foot" id="topicDecisionFoot"></div>
   </div>
 </div>
 <div id="draft-revise-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="按意见修订确认">
@@ -712,6 +720,18 @@ function renderOverview(){
   }
   h.push('<div class="hint">工作流任务（workflow job）记录，反映系统曾执行的任务状态，不等于当前待审核数量。</div>');
   h.push('</div>');
+  /* M7 统一工作台：系统建议（只读，守卫⑤）——原 V1 advise 能力 */
+  var sug=(D.daily&&D.daily.data&&D.daily.data.suggestions)||[];
+  var decidedAdvise=((D.decisions||[]).filter(function(x){return x.kind==='advice';})||[]).length;
+  h.push('<div class="card ov-alerts"><div class="card-head"><div class="card-title">'+icon('doc')+'系统建议（只读）</div><span class="pill pill-gray">守卫⑤ · 永不自动改 config</span></div>');
+  if(!sug.length){h.push('<div class="dim">当日无系统建议</div>');}
+  else{
+    sug.forEach(function(s){
+      h.push('<div class="todo-row"><span class="badge badge-gray">'+esc(s.type||'generic')+'</span><div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+esc(s.note||'')+'</div></div></div>');
+    });
+  }
+  h.push('<div class="hint">建议只读（守卫⑤）· 已记录决策 '+decidedAdvise+' 条 · 任何采纳动作必须人工触发。</div>');
+  h.push('</div>');
   h.push('<div class="card ov-alerts"><div class="card-head"><div class="card-title">'+icon('alert')+'系统提醒</div></div>');
   var alerts=[];
   if(health.overall==='red')alerts.push({cls:'badge-red',text:'情报源整体异常',target:'system'});
@@ -819,7 +839,7 @@ function renderTopics(){
   if(!ed||!(ed.cards||[]).length){h.push(empty('暂无编辑策划','运行 sparkos_run topics（payload.editorial=midweek 或 weekly）生成 A/B 证据闸门策划卡。','topics'));}
   else{
     (ed.cards||[]).forEach(function(c){
-      var decision=c.decision==='approved'?'<span class="badge badge-green">已批准 ✓</span>':c.decision==='rejected'?'<span class="badge badge-red">已驳回 ✗</span>':'<span class="badge badge-amber">待审批 · V2 预览模式（不可审批）</span>';
+      var decision=c.decision==='approved'?'<span class="badge badge-green">已批准 ✓</span>':c.decision==='rejected'?'<span class="badge badge-red">已驳回 ✗</span>':'<span class="badge badge-amber">待审批</span>';
       var pat={persistent:'连续霸榜',accelerating:'加速上升',resurfacing:'二次升温',reversal:'事实反转',structural:'结构议题',emerging:'新兴话题'}[c.trendPattern]||c.trendPattern;
       h.push('<div class="card topic-card" data-topic-drawer="'+esc(c.id)+'" style="cursor:pointer"><div class="card-head"><div class="card-title">#'+c.rank+' '+esc(c.title)+' <span class="badge '+(c.verificationGrade==='A'?'badge-green':'badge-blue')+'">证据 '+esc(c.verificationGrade)+'</span> <span class="badge badge-amber">'+esc(pat)+'</span></div><div>'+decision+'</div></div>');
       h.push('<div class="topic-section"><h5>核心判断</h5><p>'+esc(c.coreThesis)+'</p></div>');
@@ -832,6 +852,7 @@ function renderTopics(){
       if(c.counterArguments&&c.counterArguments.length)extra+='<div class="topic-section"><h5>反方</h5><p>'+esc(c.counterArguments.join('；'))+'</p></div>';
       if(c.risks&&c.risks.length)extra+='<div class="topic-section"><h5 style="color:var(--red)">风险明细</h5><p style="color:var(--red)">'+esc(c.risks.join('；'))+'</p></div>';
       h.push(extra?'<details class="tech"><summary>事实 / 反方 / 风险明细</summary><div class="tech-body">'+extra+'</div></details>':'');
+      if(!c.decision||c.decision==='pending'){h.push('<div class="vis-actions" style="margin-top:10px"><button type="button" class="btn btn-approve" data-topic-decision="approved" data-card="'+esc(c.id)+'">批准选题</button><button type="button" class="btn btn-reject" data-topic-decision="rejected" data-card="'+esc(c.id)+'">驳回选题</button></div>');}
       h.push('</div>');
     });
   }
@@ -979,7 +1000,7 @@ function renderReview(){
   var f=state.filters.review;
   var h=[flowBar('review')];
   h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('review')+'审核中心 · 编辑待办箱</div><span class="pill pill-orange">V2 预览模式</span></div>');
-  h.push('<div class="notice warn">'+icon('alert')+'<span class="n-text">本页为受控预览：视觉审批/重试与草稿审批/修订已开放；选题、交付与发布操作未启用，请前往原版工作台 /sparkos/app 执行。</span></div>');
+  h.push('<div class="notice warn">'+icon('alert')+'<span class="n-text">统一工作台受控操作：选题审批（选题策划页）、蒸馏采纳/驳回与待写回（本页下方）、视觉审批/重试、草稿审批/修订、交付与发布台账均已开放；发布动作由人工在平台后台执行。</span></div>');
   var all=reviewItems();
   var totalC=all.length;
   var cTopic=all.filter(function(x){return x.key==='topic';}).length;
@@ -993,6 +1014,27 @@ function renderReview(){
   h.push('<select class="filter" data-rf="time" aria-label="按时间筛选"><option value="all"'+(f.time==='all'?' selected':'')+'>全部时间</option><option value="today"'+(f.time==='today'?' selected':'')+'>今天</option><option value="older"'+(f.time==='older'?' selected':'')+'>更早</option></select>');
   h.push('<input class="search-input" data-rf="q" type="search" value="'+esc(f.q)+'" placeholder="搜索标题/备注…" aria-label="搜索待审项">');
   h.push('</div><div id="reviewList"></div></div>');
+  /* M7 统一工作台：蒸馏候选 + 待写回（原 V1 cards 能力，人工闸门不变） */
+  var dq=D.distillQueue||[];
+  var rv=D.distillReviewed||{approved:[],rejected:[]};
+  h.push('<div class="card" style="margin-top:14px"><div class="card-head"><div class="card-title">'+icon('review')+'蒸馏候选（四红线人工执行）</div><span class="pill pill-gray">采纳入待写回 · 驳回即弃</span></div>');
+  if(!dq.length){h.push('<div class="dim">队列已清空 · 已采纳 '+rv.approved.length+' 项 · 已驳回 '+rv.rejected.length+' 项（见下方待写回）</div>');}
+  else{
+    h.push('<div class="hint">采纳前必须人工确认四红线：无时效污染、无主线冲突、无重复入库、无事实错误。</div>');
+    dq.forEach(function(e){
+      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title">'+esc(e.file)+' <span class="badge badge-gray">'+esc(e.dir)+'</span>'+((e.targets||[]).length?' <span class="badge badge-blue">主线 '+esc(e.targets.join(','))+'</span>':'')+'</div><div class="todo-meta">'+esc(e.summary||'')+'</div></div><div><button type="button" class="btn btn-approve" data-distill-decide="adopt" data-distill-id="'+esc(e.file)+'">采纳</button> <button type="button" class="btn btn-reject" data-distill-decide="ignore" data-distill-id="'+esc(e.file)+'">驳回</button></div></div>');
+    });
+  }
+  h.push('</div>');
+  var wb=D.writebackQueue||[];
+  h.push('<div class="card" style="margin-top:14px"><div class="card-head"><div class="card-title">'+icon('doc')+'待写回清单（人工核对后写入星火库）</div><span class="pill pill-gray">只读复制 · 不自动写入</span></div>');
+  if(!wb.length){h.push('<div class="dim">暂无待写回条目（采纳蒸馏候选后自动入列）</div>');}
+  else{
+    wb.forEach(function(e,idx){
+      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title">'+esc(e.file)+' <span class="badge badge-gray">'+esc(e.dir||'')+'</span></div><div class="todo-meta">'+esc(e.target||'')+'</div></div><div><button type="button" class="btn btn-ghost" data-wb-copy="'+idx+'">复制全文</button> <button type="button" class="btn btn-reject" data-wb-remove="'+idx+'" data-wb-file="'+esc(e.file)+'">已写回并移除</button></div></div>');
+    });
+  }
+  h.push('</div>');
   return h.join('');
 }
 
@@ -1712,6 +1754,116 @@ async function submitDraftDecision(){
     handleDraftDecisionError(err);
   }
 }
+/* ============ M7 统一工作台：选题受控审批（原 V1 editorial 能力） ============ */
+var topicDialog={cardId:null,decision:null,card:null,lastFocus:null,busy:false};
+function topicCardForId(id){var c=null;(((D.factory||{}).editorial||{}).cards||[]).forEach(function(x){if(x.id===id)c=x;});return c;}
+function openTopicDecisionDialog(cardId,decision,trigger){
+  var c=topicCardForId(cardId);
+  if(!c)return;
+  if(c.decision==='approved'||c.decision==='rejected'){
+    showToast('该选题卡已有审批结论，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  topicDialog.cardId=cardId;topicDialog.decision=decision;topicDialog.card=c;
+  topicDialog.lastFocus=trigger||document.activeElement;topicDialog.busy=false;
+  renderTopicDecisionDialog();
+  var dlg=$('topic-decision-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-topic-decision-close]');if(close)close.focus();
+}
+function renderTopicDecisionDialog(){
+  var d=topicDialog;var c=d.card;
+  var approve=d.decision==='approved';
+  $('topicDecisionTitle').textContent=approve?'批准选题':'驳回选题';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>cardId</b><span class="mono">'+esc(c.id)+'</span></div><div><b>排名</b>#'+esc(String(c.rank))+'</div>');
+  h.push('<div><b>标题</b>'+esc(c.title||'—')+'</div><div><b>证据</b>'+gradeBadge(c.verificationGrade)+'</div>');
+  h.push('</div>');
+  h.push('<div style="margin-top:8px"><b>核心判断</b><div class="kv">'+esc(c.coreThesis||'—')+'</div></div>');
+  if(c.risks&&c.risks.length)h.push('<div class="modal-warn">风险：'+c.risks.slice(0,3).map(esc).join('；')+'</div>');
+  h.push('<div style="margin-top:12px"><label for="topic-decision-note" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">'+(approve?'审批意见（可选）':'驳回意见（必填）')+'</label><textarea id="topic-decision-note" class="modal-note" maxlength="2000" placeholder="'+(approve?'可填写备注，留空也可以':'请说明驳回原因')+'"></textarea></div>');
+  h.push('<div class="modal-warn">'+(approve?'批准选题不会自动创建草稿或视觉任务；草稿仍由 agent 按契约生成后人工审批。':'驳回后该选题卡不再进入创作；如需重提需等待下一轮编辑策划。')+'</div>');
+  h.push('<div class="modal-err" id="topicDecisionErr"></div>');
+  $('topicDecisionBody').innerHTML=h.join('');
+  $('topicDecisionFoot').innerHTML='<button type="button" class="btn btn-ghost" data-topic-decision-cancel>取消</button><button type="button" class="btn '+(approve?'btn-approve':'btn-reject')+'" data-topic-decision-confirm>'+(approve?'确认批准选题':'确认驳回选题')+'</button>';
+}
+function closeTopicDecisionDialog(){
+  if(!topicDialog.cardId)return;
+  var dlg=$('topic-decision-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!reviseDialog.packageId&&!draftDialog.packageId)document.body.classList.remove('modal-open');
+  var last=topicDialog.lastFocus;
+  topicDialog.cardId=null;topicDialog.decision=null;topicDialog.card=null;topicDialog.lastFocus=null;topicDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showTopicDecisionError(msg){var e=$('topicDecisionErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setTopicDecisionBusy(busy,label){
+  topicDialog.busy=busy;
+  var dlg=$('topic-decision-dialog');
+  var btn=dlg.querySelector('[data-topic-decision-confirm]');
+  var cancel=dlg.querySelector('[data-topic-decision-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+async function submitTopicDecision(){
+  if(!topicDialog.cardId||topicDialog.busy)return;
+  var d=topicDialog;
+  var noteEl=$('topic-decision-note');var note=noteEl?noteEl.value.trim():'';
+  if(d.decision==='rejected'&&!note){showTopicDecisionError('驳回选题必须填写意见');if(noteEl)noteEl.focus();return;}
+  if(note.length>2000){showTopicDecisionError('意见不能超过 2000 字');return;}
+  var errEl=$('topicDecisionErr');if(errEl)errEl.classList.remove('show');
+  setTopicDecisionBusy(true,'提交中…');
+  try{
+    var resp=await apiFetch('/sparkos/editorial/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({cardId:d.cardId,decision:d.decision,note:note})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      throw e;
+    }
+    var approved=d.decision==='approved';
+    closeTopicDecisionDialog();
+    showToast(approved?'选题已批准':'选题已驳回','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已提交，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setTopicDecisionBusy(false);
+    showTopicDecisionError((err&&err.message)||'请求失败，请重试');
+  }
+}
+/* ============ M7 统一工作台：蒸馏采纳与待写回（原 V1 cards 能力，人工闸门不变） ============ */
+async function distillDecide(btn){
+  if(btn.disabled)return;btn.disabled=true;var old=btn.textContent;btn.textContent='提交中…';
+  try{
+    var resp=await apiFetch('/sparkos/mutate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'distill',id:btn.getAttribute('data-distill-id'),action:btn.getAttribute('data-distill-decide')})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok)throw new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+    showToast(btn.getAttribute('data-distill-decide')==='adopt'?'蒸馏候选已采纳，进入待写回清单':'蒸馏候选已驳回','success');
+    try{await refreshWorkbenchData();}catch(e2){}
+    renderRouter();
+  }catch(err){btn.disabled=false;btn.textContent=old;showToast('操作失败：'+String(err.message||err),'error');}
+}
+function writebackCopy(btn){
+  var idx=Number(btn.getAttribute('data-wb-idx'));
+  var entry=((D.writebackQueue||[])[idx])||null;
+  var content=entry?(entry.content||''):'';
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(content).then(function(){btn.textContent='已复制 ✓';});}
+  else{btn.textContent='浏览器不支持剪贴板，请手动复制';}
+}
+async function writebackRemove(btn){
+  if(btn.disabled)return;btn.disabled=true;var old=btn.textContent;btn.textContent='移除中…';
+  try{
+    var resp=await apiFetch('/sparkos/writeback/remove',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:btn.getAttribute('data-wb-file')})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok)throw new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+    showToast('已从待写回清单移除（星火库写入仍由人工执行）','success');
+    try{await refreshWorkbenchData();}catch(e2){}
+    renderRouter();
+  }catch(err){btn.disabled=false;btn.textContent=old;showToast('移除失败：'+String(err.message||err),'error');}
+}
 function openDraftReviseDialog(packageId,trigger){
   var p=draftForId(packageId);
   if(!p)return;
@@ -2121,6 +2273,16 @@ function visActions(t,a){
     var vrfr=t.closest('[data-visual-refresh]');if(vrfr){manualRefreshVisual();return;}
     var ah=t.closest('[data-attempt-history]');if(ah){openVisualAttemptDrawer(ah.getAttribute('data-attempt-history'));return;}
     var cp=t.closest('[data-copy]');if(cp){copyTechId(cp);return;}
+    // M7 选题受控审批
+    var tdc=t.closest('[data-topic-decision]');if(tdc){openTopicDecisionDialog(tdc.getAttribute('data-card'),tdc.getAttribute('data-topic-decision'),tdc);return;}
+    var tdcl=t.closest('[data-topic-decision-close]');if(tdcl){closeTopicDecisionDialog();return;}
+    var tdcb=t.closest('[data-topic-decision-backdrop]');if(tdcb){closeTopicDecisionDialog();return;}
+    var tdcancel=t.closest('[data-topic-decision-cancel]');if(tdcancel){closeTopicDecisionDialog();return;}
+    var tdconfirm=t.closest('[data-topic-decision-confirm]');if(tdconfirm){submitTopicDecision();return;}
+    // M7 蒸馏采纳/驳回与待写回（人工闸门）
+    var dsd=t.closest('[data-distill-decide]');if(dsd){distillDecide(dsd);return;}
+    var wbc=t.closest('[data-wb-copy]');if(wbc){writebackCopy(wbc);return;}
+    var wbr=t.closest('[data-wb-remove]');if(wbr){writebackRemove(wbr);return;}
     // M6.3 草稿受控审批/修订
     var dd=t.closest('[data-draft-decision]');if(dd){openDraftDecisionDialog(dd.getAttribute('data-package'),dd.getAttribute('data-draft-decision'),dd);return;}
     var ddc=t.closest('[data-draft-decision-close]');if(ddc){closeDraftDecisionDialog();return;}

@@ -30,6 +30,7 @@ interface InteractionResult {
   drawerEscClosed: boolean
   topicsPreviewMode: boolean
   noEditorialButtons: boolean
+  topicDecisionButtons: boolean
   reviewPreview: boolean
   noDecisionButtons: boolean
   reviewFiltered: boolean
@@ -165,6 +166,7 @@ test('v2 review and topics are read-only preview with no decision controls', asy
   const r = await interactionResult
   assert.equal(r.topicsPreviewMode, true)
   assert.equal(r.noEditorialButtons, true)
+  assert.equal(r.topicDecisionButtons, true, 'M7：每张待审选题卡应有批准/驳回按钮')
   assert.equal(r.reviewPreview, true)
   assert.equal(r.noDecisionButtons, true)
   assert.equal(r.reviewFiltered, true)
@@ -608,10 +610,12 @@ function interactionHarness(): string {
     document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));await wait(50);
     out.drawerEscClosed=q('#drawer').classList.contains('hidden');
     await hash('#/topics');
-    out.topicsPreviewMode=document.getElementById('view').textContent.indexOf('V2 预览模式（不可审批）')>=0;
-    out.noEditorialButtons=qa('[data-editorial]').length===0;
+    out.topicsPreviewMode=document.getElementById('view').textContent.indexOf('待审批')>=0;
+    var pendingCards=qa('[data-topic-drawer]').length; // fixture 中全部策划卡均为待审
+    out.noEditorialButtons=qa('[data-editorial]').length===0; // 旧 data-editorial 标记已废弃
+    out.topicDecisionButtons=qa('[data-topic-decision="approved"]').length===pendingCards&&qa('[data-topic-decision="rejected"]').length===pendingCards;
     await hash('#/review');
-    out.reviewPreview=document.getElementById('view').textContent.indexOf('V2 预览模式')>=0;
+    out.reviewPreview=document.getElementById('view').textContent.indexOf('统一工作台受控操作')>=0;
     out.noDecisionButtons=qa('[data-visual-decision]').length===0&&qa('[data-draft-decision]').length===0&&qa('[data-visual-queue]').length===0&&qa('[data-visual-retry]').length===0;
     var sel=q('[data-rf="type"]');if(sel){sel.value='visual';sel.dispatchEvent(new Event('change',{bubbles:true}));}
     // 视觉待审 5 项 + 被驳回可重试 1 项（888）= 6

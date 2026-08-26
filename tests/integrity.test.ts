@@ -404,11 +404,12 @@ test('8b. DB 已提交后 transitionJob 失败 → 不得删除已落库目录�
   // 当 to_status='waiting_approval' 时 RAISE(ABORT) —— 精确模拟「产物事务已提交、后续转态失败」。
   item.db.exec("CREATE TRIGGER fail_post_commit BEFORE INSERT ON workflow_job_events WHEN NEW.to_status='waiting_approval' BEGIN SELECT RAISE(ABORT, 'post-commit transition boom'); END")
   assert.throws(() => submitDraftPackage(item.db, item.submission, new Date('2026-08-24T08:00:00Z')), /post-commit transition boom/)
-  const dirAbsolute = path.join(vault, 'drafts', 'factory', '2026-08-24', item.draft.id)
-  assert.equal(existsSync(dirAbsolute), true, 'DB 已提交的目录绝不能被清理')
   // 且数据库行的确已落库指向该目录（半提交但自洽：artifact_dir 已写入）
   const row = item.db.prepare('SELECT artifact_dir FROM draft_packages WHERE id=?').get(item.draft.id) as { artifact_dir: string | null }
   assert.ok(row.artifact_dir, 'artifact_dir 已落库')
+  // 目录按 artifact_dir 实际落点判断（不硬编码日期：folderDate 跟随 fixture 的真实时钟）
+  const dirAbsolute = path.join(vault, row.artifact_dir!)
+  assert.equal(existsSync(dirAbsolute), true, 'DB 已提交的目录绝不能被清理')
   // 复用目录的后续校验也能通过（目录内容完好）
   assert.equal(readdirSync(dirAbsolute).length, 8)
   void getJob
