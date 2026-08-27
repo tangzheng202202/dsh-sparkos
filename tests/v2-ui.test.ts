@@ -507,7 +507,7 @@ function runV2InteractionFixture(): Promise<InteractionResult> {
       const preScript = '<script>window.__v2errs=[];window.onerror=function(m){window.__v2errs.push(String(m));};var _ce=console.error.bind(console);console.error=function(){window.__v2errs.push(Array.prototype.slice.call(arguments).join(" "));_ce.apply(console,arguments);};</script>'
       writeFileSync(fixture, source.replace('<head>', '<head>' + preScript).replace('</body>', '<script>' + interactionHarness() + '</script></body>'))
       const chrome = spawnSync(CHROME, [
-        '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
+        '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check', '--user-data-dir=' + path.join(root, 'chrome-profile'),
         '--virtual-time-budget=4000', '--window-size=1440,900', '--dump-dom', 'file://' + fixture,
       ], { encoding: 'utf8', timeout: 60_000, maxBuffer: 12 * 1024 * 1024 })
       assert.equal(chrome.status, 0, chrome.stderr)
@@ -539,7 +539,7 @@ function runV2ResponsiveFixture(): Promise<ResponsiveResult[]> {
       const results: ResponsiveResult[] = []
       for (const [w, h] of sizes) {
         const chrome = spawnSync(CHROME, [
-          '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
+          '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check', '--user-data-dir=' + path.join(root, 'chrome-profile'),
           '--virtual-time-budget=2000', '--window-size=' + w + ',' + h, '--dump-dom', 'file://' + fixture,
         ], { encoding: 'utf8', timeout: 60_000, maxBuffer: 12 * 1024 * 1024 })
         assert.equal(chrome.status, 0, chrome.stderr)
@@ -780,7 +780,7 @@ function runV2ReviewFixture(): Promise<ReviewResult> {
       const source = readFileSync(base, 'utf8')
       writeFileSync(fixture, source.replace('</body>', '<script>' + reviewHarness() + '</script></body>'))
       const chrome = spawnSync(CHROME, [
-        '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
+        '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check', '--user-data-dir=' + path.join(root, 'chrome-profile'),
         '--virtual-time-budget=4000', '--window-size=1440,900', '--dump-dom', 'file://' + fixture,
       ], { encoding: 'utf8', timeout: 60_000, maxBuffer: 12 * 1024 * 1024 })
       assert.equal(chrome.status, 0, chrome.stderr)

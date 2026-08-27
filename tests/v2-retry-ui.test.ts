@@ -199,7 +199,7 @@ function runChromeFixture(harnessName: string, harness: string, preId: string, b
       const source = readFileSync(base, 'utf8')
       writeFileSync(fixture, source.replace('</body>', '<script>' + harness + '</script></body>'))
       const chrome = spawnSync(CHROME, [
-        '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
+        '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check', '--user-data-dir=' + path.join(root, 'chrome-profile'),
         '--virtual-time-budget=' + budgetMs, '--window-size=1440,900', '--dump-dom', 'file://' + fixture,
       ], { encoding: 'utf8', timeout: 60_000, maxBuffer: 12 * 1024 * 1024 })
       assert.equal(chrome.status, 0, chrome.stderr)
