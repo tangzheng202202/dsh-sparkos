@@ -38,10 +38,11 @@ ${indent(inner, 4)}
 })
 `
   writeFileSync('lib/client.js', wrapped)
+  // M8 unified workbench: single page template (page-v2 removed; app-v2 is an alias route)
   copyFileSync('src/server/page.template.html', 'lib/page.template.html')
-  copyFileSync('src/server/page-v2.template.html', 'lib/page-v2.template.html')
+  rmSync('lib/page-v2.template.html', { force: true })
   rmSync('lib/client.tmp.js', { force: true })
-  console.log('built lib/index.js, lib/client.js and page templates')
+  console.log('built lib/index.js, lib/client.js and the unified page template')
 }
 
 function indent(source, spaces) {

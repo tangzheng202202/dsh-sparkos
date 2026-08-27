@@ -54,7 +54,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit -p $(test -f tsconfig.local.json && echo tsconfig.local.json || echo tsconfig.json)",
-    "test": "node --test --experimental-strip-types tests/guards.test.ts tests/vault.test.ts tests/data.test.ts tests/intel.test.ts tests/daily.test.ts tests/routes.test.ts tests/security.test.ts tests/semantics.test.ts tests/integrity.test.ts tests/storage.test.ts tests/ranking.test.ts tests/editorial.test.ts tests/creation.test.ts tests/factory.test.ts tests/visual.test.ts tests/visual-review.test.ts tests/visual-retry.test.ts tests/e2e-flow.test.ts tests/publish.test.ts tests/visual-ui.test.ts tests/v2-ui.test.ts tests/v2-retry-ui.test.ts tests/v2-creation-ui.test.ts tests/v2-delivery-ui.test.ts tests/v2-publish-ui.test.ts",
+    "test": "node --test --experimental-strip-types tests/guards.test.ts tests/vault.test.ts tests/data.test.ts tests/intel.test.ts tests/daily.test.ts tests/routes.test.ts tests/security.test.ts tests/semantics.test.ts tests/integrity.test.ts tests/storage.test.ts tests/ranking.test.ts tests/editorial.test.ts tests/creation.test.ts tests/factory.test.ts tests/visual.test.ts tests/visual-review.test.ts tests/visual-retry.test.ts tests/e2e-flow.test.ts tests/publish.test.ts tests/visual-ui.test.ts tests/v2-ui.test.ts tests/v2-retry-ui.test.ts tests/v2-creation-ui.test.ts tests/v2-delivery-ui.test.ts tests/v2-publish-ui.test.ts tests/unified-ui.test.ts",
     "test:dom": "node --experimental-strip-types scripts/render-page.mjs && python3 scripts/dom-check.py /tmp/sparkos-wb.html",
     "prepare": "npm run build"
   },

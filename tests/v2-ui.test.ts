@@ -203,7 +203,7 @@ test('v2 page title stays horizontal (width>120, height<48, no vertical stacking
   assert.ok(r.titleH < 48, 'title height ' + r.titleH + ' should stay under 48px')
 })
 
-test('v2 review warning icon stays small (max 64px)', async () => {
+test('v2 review notice icon stays small (max 64px)', async () => {
   const r = await interactionResult
   assert.ok(r.reviewIconW > 0 && r.reviewIconW <= 64, 'review icon width ' + r.reviewIconW)
   assert.ok(r.reviewIconH > 0 && r.reviewIconH <= 64, 'review icon height ' + r.reviewIconH)
@@ -620,7 +620,7 @@ function interactionHarness(): string {
     var sel=q('[data-rf="type"]');if(sel){sel.value='visual';sel.dispatchEvent(new Event('change',{bubbles:true}));}
     // 视觉待审 5 项 + 被驳回可重试 1 项（888）= 6
     out.reviewFiltered=document.getElementById('reviewList').textContent.indexOf('共 6 项')>=0;
-    var rn=q('.notice.warn');
+    var rn=q('.notice.warn')||q('#view .notice'); /* M8：审核中心提示改为 info 样式，兜底取任意 notice */
     out.reviewIconW=0;out.reviewIconH=0;
     if(rn){var ri=rn.querySelector('svg');if(ri){var rr=ri.getBoundingClientRect();out.reviewIconW=Math.round(rr.width);out.reviewIconH=Math.round(rr.height);}}
     await hash('#/visual');

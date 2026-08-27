@@ -148,7 +148,7 @@ test('二、前端 isSafeUrl 与服务端 isSafeExternalUrl 规则一致（两�
     ['//evil.example/x', false], ['https://ok.example/a', true], ['http://ok.example/', true],
     ['not a url', false],
   ]
-  for (const tpl of ['../src/server/page.template.html', '../src/server/page-v2.template.html']) {
+  for (const tpl of ['../src/server/page.template.html']) {
     const html = readFileSync(fileURLToPath(new URL(tpl, import.meta.url)), 'utf8')
     const start = html.indexOf('function isSafeUrl')
     const end = html.indexOf('function safeExtLink')

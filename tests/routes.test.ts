@@ -218,7 +218,7 @@ test('GET /sparkos/app-v2：V2 统一受控工作台（GET 200 · 内嵌数据 �
   assert.ok(html.includes('window._embeddedDailyData'), 'V2 注入同一数据范式')
   assert.ok(html.includes('id="visual-lightbox"'), 'V2 复用受控 lightbox')
   assert.ok(html.includes('data-nav="intel"') || html.includes("data-nav='intel'") || html.includes('data-nav'), 'V2 侧栏导航')
-  assert.ok(html.includes('V2 受控操作'), 'V2 受控操作声明')
+  assert.ok(html.includes('统一工作台'), '统一工作台声明')
   // 受控写边界（M6.6）：V2 允许的写端点为视觉 decision/retry、草稿 decision/revise、
   // 交付 delivery 与发布 publish（publish 仅创建台账 job，不自动发布），
   // 均只在人工确认对话框提交时以 POST 发送；其余写端点一律不得出现。
@@ -234,6 +234,13 @@ test('GET /sparkos/app-v2：V2 统一受控工作台（GET 200 · 内嵌数据 �
   assert.ok(html.includes('data-topic-decision'), 'V2 应含选题审批按钮')
   assert.ok(html.includes('/sparkos/mutate'), 'V2 应引用蒸馏采纳端点（kind=distill，仅人工确认后 POST）')
   assert.ok(html.includes('/sparkos/writeback/remove'), 'V2 应引用待写回移除端点（仅人工确认后 POST）')
+  // M8 统一工作台：V1 独有能力全部迁入（must_reads / 运行时草稿 / 时间线 / 来源注册表 / 简报）
+  assert.ok(html.includes('data-mr-decide'), '统一模板应含必读采纳/忽略按钮')
+  assert.ok(html.includes('/sparkos/draft?file='), '统一模板应支持运行时草稿查看全文')
+  assert.ok(html.includes('data-tl-q'), '统一模板应含时间线搜索')
+  assert.ok(html.includes('renderBriefMd'), '统一模板应含每日简报渲染')
+  assert.ok(html.includes('来源注册表'), '统一模板应含来源注册表')
+  assert.ok(!html.includes('window.prompt(') && !html.includes('window.alert(') && !html.includes('window.confirm('), '统一模板禁用原生对话框')
   for (const forbidden of ['/sparkos/visual/queue']) {
     assert.ok(!html.includes(forbidden), 'V2 页面不得包含写端点：' + forbidden)
   }
@@ -241,12 +248,21 @@ test('GET /sparkos/app-v2：V2 统一受控工作台（GET 200 · 内嵌数据 �
   // 与 V1 隔离：V2 不含 V1 的 nav-tab 标记
   assert.ok(!html.includes('nav-tab'), 'V2 不含 V1 导航标记')
   assert.ok(html.includes('data-nav='), 'V2 含 hash 路由导航')
-  // M7 统一工作台：/sparkos/app 默认渲染同一 V2 模板（合并完成）
+  // M8 统一工作台：/sparkos、/sparkos/app、/sparkos/app-v2 三入口渲染同一模板，无功能分叉
   const unified = mockRes()
   await handleSparkosHttp(mockReq('GET', '/sparkos/app'), unified.res)
   assert.equal(unified.out.status, 200)
-  assert.ok(unified.out.body.includes('data-nav='), '/sparkos/app 渲染统一 V2 工作台')
+  const root = mockRes()
+  await handleSparkosHttp(mockReq('GET', '/sparkos'), root.res)
+  assert.equal(root.out.status, 200)
+  assert.ok(unified.out.body.includes('data-nav='), '/sparkos/app 渲染统一工作台')
   assert.ok(!unified.out.body.includes('nav-tab'), '/sparkos/app 不再是旧 9-tab 模板')
+  for (const pageBody of [root.out.body, unified.out.body, res.out.body]) {
+    assert.ok(pageBody.includes('data-nav='), '三入口均渲染统一工作台')
+    assert.ok(pageBody.includes('统一工作台'), '三入口均含统一工作台标识')
+    assert.ok(!pageBody.includes('nav-tab'), '三入口均无旧 V1 模板标记')
+    assert.ok(pageBody.includes('data-mr-decide') && pageBody.includes('data-rt-draft'), '三入口功能标记一致（无分叉）')
+  }
   // 只读：POST /sparkos/app-v2 一律 404
   const post = mockRes()
   await handleSparkosHttp(mockReq('POST', '/sparkos/app-v2'), post.res)

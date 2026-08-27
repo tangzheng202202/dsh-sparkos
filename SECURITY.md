@@ -21,7 +21,7 @@
 
 ## CSP
 
-两个工作台页面（`/sparkos/app`、`/sparkos/app-v2`）：
+统一工作台（`/sparkos/app` 正式入口；`/sparkos/app-v2` 仅兼容别名，渲染同一份统一模板，M8 起不再有第二套页面实现）：
 
 - 每请求唯一 nonce（128-bit）；`script-src 'self' 'nonce-…'`，**无 unsafe-inline**
 - 保留最小权限：同源 style（`style-src 'unsafe-inline'` 用于现有内联样式）、`img-src 'self' data: blob:`（图片预览）、`frame-src 'self'`、`connect-src 'self'`、`object-src 'none'`、`base-uri 'none'`

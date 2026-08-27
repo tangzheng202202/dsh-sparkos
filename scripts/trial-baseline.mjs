@@ -43,12 +43,12 @@ try {
   db.close()
 }
 
-// V2 页面渲染检查（生产数据只读装配）
+// 统一工作台页面检查（生产数据只读装配；M8 起仅一份模板）
 const { buildWorkbenchData } = await import('../src/server/data.ts')
 const data = buildWorkbenchData()
-const html = readFileSync(new URL('../src/server/page-v2.template.html', import.meta.url), 'utf8')
-const allowed = ['/sparkos/visual/decision', '/sparkos/visual/retry', '/sparkos/creation/decision', '/sparkos/creation/revise', '/sparkos/visual/delivery', '/sparkos/publish']
-const forbidden = ['/sparkos/visual/queue', '/sparkos/mutate', '/sparkos/editorial/decision']
+const html = readFileSync(new URL('../src/server/page.template.html', import.meta.url), 'utf8')
+const allowed = ['/sparkos/visual/decision', '/sparkos/visual/retry', '/sparkos/creation/decision', '/sparkos/creation/revise', '/sparkos/editorial/decision', '/sparkos/mutate', '/sparkos/writeback/remove', '/sparkos/visual/delivery', '/sparkos/publish']
+const forbidden = ['/sparkos/visual/queue']
 report.page = {
   embeddedData: html.includes('window._embeddedDailyData'),
   controlledWriteEndpointsPresent: allowed.map((e) => [e, html.includes(e)]),

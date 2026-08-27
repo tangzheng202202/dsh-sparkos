@@ -35,23 +35,27 @@ DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇�
 
 ## 工作台 UI
 
-- `/sparkos/app`：**统一工作台（V2 受控模板，已合并原 V1 能力）**；`SPARKOS_LEGACY_V1=1` 可回滚旧 9-tab 模板（仅排障）
-- `/sparkos/app-v2`：同一统一工作台（别名路由）
-- 两个页面共享同一安全序列化（`< > & U+2028 U+2029` 全转义）、每请求 CSP nonce、页面内嵌 CSRF token；全部 mutation POST 走统一 `apiFetch`（application/json + CSRF 头）
+**SparkOS 只有一个正式工作台。** `/sparkos` 与 `/sparkos/app` 是唯一正式入口，渲染统一模板 `src/server/page.template.html`（M8 起原 V1 与 V2 两套实现已合并为这一份；旧 `page-v2.template.html` 已删除，仅存 Git 历史）。
 
-### V2 受控操作（统一工作台包含的写端点）
+- `/sparkos/app-v2`：**仅为过渡期兼容别名**，渲染与正式入口完全相同的统一模板，不是第二套实现
+- 安全序列化（`< > & U+2028 U+2029` 全转义）、每请求 CSP nonce、页面内嵌 CSRF token；全部 mutation POST 走统一 `apiFetch`（application/json + CSRF 头）
+- 统一九视图：总览（日报摘要/建议）、情报（Top5/簇/叙事线/时间线搜索/融合/下发/归档）、选题（must_reads 采纳/忽略 + 编辑策划审批）、创作（工厂草稿审批/修订 + 运行时草稿）、审核（收件箱/蒸馏/待写回）、视觉（审核/受控重试）、发布（delivery 台账，**不执行平台发布**）、增长、系统（来源注册表/健康）
 
-统一工作台（/sparkos/app 与 /sparkos/app-v2）在只读渲染之外，提供以下受控 POST（全部经服务端安全边界：Content-Type 校验、Origin 同源校验、CSRF token；M7 起原 V1 独有能力已并入）：
+### 统一工作台受控写端点
+
+统一工作台在只读渲染之外，提供以下受控 POST（全部经服务端安全边界：Content-Type 校验、Origin 同源校验、CSRF token；M7/M8 起原 V1 独有能力已全部并入）：
 
 - `POST /sparkos/editorial/decision` 选题卡人工审批（批准/驳回，驳回必填意见）
 - `POST /sparkos/creation/decision` 草稿包人工审批
 - `POST /sparkos/creation/revise` 创建不可覆盖修订版
 - `POST /sparkos/visual/decision` 批准/驳回图片（驳回必填意见）
 - `POST /sparkos/visual/retry` 受控视觉重试（含 `purpose=replace_stub_with_production` + 人工确认）
-- `POST /sparkos/mutate` 蒸馏候选采纳/驳回（kind=distill，四红线人工执行）
+- `POST /sparkos/mutate` 必读采纳/忽略（kind=topic）与蒸馏候选采纳/驳回（kind=distill，四红线人工执行）
 - `POST /sparkos/writeback/remove` 待写回清单人工移除（星火库写入永远人工）
 - `POST /sparkos/visual/delivery` 生成 preview/production 交付包
 - `POST /sparkos/publish` 创建发布台账记录（仅台账，不自动发布）
+
+兼容与红线：contractVersion 1/2 与 legacy 小红书规则继续兼容（旧 v1 包不可证明小红书完整，不能进入 production 交付）；**不存在自动发布**——`publication_intents` 仅是台账，Worker 永不领取发布任务，平台 API 调用为零，发布永远由人工在对应后台执行。
 
 ## 安装（DSH profile）
 
@@ -94,7 +98,7 @@ sparkos_run {action:"brief"}    # 今日简报
 
 ## HTTP 端点
 
-**只读**：`GET /sparkos/app`、`GET /sparkos/app-v2`（工作台 HTML）、`GET /sparkos/data`、`GET /sparkos/intel`、`GET /sparkos/creation/artifact`、`GET /sparkos/visual/status`、`GET /sparkos/visual/asset`（图片预览，完整性校验）、`GET /sparkos/visual/deliveries` / `delivery` / `download`、`GET /sparkos/draft`、`GET /sparkos/writeback`、`GET /sparkos/csrf`（签发 CSRF token）
+**只读**：`GET /sparkos/app`（统一工作台 HTML，正式入口）、`GET /sparkos/app-v2`（同一统一模板的兼容别名）、`GET /sparkos/data`、`GET /sparkos/intel`、`GET /sparkos/creation/artifact`、`GET /sparkos/visual/status`、`GET /sparkos/visual/asset`（图片预览，完整性校验）、`GET /sparkos/visual/deliveries` / `delivery` / `download`、`GET /sparkos/draft`、`GET /sparkos/writeback`、`GET /sparkos/csrf`（签发 CSRF token）
 
 **写（全部走统一安全边界：application/json 强制、Origin/Host 同源校验、CSRF token、结构化 JSON 错误）**：
 

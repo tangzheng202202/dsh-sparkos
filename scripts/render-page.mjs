@@ -1,8 +1,8 @@
 /**
- * 渲染工作台 HTML 到 /tmp/sparkos-wb.html（无宿主也可跑 DOM 检查）。
+ * 渲染统一工作台 HTML 到 /tmp/sparkos-wb.html（无宿主也可跑 DOM 检查）。
  * 用法：node --experimental-strip-types scripts/render-page.mjs [out.html]
- *       node --experimental-strip-types scripts/render-page.mjs --v2 [out.html]  （V2 受控工作台）
- * 默认渲染 V1 时，会顺带把 V2 渲染到 /tmp/sparkos-wb-v2.html 供 DOM 检查。
+ * M8 起 /sparkos/app 与 /sparkos/app-v2 是同一份统一模板；--v2 参数保留为兼容
+ * （被忽略），渲染结果与默认完全一致，并顺带写 /tmp/sparkos-wb-v2.html 供 DOM 检查。
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -25,9 +25,15 @@ if (!process.env.SPARKOS_VAULT_ROOT) {
   process.env.SPARKOS_TIMELINE_DATA = path.join(vault, 'config', 'timeline_cards.json')
   writeFileSync(path.join(daily, 'daily_data_2026-08-22.json'), JSON.stringify({
     date: '2026-08-22',
-    must_reads: [{ event_id: 'render-fixture-1', title: '工作台渲染检查', fresh_hours: 1, primary_line: 'line-001' }],
+    must_reads: [
+      { event_id: 'render-fixture-1', title: '工作台渲染检查', fresh_hours: 1, primary_line: 'line-001' },
+      { event_id: 'render-fixture-2', title: '必读第二条（忽略路径）', fresh_hours: 30, primary_line: 'line-002' },
+      { event_id: 'render-fixture-3', title: '必读第三条（失败重试路径）', fresh_hours: 72, primary_line: 'line-003' },
+    ],
   }))
   writeFileSync(path.join(daily, 'daily_briefing_2026-08-22.md'), '# 每日简报\n\n- 工作台渲染检查\n')
+  mkdirSync(path.join(daily, 'drafts'), { recursive: true })
+  writeFileSync(path.join(daily, 'drafts', '2026-08-22-wechat.md'), '# 运行时草稿标题\n\n正文预览第一行。\n')
 }
 
 const { initVault } = await import('../src/vault.ts')
@@ -174,7 +180,8 @@ function renderTemplate(templatePath, target) {
   writeFileSync(target, html)
   console.log('rendered ' + target + ' (' + html.length + ' bytes)')
 }
-const templatePath = v2 ? '../src/server/page-v2.template.html' : '../src/server/page.template.html'
-renderTemplate(templatePath, out)
-if (!v2) renderTemplate('../src/server/page-v2.template.html', '/tmp/sparkos-wb-v2.html')
+// M8：统一模板只有一份；--v2 兼容参数被忽略（两处输出内容完全一致，供旧 DOM 检查脚本读取）
+void v2
+renderTemplate('../src/server/page.template.html', out)
+renderTemplate('../src/server/page.template.html', '/tmp/sparkos-wb-v2.html')
 if (fixtureRoot) rmSync(fixtureRoot, { recursive: true, force: true })

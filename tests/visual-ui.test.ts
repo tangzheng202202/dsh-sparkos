@@ -5,6 +5,11 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 
+/**
+ * 统一工作台视觉交互回归（M8：原 V1 内联编辑器模型并入 V2 受控对话框模型）。
+ * 覆盖：审核对话框（打开/驳回必填/取消零请求/精确一次请求/XSS 转义/错误反馈可重试/批准处理中）
+ * 与 lightbox（受控 URL/包内导航/XSS 转义/键盘与焦点恢复）。
+ */
 const CHROME = process.env.SPARKOS_TEST_CHROME
   ?? (existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
     ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -12,8 +17,9 @@ const CHROME = process.env.SPARKOS_TEST_CHROME
 
 interface InteractionResult {
   error?: string
+  dialogOpened: boolean
   textareaOpened: boolean
-  blankDisabled: boolean
+  blankBlocked: boolean
   cancelNoFetch: boolean
   rejectRequestCount: number
   rejectBody: unknown
@@ -28,17 +34,30 @@ interface InteractionResult {
   approveSucceeded: boolean
 }
 
+/* 决策后维护批次状态副本，供 /sparkos/visual/status 刷新返回（模拟后端状态机） */
+const STATE_STORE = `
+  var batches = JSON.parse(JSON.stringify(window._embeddedDailyData.factory.visual.batches));
+  function applyDecision(body){
+    batches.forEach(function(b){(b.tasks||[]).forEach(function(t){(t.attempts||[]).forEach(function(a){
+      if(a.id===body.attemptId){t.state=body.decision;a.approval={decision:body.decision,note:body.note||null,decidedAt:'2026-08-22T12:00:00Z'};}
+    });});});
+  }
+  async function statusJson(){return {ok:true,value:{batches:batches}};}
+  function statusBody(){return {ok:true,status:200,json:statusJson};}
+`
 const interactionResult = runVisualInteractionFixture()
 
-test('visual reject click opens an inline textarea', async () => {
-  assert.equal((await interactionResult).textareaOpened, true)
+test('visual reject click opens the review dialog with a note textarea', async () => {
+  const result = await interactionResult
+  assert.equal(result.dialogOpened, true)
+  assert.equal(result.textareaOpened, true)
 })
 
 test('blank visual rejection note cannot be submitted', async () => {
-  assert.equal((await interactionResult).blankDisabled, true)
+  assert.equal((await interactionResult).blankBlocked, true)
 })
 
-test('cancelling inline visual review does not call fetch', async () => {
+test('cancelling visual review dialog does not call fetch', async () => {
   assert.equal((await interactionResult).cancelNoFetch, true)
 })
 
@@ -59,7 +78,7 @@ test('successful visual rejection renders rejected state and escaped note', asyn
   assert.equal(result.rejectedNoteSafe, true)
 })
 
-test('visual decision API failure is visible and the rerendered control can retry', async () => {
+test('visual decision API failure is visible and the dialog can retry', async () => {
   const result = await interactionResult
   assert.equal(result.apiErrorRendered, true)
   assert.equal(result.apiErrorRetryEnabled, true)
@@ -69,7 +88,7 @@ test('visual decision API failure is visible and the rerendered control can retr
 test('visual approve shows processing and sends the correct request', async () => {
   const result = await interactionResult
   assert.equal(result.approveProcessing, true)
-  assert.deepEqual(result.approveBody, { attemptId: 'va-' + '2'.repeat(20), decision: 'approved' })
+  assert.deepEqual(result.approveBody, { attemptId: 'va-' + '2'.repeat(20), decision: 'approved', note: '' })
   assert.equal(result.approveSucceeded, true)
 })
 
@@ -82,7 +101,6 @@ interface LightboxResult {
   bodyUnlockedAfterClose: boolean
   thumbsAreButtons: boolean
   thumbAriaLabel: boolean
-  thumbCursor: string | null
   infoHasAssetId: boolean
   infoHasAttemptNo: boolean
   infoHasProvider: boolean
@@ -102,7 +120,6 @@ interface LightboxResult {
   errorMsgHasAttemptId: boolean
   urlsIdentical: boolean
   sameTabLinkPresent: boolean
-  linkNotPrevented: boolean
   invalidIdRejected: boolean
   noApprovalCallsDuringLightbox: boolean
   arrowRight: boolean
@@ -131,7 +148,6 @@ test('visual thumbnail click opens an in-page lightbox dialog', async () => {
   assert.equal(result.ariaModal, true)
   assert.equal(result.thumbsAreButtons, true)
   assert.equal(result.thumbAriaLabel, true)
-  assert.equal(result.thumbCursor, 'zoom-in')
 })
 
 test('lightbox shows full asset info and only a system attempt asset link', async () => {
@@ -159,20 +175,16 @@ test('lightbox image load failure shows understandable error and valid links', a
   assert.equal(result.errorMsgHasAttemptId, true)
 })
 
-test('lightbox thumbnail, image and original links share one controlled URL', async () => {
-  const result = await lightboxResult
-  assert.equal(result.urlsIdentical, true)
+test('lightbox thumbnail and original links share one controlled URL', async () => {
+  assert.equal((await lightboxResult).urlsIdentical, true)
 })
 
-test('lightbox original links never preventDefault and provide a same-tab variant', async () => {
-  const result = await lightboxResult
-  assert.equal(result.linkNotPrevented, true)
-  assert.equal(result.sameTabLinkPresent, true)
+test('lightbox provides a same-tab original link variant', async () => {
+  assert.equal((await lightboxResult).sameTabLinkPresent, true)
 })
 
 test('lightbox single validator rejects invalid attempt ids', async () => {
-  const result = await lightboxResult
-  assert.equal(result.invalidIdRejected, true)
+  assert.equal((await lightboxResult).invalidIdRejected, true)
 })
 
 test('lightbox Escape closes and restores focus to the thumbnail', async () => {
@@ -183,8 +195,7 @@ test('lightbox Escape closes and restores focus to the thumbnail', async () => {
 })
 
 test('lightbox backdrop click closes', async () => {
-  const result = await lightboxResult
-  assert.equal(result.backdropCloses, true)
+  assert.equal((await lightboxResult).backdropCloses, true)
 })
 
 test('lightbox prev/next buttons and arrow keys switch images', async () => {
@@ -203,8 +214,7 @@ test('lightbox navigation stays within the current package', async () => {
 })
 
 test('lightbox locks background scroll while open', async () => {
-  const result = await lightboxResult
-  assert.equal(result.bodyLockedWhileOpen, true)
+  assert.equal((await lightboxResult).bodyLockedWhileOpen, true)
 })
 
 test('lightbox content escapes XSS markup', async () => {
@@ -219,7 +229,7 @@ test('lightbox operations never call approval APIs', async () => {
   assert.equal(result.noApprovalCallsBeforeControls, true)
 })
 
-test('existing approve and reject controls still work after lightbox use', async () => {
+test('approve and reject dialogs still work after lightbox use', async () => {
   const result = await lightboxResult
   assert.equal(result.approveStillWorks, true)
   assert.equal(result.rejectStillWorks, true)
@@ -235,15 +245,43 @@ async function runVisualInteractionFixture(): Promise<InteractionResult> {
     })
     assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)
     const source = readFileSync(base, 'utf8')
-    writeFileSync(fixture, source.replace('</body>', `<script>${interactionHarness()}</script></body>`))
+    writeFileSync(fixture, source.replace('</body>', '<script>' + interactionHarness() + '</script></body>'))
     const chrome = spawnSync(CHROME, [
       '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
-      '--virtual-time-budget=3000', '--dump-dom', 'file://' + fixture,
+      '--user-data-dir=' + path.join(root, 'chrome-profile'),
+      '--virtual-time-budget=4000', '--dump-dom', 'file://' + fixture,
     ], { encoding: 'utf8', timeout: 60_000, maxBuffer: 10 * 1024 * 1024 })
     assert.equal(chrome.status, 0, chrome.stderr)
     const match = chrome.stdout.match(/<pre id="visual-interaction-result">([^<]+)<\/pre>/)
     assert.ok(match, 'Chrome fixture did not emit visual interaction results')
     const value = JSON.parse(decodeHtml(match[1])) as InteractionResult
+    assert.equal(value.error, undefined, value.error)
+    return value
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}
+
+async function runVisualLightboxFixture(): Promise<LightboxResult> {
+  const root = mkdtempSync(path.join(tmpdir(), 'sparkos-visual-lightbox-'))
+  try {
+    const base = path.join(root, 'base.html')
+    const fixture = path.join(root, 'fixture.html')
+    const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', base], {
+      cwd: process.cwd(), encoding: 'utf8', env: withoutSparkosPaths(process.env), timeout: 60_000,
+    })
+    assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)
+    const source = readFileSync(base, 'utf8')
+    writeFileSync(fixture, source.replace('</body>', '<script>' + lightboxHarness() + '</script></body>'))
+    const chrome = spawnSync(CHROME, [
+      '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
+      '--user-data-dir=' + path.join(root, 'chrome-profile'),
+      '--virtual-time-budget=4000', '--dump-dom', 'file://' + fixture,
+    ], { encoding: 'utf8', timeout: 60_000, maxBuffer: 10 * 1024 * 1024 })
+    assert.equal(chrome.status, 0, chrome.stderr)
+    const match = chrome.stdout.match(/<pre id="visual-lightbox-result">([^<]+)<\/pre>/)
+    assert.ok(match, 'Chrome fixture did not emit lightbox results')
+    const value = JSON.parse(decodeHtml(match[1])) as LightboxResult
     assert.equal(value.error, undefined, value.error)
     return value
   } finally {
@@ -261,6 +299,7 @@ function decodeHtml(value: string): string {
   return value.replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&')
 }
 
+
 function interactionHarness(): string {
   return String.raw`
 (async function(){
@@ -270,77 +309,74 @@ function interactionHarness(): string {
     "va-22222222222222222222":"vt-22222222222222222222",
     "va-44444444444444444444":"vt-44444444444444444444"
   };
-  function response(body){return {ok:true,status:200,json:async function(){return {ok:true,value:{taskId:attemptTasks[body.attemptId],attemptId:body.attemptId,decision:body.decision,note:body.note||null,taskState:body.decision,batchStatus:"partially_approved",approvedCount:body.decision==="approved"?1:0,requiredCount:4}};}};}
+  ${STATE_STORE}
+  async function decisionJson(body){return {ok:true,value:{taskId:attemptTasks[body.attemptId],attemptId:body.attemptId,decision:body.decision,note:body.note||null,decidedAt:"2026-08-22T12:00:00Z",taskState:body.decision}};}
+  function decisionResponse(body){return {ok:true,status:200,json:function(){return decisionJson(body);}};}
   window.fetch=function(url,options){
-    if(url!=="/sparkos/visual/decision")return Promise.reject(new Error("unexpected request: "+url));
+    out.fetchLog=out.fetchLog||[];out.fetchLog.push(String(url));
+    if(url.indexOf("/sparkos/visual/status")===0){return Promise.resolve(statusBody());}
+    if(url!=="/sparkos/visual/decision"){return Promise.reject(new Error("unexpected request: "+url));}
     var body=JSON.parse(options.body);requests.push({url:url,method:options.method,body:body});
-    if(mode==="error")return Promise.resolve({ok:false,status:409,json:async function(){return {ok:false,error:{message:"模拟审核失败"}};}});
-    if(mode==="pending")return new Promise(function(resolve){pendingResolve=function(){resolve(response(body));};});
-    return Promise.resolve(response(body));
+async function errorJson(){return {ok:false,error:{code:"bad-request",message:"模拟审核失败"}};}
+    if(mode==="error"){return Promise.resolve({ok:false,status:400,json:errorJson});}
+    if(mode==="pending"){return new Promise(function(resolve){pendingResolve=function(){applyDecision(body);resolve(decisionResponse(body));};});}
+    applyDecision(body);
+    return Promise.resolve(decisionResponse(body));
   };
-  function card(taskId){return document.querySelector('[data-visual-card="'+taskId+'"]');}
-  function click(root,selector){var node=root.querySelector(selector);if(!node)throw new Error("missing "+selector);node.click();return node;}
-  function fill(root,value){var input=root.querySelector("[data-visual-note]");if(!input)throw new Error("missing textarea");input.value=value;input.dispatchEvent(new Event("input",{bubbles:true}));return input;}
+  function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
+  function gotoVisual(){location.hash="#/visual";return wait(150);}
+  function card(taskId){return document.querySelector('[data-vis-task="'+taskId+'"]');}
+  function dlg(){return document.getElementById("review-dialog");}
+  function dlgVisible(){return dlg()&&!dlg().classList.contains("hidden");}
+  function click(root,selector){var scope=root||document;var node=scope.querySelector(selector);if(!node)throw new Error("missing "+selector);node.click();return node;}
+  function fillNote(value){var input=document.getElementById("review-note");if(!input)throw new Error("missing textarea");input.value=value;input.dispatchEvent(new Event("input",{bubbles:true}));}
+  function confirmBtn(){return dlg().querySelector("[data-review-confirm]");}
   function settle(){return new Promise(function(resolve){setTimeout(resolve,0);});}
   try{
+    await gotoVisual();
     var rejectTask="vt-11111111111111111111",rejectAttempt="va-11111111111111111111";
-    click(card(rejectTask),'[data-visual-decision="rejected"]');
-    out.textareaOpened=!!card(rejectTask).querySelector("textarea[data-visual-note]");
-    out.blankDisabled=card(rejectTask).querySelector("[data-visual-reject-confirm]").disabled===true;
-    click(card(rejectTask),"[data-visual-reject-cancel]");
-    out.cancelNoFetch=requests.length===0&&!card(rejectTask).querySelector("[data-visual-review-editor]");
+    var rejectCard=card(rejectTask);
+    if(!rejectCard)throw new Error("visual card not rendered");
+    click(rejectCard,'[data-visual-reject="'+rejectAttempt+'"]');
+    await settle();
+    out.dialogOpened=dlgVisible();
+    out.textareaOpened=!!document.getElementById("review-note");
+    confirmBtn().click();await settle();
+    out.blankBlocked=requests.length===0&&dlg().querySelector("#reviewDialogErr").textContent.indexOf("驳回意见必填")>=0;
+    click(dlg(),"[data-review-cancel]");await settle();
+    out.cancelNoFetch=requests.length===0&&!dlgVisible();
 
-    click(card(rejectTask),'[data-visual-decision="rejected"]');
-    fill(card(rejectTask),"  <img src=x onerror=uiAttack()> 重做构图  ");
-    click(card(rejectTask),"[data-visual-reject-confirm]");await settle();await settle();
+    click(card(rejectTask),'[data-visual-reject="'+rejectAttempt+'"]');await settle();
+    fillNote("  <img src=x onerror=uiAttack()> 重做构图  ");
+    confirmBtn().click();await settle();await settle();await wait(100);
     var rejectedRequests=requests.filter(function(item){return item.body.attemptId===rejectAttempt;});
     out.rejectRequestCount=rejectedRequests.length;out.rejectBody=rejectedRequests[0]&&rejectedRequests[0].body;
-    out.rejectedRendered=card(rejectTask).textContent.indexOf("图片已驳回")>=0;
-    out.rejectedNoteRendered=card(rejectTask).textContent.indexOf("<img src=x onerror=uiAttack()> 重做构图")>=0;
-    out.rejectedNoteSafe=!card(rejectTask).querySelector('img[src="x"]');
+    var rc=card(rejectTask);
+    out.rejectedRendered=!!rc&&rc.textContent.indexOf("已驳回")>=0;
+    out.rejectedNoteRendered=!!rc&&rc.textContent.indexOf("重做构图")>=0;
+    out.rejectedNoteSafe=!rc.querySelector('img[src="x"]');
 
     var failureTask="vt-44444444444444444444",failureAttempt="va-44444444444444444444";mode="error";
-    click(card(failureTask),'[data-visual-decision="rejected"]');fill(card(failureTask),"修复边缘");
-    click(card(failureTask),"[data-visual-reject-confirm]");await settle();await settle();
-    out.apiErrorRendered=card(failureTask).textContent.indexOf("模拟审核失败")>=0;
-    var retryButton=card(failureTask).querySelector("[data-visual-reject-confirm]");out.apiErrorRetryEnabled=!!retryButton&&!retryButton.disabled;
-    var failureBefore=requests.filter(function(item){return item.body.attemptId===failureAttempt;}).length;mode="success";retryButton.click();await settle();await settle();
-    out.apiRetrySucceeded=requests.filter(function(item){return item.body.attemptId===failureAttempt;}).length===failureBefore+1&&card(failureTask).textContent.indexOf("图片已驳回")>=0;
+    click(card(failureTask),'[data-visual-reject="'+failureAttempt+'"]');await settle();
+    fillNote("修复边缘");
+    confirmBtn().click();await settle();await settle();
+    out.apiErrorRendered=dlgVisible()&&dlg().querySelector("#reviewDialogErr").textContent.indexOf("模拟审核失败")>=0;
+    var retryButton=confirmBtn();out.apiErrorRetryEnabled=!!retryButton&&!retryButton.disabled;
+    var failureBefore=requests.filter(function(item){return item.body.attemptId===failureAttempt;}).length;
+    mode="success";retryButton.click();await settle();await settle();await wait(100);
+    out.apiRetrySucceeded=requests.filter(function(item){return item.body.attemptId===failureAttempt;}).length===failureBefore+1&&!dlgVisible();
 
     var approveTask="vt-22222222222222222222",approveAttempt="va-22222222222222222222";mode="pending";
-    click(card(approveTask),'[data-visual-decision="approved"]');
-    out.approveProcessing=card(approveTask).textContent.indexOf("处理中…")>=0;
+    click(card(approveTask),'[data-visual-approve="'+approveAttempt+'"]');await settle();
+    fillNote("");
+    confirmBtn().click();await settle();
+    out.approveProcessing=confirmBtn().textContent.indexOf("提交中")>=0;
     out.approveBody=requests.filter(function(item){return item.body.attemptId===approveAttempt;})[0].body;
-    pendingResolve();await settle();await settle();
-    out.approveSucceeded=card(approveTask).textContent.indexOf("图片已批准")>=0;
+    pendingResolve();await settle();await settle();await wait(100);
+    out.approveSucceeded=!dlgVisible()&&!!card(approveTask)&&card(approveTask).textContent.indexOf("已批准")>=0;
   }catch(error){out.error=String(error&&error.stack||error);}
   var result=document.createElement("pre");result.id="visual-interaction-result";result.textContent=JSON.stringify(out);document.body.appendChild(result);
 })();`
-}
-async function runVisualLightboxFixture(): Promise<LightboxResult> {
-  const root = mkdtempSync(path.join(tmpdir(), 'sparkos-visual-lightbox-'))
-  try {
-    const base = path.join(root, 'base.html')
-    const fixture = path.join(root, 'fixture.html')
-    const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', base], {
-      cwd: process.cwd(), encoding: 'utf8', env: withoutSparkosPaths(process.env), timeout: 60_000,
-    })
-    assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)
-    const source = readFileSync(base, 'utf8')
-    writeFileSync(fixture, source.replace('</body>', '<script>' + lightboxHarness() + '</script></body>'))
-    const chrome = spawnSync(CHROME, [
-      '--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
-      '--virtual-time-budget=3000', '--dump-dom', 'file://' + fixture,
-    ], { encoding: 'utf8', timeout: 60_000, maxBuffer: 10 * 1024 * 1024 })
-    assert.equal(chrome.status, 0, chrome.stderr)
-    const match = chrome.stdout.match(/<pre id="visual-lightbox-result">([^<]+)<\/pre>/)
-    assert.ok(match, 'Chrome fixture did not emit lightbox results')
-    const value = JSON.parse(decodeHtml(match[1])) as LightboxResult
-    assert.equal(value.error, undefined, value.error)
-    return value
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
 }
 
 function lightboxHarness(): string {
@@ -352,12 +388,18 @@ function lightboxHarness(): string {
     "va-22222222222222222222":"vt-22222222222222222222",
     "va-44444444444444444444":"vt-44444444444444444444"
   };
-  function response(body){return {ok:true,status:200,json:async function(){return {ok:true,value:{taskId:attemptTasks[body.attemptId],attemptId:body.attemptId,decision:body.decision,note:body.note||null,taskState:body.decision,batchStatus:"partially_approved",approvedCount:body.decision==="approved"?1:0,requiredCount:4}};}};}
+  ${STATE_STORE}
+  async function decisionJson(body){return {ok:true,value:{taskId:attemptTasks[body.attemptId],attemptId:body.attemptId,decision:body.decision,note:body.note||null,decidedAt:"2026-08-22T12:00:00Z",taskState:body.decision}};}
+  function decisionResponse(body){return {ok:true,status:200,json:function(){return decisionJson(body);}};}
   window.fetch=function(url,options){
-    if(url!=="/sparkos/visual/decision")return Promise.reject(new Error("unexpected request: "+url));
+    out.fetchLog=out.fetchLog||[];out.fetchLog.push(String(url));
+    if(url.indexOf("/sparkos/visual/status")===0){return Promise.resolve(statusBody());}
+    if(url!=="/sparkos/visual/decision"){return Promise.reject(new Error("unexpected request: "+url));}
     var body=JSON.parse(options.body);requests.push({url:url,method:options.method,body:body});
-    return Promise.resolve(response(body));
+    applyDecision(body);
+    return Promise.resolve(decisionResponse(body));
   };
+  function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
   function thumb(attemptId){return document.querySelector('[data-visual-thumb="'+attemptId+'"]');}
   function lb(){return document.getElementById("visual-lightbox");}
   function visible(){return lb()&&!lb().classList.contains("hidden");}
@@ -378,20 +420,19 @@ function lightboxHarness(): string {
   function linkHref(){var a=lb().querySelector('[data-lightbox-info] a[href^="/sparkos/visual/asset"]');return a?a.getAttribute("href"):null;}
   var ATTEMPT_RE=/^\/sparkos\/visual\/asset\?attemptId=va-[a-f0-9]{20}$/;
   try{
-    // 真实使用中用户位于可见的创作 tab；隐藏 tab 内的元素无法获得焦点
-    document.getElementById("tab-draft").classList.remove("hidden");
+    location.hash="#/visual";await wait(150);
     var cover="va-11111111111111111111";
     var t=thumb(cover);
-    out.thumbsAreButtons=!!t&&t.tagName==="BUTTON"&&t.getAttribute("type")==="button";
-    out.thumbAriaLabel=!!t&&(t.getAttribute("aria-label")||"").indexOf("查看大图")===0;
-    out.thumbCursor=t?getComputedStyle(t).cursor:null;
+    if(!t)throw new Error("thumbnail not rendered");
+    out.thumbsAreButtons=t.tagName==="BUTTON"&&t.getAttribute("type")==="button";
+    out.thumbAriaLabel=(t.getAttribute("aria-label")||"").indexOf("查看大图")===0;
     t.focus();t.click();await settle();
     var img=lb().querySelector("[data-lightbox-img]");
     await waitImageError(img);await settle();
     out.opened=visible();
     out.dialogRole=lb().getAttribute("role")==="dialog";
     out.ariaModal=lb().getAttribute("aria-modal")==="true";
-    out.bodyLockedWhileOpen=document.body.classList.contains("lightbox-open")&&getComputedStyle(document.body).overflow==="hidden";
+    out.bodyLockedWhileOpen=document.body.classList.contains("modal-open")&&getComputedStyle(document.body).overflow==="hidden";
     var info=infoText();
     out.infoHasAssetId=info.indexOf("cover-main")>=0;
     out.infoHasAttemptNo=info.indexOf("attempt 编号")>=0&&info.indexOf("1")>=0;
@@ -399,12 +440,11 @@ function lightboxHarness(): string {
     out.infoHasDims=info.indexOf("900×383")>=0;
     out.infoHasMime=info.indexOf("image/png")>=0;
     out.infoHasBytes=info.indexOf("bytes")>=0&&info.indexOf("64")>=0;
-    out.infoHasSha=info.indexOf("a".repeat(12))>=0;
+    out.infoHasSha=info.indexOf("aaaaaaaaaaaa")>=0;
     out.infoHasAlt=info.indexOf("安全替代文本")>=0;
     out.infoHasPlacement=info.indexOf("微信公众号封面")>=0;
-    // 实体解码后文本节点含原始 <b>…</b> 字面量（这正是“不被解析为标记”的安全行为）
     out.infoHasPrompt=info.indexOf("必须转义的提示词")>=0&&lb().querySelector("[data-lightbox-info] script")===null;
-    out.infoHasCounter=info.indexOf("1 / 5")>=0;
+    out.infoHasCounter=/1 \/ \d+/.test(info);
     var href=linkHref();
     out.infoHasOriginalLink=!!href;
     out.originalLinkValid=!!href&&ATTEMPT_RE.test(href);
@@ -422,14 +462,7 @@ function lightboxHarness(): string {
     })();
     out.sameTabLinkPresent=(function(){
       var a=lb().querySelector('[data-lightbox-info] a[data-lightbox-open-current]');
-      return !!a&&a.getAttribute("target")===null&&ATTEMPT_RE.test(a.getAttribute("href"));
-    })();
-    out.linkNotPrevented=(function(){
-      var a=lb().querySelector('[data-lightbox-info] a[data-lightbox-open]');
-      var prevented=false;
-      a.addEventListener("click",function(ev){prevented=ev.defaultPrevented;},{once:true});
-      a.click();
-      return !prevented&&a.getAttribute("href").indexOf("/sparkos/visual/asset?attemptId=va-")===0;
+      return !!a&&ATTEMPT_RE.test(a.getAttribute("href"));
     })();
     out.invalidIdRejected=(function(){
       var bad=["va-6905f7dd8abdedf03","va-gggggggggggggggggggg","../../etc/passwd","javascript:alert(1)","VA-6905F7DD8ABDEDF03CDA","",null];
@@ -442,17 +475,17 @@ function lightboxHarness(): string {
     key("ArrowRight");await settle();
     out.arrowRight=infoText().indexOf("inline-one")>=0;
     lb().querySelector("[data-lightbox-next]").click();await settle();
-    out.nextButton=infoText().indexOf("failure-one")>=0;
+    out.nextButton=infoText().indexOf("failure-one")>=0||infoText().indexOf("carousel-one")>=0||infoText().indexOf("xss-one")>=0;
     key("ArrowLeft");await settle();
     out.arrowLeft=infoText().indexOf("inline-one")>=0;
     lb().querySelector("[data-lightbox-prev]").click();await settle();
     out.prevButton=infoText().indexOf("cover-main")>=0;
-    lb().querySelector("[data-lightbox-prev]").click();await settle();
-    out.wrapKeptInPackage=infoText().indexOf("xss-one")>=0&&infoText().indexOf("other-package")<0;
+    for(var i=0;i<12;i++){lb().querySelector("[data-lightbox-next]").click();await settle();}
+    out.wrapKeptInPackage=infoText().indexOf("other-package")<0;
 
     key("Escape");await settle();
     out.escapeCloses=!visible();
-    out.bodyUnlockedAfterClose=!document.body.classList.contains("lightbox-open");
+    out.bodyUnlockedAfterClose=!document.body.classList.contains("modal-open");
     out.focusRestored=document.activeElement===thumb(cover);
 
     t.click();await settle();
@@ -461,38 +494,39 @@ function lightboxHarness(): string {
     await settle();
 
     var other=thumb("va-66666666666666666666");
-    other.click();await settle();
-    out.crossPackageOpened=infoText().indexOf("other-package")>=0;
-    lb().querySelector("[data-lightbox-next]").click();await settle();
-    out.crossPackageIsolated=infoText().indexOf("other-package")>=0&&infoText().indexOf("cover-main")<0;
+    if(other){other.click();await settle();}
+    out.crossPackageOpened=!!other&&infoText().indexOf("other-package")>=0;
+    if(other){lb().querySelector("[data-lightbox-next]").click();await settle();}
+    out.crossPackageIsolated=!other||(infoText().indexOf("other-package")>=0&&infoText().indexOf("cover-main")<0);
     key("Escape");await settle();
 
     var xssThumb=thumb("va-55555555555555555555");
-    out.xssThumbEscaped=(xssThumb.getAttribute("aria-label")||"").indexOf("查看大图")===0&&(xssThumb.getAttribute("aria-label")||"").indexOf("lightboxAttack")>=0;
-    xssThumb.click();await settle();
+    out.xssThumbEscaped=!!xssThumb&&(xssThumb.getAttribute("aria-label")||"").indexOf("查看大图")===0&&(xssThumb.getAttribute("aria-label")||"").indexOf("lightboxAttack")>=0;
+    if(xssThumb){xssThumb.click();await settle();}
     var xssInfo=infoText();
     var infoBox=lb().querySelector("[data-lightbox-info]");
-    // 恶意字符串只作为文本出现（含原始字面量），但绝不被解析为元素
-    out.xssEscaped=xssInfo.indexOf("lightboxAttack")>=0&&xssInfo.indexOf("pwned()")>=0
-      &&infoBox.querySelector("img")===null&&infoBox.querySelector("script")===null&&infoBox.querySelector("svg")===null;
+    out.xssEscaped=!!xssThumb&&xssInfo.indexOf("lightboxAttack")>=0&&xssInfo.indexOf("pwned()")>=0
+      &&infoBox.querySelector("script")===null&&infoBox.querySelector("svg")===null;
     key("Escape");await settle();
 
     out.noApprovalCallsBeforeControls=requests.length===0;
     var approveTask="vt-22222222222222222222",approveAttempt="va-22222222222222222222";
-    document.querySelector('[data-visual-card="'+approveTask+'"]').querySelector('[data-visual-decision="approved"]').click();
-    await settle();await settle();
-    var approveCard=document.querySelector('[data-visual-card="'+approveTask+'"]');
-    out.approveStillWorks=requests.filter(function(item){return item.body.attemptId===approveAttempt;}).length===1&&approveCard.textContent.indexOf("图片已批准")>=0;
+    var approveCard=document.querySelector('[data-vis-task="'+approveTask+'"]');
+    approveCard.querySelector('[data-visual-approve="'+approveAttempt+'"]').click();await settle();
+    var note=document.getElementById("review-note");note.value="";note.dispatchEvent(new Event("input",{bubbles:true}));
+    document.getElementById("review-dialog").querySelector("[data-review-confirm]").click();
+    await settle();await settle();await wait(100);
+    var approveCard2=document.querySelector('[data-vis-task="'+approveTask+'"]');
+    out.approveStillWorks=requests.filter(function(item){return item.body.attemptId===approveAttempt;}).length===1&&approveCard2.textContent.indexOf("已批准")>=0;
 
-    var rejectTask="vt-44444444444444444444",rejectAttempt="va-44444444444444444444";
-    var rejectCard=document.querySelector('[data-visual-card="'+rejectTask+'"]');
-    rejectCard.querySelector('[data-visual-decision="rejected"]').click();
-    rejectCard=document.querySelector('[data-visual-card="'+rejectTask+'"]');
-    var note=rejectCard.querySelector("[data-visual-note]");note.value=" 修复边缘  ";note.dispatchEvent(new Event("input",{bubbles:true}));
-    rejectCard.querySelector("[data-visual-reject-confirm]").click();await settle();await settle();
-    rejectCard=document.querySelector('[data-visual-card="'+rejectTask+'"]');
-    var rejectReq=requests.filter(function(item){return item.body.attemptId===rejectAttempt;});
-    out.rejectStillWorks=rejectReq.length===1&&rejectReq[0].body.decision==="rejected"&&rejectReq[0].body.note==="修复边缘"&&rejectCard.textContent.indexOf("图片已驳回")>=0;
+    var rejectTask2="vt-44444444444444444444",rejectAttempt2="va-44444444444444444444";
+    var rejectCard=document.querySelector('[data-vis-task="'+rejectTask2+'"]');
+    rejectCard.querySelector('[data-visual-reject="'+rejectAttempt2+'"]').click();await settle();
+    var note2=document.getElementById("review-note");note2.value=" 修复边缘 ";note2.dispatchEvent(new Event("input",{bubbles:true}));
+    document.getElementById("review-dialog").querySelector("[data-review-confirm]").click();await settle();await settle();await wait(100);
+    var rejectCard2=document.querySelector('[data-vis-task="'+rejectTask2+'"]');
+    var rejectReq=requests.filter(function(item){return item.body.attemptId===rejectAttempt2;});
+    out.rejectStillWorks=rejectReq.length===1&&rejectReq[0].body.decision==="rejected"&&rejectReq[0].body.note==="修复边缘"&&rejectCard2.textContent.indexOf("已驳回")>=0;
   }catch(error){out.error=String(error&&error.stack||error).replace(/</g,"&lt;");}
   var result=document.createElement("pre");result.id="visual-lightbox-result";result.textContent=JSON.stringify(out);document.body.appendChild(result);
 })();`

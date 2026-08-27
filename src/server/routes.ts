@@ -1,7 +1,7 @@
 /**
  * 工作台 web 半：宿主 webServer 路由。
- * GET  /sparkos/            → 统一工作台 HTML（默认 V2 受控模板；SPARKOS_LEGACY_V1=1 回滚旧 9-tab 模板）
- * GET  /sparkos/app-v2      → V2 工作台（同一数据注入范式；页面含受控写操作：视觉 decision/retry、草稿 decision/revise、delivery、publish，均经人工确认 + CSRF）
+ * GET  /sparkos/ | /sparkos/app → 统一工作台 HTML（唯一正式入口，_embeddedDailyData 注入范式）
+ * GET  /sparkos/app-v2      → 兼容别名：渲染与正式入口完全相同的统一模板
  * GET  /sparkos/data        → 工作台数据 JSON（含 intel 报告）
  * GET  /sparkos/intel       → 情报指挥所数据端点（健康 + 最近 run + archive 计数）
  * POST /sparkos/intel/tick  → 手动触发一轮 ingest（不自动融合）
@@ -39,10 +39,7 @@ function loadTemplate(): string {
   return readFileSync(fileURLToPath(new URL('./page.template.html', import.meta.url)), 'utf8')
 }
 
-/** V2 工作台模板（受控写操作版：含视觉/草稿/交付/发布台账的人工确认 POST）。 */
-function loadV2Template(): string {
-  return readFileSync(fileURLToPath(new URL('./page-v2.template.html', import.meta.url)), 'utf8')
-}
+/** 兼容说明：M8 起仅保留这一份统一工作台模板；/sparkos/app-v2 渲染同一模板。 */
 
 function respondJson(res: import('node:http').ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body)
@@ -111,15 +108,10 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       respondJson(res, 200, { ok: true, value: { token: issueCsrfToken() } })
       return
     }
-    if (req.method === 'GET' && (path === '/sparkos' || path === '/sparkos/app')) {
-      // M7 统一工作台：/sparkos/app 默认渲染 V2 受控模板（V1 能力已并入）。
-      // 回滚开关：SPARKOS_LEGACY_V1=1 时恢复旧 V1 模板（仅排障用，写端点路由不变）。
-      renderWorkbenchPage(res, process.env.SPARKOS_LEGACY_V1 === '1' ? loadTemplate() : loadV2Template())
-      return
-    }
-    if (req.method === 'GET' && path === '/sparkos/app-v2') {
-      // V2 工作台：GET 页面；同一安全序列化与 CSP 注入范式；页面内的受控 POST 走下方各写路由（人工确认 + CSRF）
-      renderWorkbenchPage(res, loadV2Template())
+    if (req.method === 'GET' && (path === '/sparkos' || path === '/sparkos/app' || path === '/sparkos/app-v2')) {
+      // M8 统一工作台：/sparkos 与 /sparkos/app 是正式入口；/sparkos/app-v2 仅为兼容别名，
+      // 三者渲染同一份统一模板（原 V1 能力已全部并入，不再维护第二套页面实现）。
+      renderWorkbenchPage(res, loadTemplate())
       return
     }
     if (req.method === 'GET' && path === '/sparkos/data') {

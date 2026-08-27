@@ -8,7 +8,7 @@
 DSH 宿主（webServer / tools / attachments 服务）
    │
    ├─ sparkos_run / sparkos_visual_* 工具（agent 调用）
-   ├─ /sparkos/* HTTP 端点（工作台 UI）
+   ├─ /sparkos/* HTTP 端点（统一工作台 UI：/sparkos/app 唯一正式入口，/sparkos/app-v2 仅兼容别名，同一模板）
    │
 dsh-sparkos 插件
    │
