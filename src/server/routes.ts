@@ -31,12 +31,26 @@ import { openFactoryDatabase } from '../storage/database.ts'
 import { queueVisualBatch, readVisualAsset, visualStatus, VisualPipelineError } from '../visual/service.ts'
 import { createPublishTask, decideVisualAttempt, requestVisualRetry, retryVisualTask } from '../visual/review.ts'
 import { checkMutationRequest, cspWithNonce, escapeJsonForScript, issueCsrfToken, newCspNonce } from './security.ts'
+import { factoryEnabled } from './mode.ts'
 import { createVisualDelivery, listVisualDeliveries, readVisualDeliveryFile, readVisualDeliveryZip } from '../visual/delivery.ts'
 
 
 /** 工作台模板：运行时读取（esbuild 打包时 build.mjs 会拷贝一份到 lib/）。 */
-function loadTemplate(): string {
-  return readFileSync(fileURLToPath(new URL('./page.template.html', import.meta.url)), 'utf8')
+function loadTemplate(name: 'page.template.html' | 'factory.template.html'): string {
+  return readFileSync(fileURLToPath(new URL('./' + name, import.meta.url)), 'utf8')
+}
+
+/** 2026-08-30 降级决策：工厂管线默认停用，受控工厂端点统一 410。 */
+function factoryDisabled(res: import('node:http').ServerResponse): boolean {
+  if (factoryEnabled()) return false
+  respondJson(res, 410, {
+    ok: false,
+    error: {
+      code: 'factory-disabled',
+      message: '工厂受控管线已停用（SparkOS 降级为简报台）。编辑与发布请使用 media-os 工作流；如需临时恢复，在 VAULT config/workbench_mode.json 写入 {"mode":"full"} 并重启宿主。',
+    },
+  })
+  return true
 }
 
 /** 兼容说明：M8 起仅保留这一份统一工作台模板；/sparkos/app-v2 渲染同一模板。 */
@@ -109,9 +123,8 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'GET' && (path === '/sparkos' || path === '/sparkos/app' || path === '/sparkos/app-v2')) {
-      // M8 统一工作台：/sparkos 与 /sparkos/app 是正式入口；/sparkos/app-v2 仅为兼容别名，
-      // 三者渲染同一份统一模板（原 V1 能力已全部并入，不再维护第二套页面实现）。
-      renderWorkbenchPage(res, loadTemplate())
+      // 2026-08-30 降级：默认渲染简报台模板；mode=full 时渲染原统一工作台（工厂模板）。
+      renderWorkbenchPage(res, loadTemplate(factoryEnabled() ? 'factory.template.html' : 'page.template.html'))
       return
     }
     if (req.method === 'GET' && path === '/sparkos/data') {
@@ -130,6 +143,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'POST' && path === '/sparkos/visual/queue') {
+      if (factoryDisabled(res)) return
       let body: Record<string, unknown>
       try {
         body = await readJsonBody(req)
@@ -157,6 +171,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'GET' && path === '/sparkos/visual/status') {
+      if (factoryDisabled(res)) return
       const packageId = url.searchParams.get('packageId') ?? undefined
       const db = openFactoryDatabase()
       try {
@@ -169,6 +184,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'GET' && path === '/sparkos/visual/asset') {
+      if (factoryDisabled(res)) return
       const attemptId = url.searchParams.get('attemptId') ?? ''
       if ([...url.searchParams.keys()].some((key) => key !== 'attemptId') || url.searchParams.getAll('attemptId').length !== 1) {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许一个 attemptId 参数' } })
@@ -195,6 +211,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'POST' && path === '/sparkos/visual/decision') {
+      if (factoryDisabled(res)) return
       let body: Record<string, unknown>
       try { body = await readJsonBody(req) } catch {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
@@ -213,6 +230,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'POST' && path === '/sparkos/visual/retry') {
+      if (factoryDisabled(res)) return
       let body: Record<string, unknown>
       try { body = await readJsonBody(req) } catch {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
@@ -244,6 +262,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'POST' && path === '/sparkos/visual/delivery') {
+      if (factoryDisabled(res)) return
       let body: Record<string, unknown>
       try { body = await readJsonBody(req) } catch {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
@@ -263,6 +282,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
     }
     // M6.6 受控发布任务创建：仅创建 kind='publish' 台账 job，绝不实际发布
     if (req.method === 'POST' && path === '/sparkos/publish') {
+      if (factoryDisabled(res)) return
       let body: Record<string, unknown>
       try { body = await readJsonBody(req) } catch {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })
@@ -278,6 +298,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'GET' && path === '/sparkos/visual/deliveries') {
+      if (factoryDisabled(res)) return
       const packageId = url.searchParams.get('packageId') ?? ''
       if (url.searchParams.getAll('packageId').length !== 1 || [...url.searchParams.keys()].some((key) => key !== 'packageId')) {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许一个 packageId 参数' } })
@@ -289,6 +310,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'GET' && path === '/sparkos/visual/delivery') {
+      if (factoryDisabled(res)) return
       const deliveryId = url.searchParams.get('deliveryId') ?? ''
       const file = url.searchParams.get('file') ?? ''
       if (url.searchParams.getAll('deliveryId').length !== 1 || url.searchParams.getAll('file').length !== 1
@@ -311,6 +333,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'GET' && path === '/sparkos/visual/download') {
+      if (factoryDisabled(res)) return
       const deliveryId = url.searchParams.get('deliveryId') ?? ''
       if (url.searchParams.getAll('deliveryId').length !== 1 || [...url.searchParams.keys()].some((key) => key !== 'deliveryId')) {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: '仅允许一个 deliveryId 参数' } })
@@ -328,6 +351,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'POST' && path === '/sparkos/editorial/decision') {
+      if (factoryDisabled(res)) return
       let body: Record<string, unknown>
       try {
         body = await readJsonBody(req)
@@ -355,6 +379,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'GET' && path === '/sparkos/creation/artifact') {
+      if (factoryDisabled(res)) return
       const packageId = url.searchParams.get('packageId') ?? ''
       const file = url.searchParams.get('file') ?? ''
       const { openFactoryDatabase } = await import('../storage/database.ts')
@@ -385,6 +410,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'POST' && path === '/sparkos/creation/decision') {
+      if (factoryDisabled(res)) return
       let body: Record<string, unknown>
       try {
         body = await readJsonBody(req)
@@ -417,6 +443,7 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
       return
     }
     if (req.method === 'POST' && path === '/sparkos/creation/revise') {
+      if (factoryDisabled(res)) return
       let body: Record<string, unknown>
       try { body = await readJsonBody(req) } catch {
         respondJson(res, 400, { ok: false, error: { code: 'bad-request', message: 'body 必须是合法 JSON' } })

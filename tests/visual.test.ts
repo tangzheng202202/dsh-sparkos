@@ -11,6 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ImageAttachmentRef, ImageMediaType, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type { DraftAssetPlan, DraftSubmission } from '../src/creation/drafts.ts'
 import type { IntelCluster } from '../src/intel/cluster.ts'
+process.env.SPARKOS_WORKBENCH_MODE = 'full' // 2026-08-30 降级：工厂端点仅在 full 模式开放，本套件回归工厂行为
 
 const root = mkdtempSync(path.join(tmpdir(), 'sparkos-visual-'))
 const vault = path.join(root, 'vault')

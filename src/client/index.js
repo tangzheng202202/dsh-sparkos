@@ -137,6 +137,7 @@ function apply(ctx) {
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
     id: NS,
+    key: NS,
     order: 45,
     locale: 'settings.dshSparkos',
     inject: () => ({ t }),

@@ -110,7 +110,7 @@ function runDeliveryFixture(): Promise<DeliveryResult> {
       root = mkdtempSync(path.join(tmpdir(), 'sparkos-v2-delivery-'))
       const base = path.join(root, 'base.html')
       const fixture = path.join(root, 'fixture.html')
-      const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', '--v2', base], {
+      const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', '--factory', '--v2', base], {
         cwd: process.cwd(), encoding: 'utf8', env: withoutSparkosPaths(process.env), timeout: 60_000,
       })
       assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)

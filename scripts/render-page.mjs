@@ -180,8 +180,10 @@ function renderTemplate(templatePath, target) {
   writeFileSync(target, html)
   console.log('rendered ' + target + ' (' + html.length + ' bytes)')
 }
-// M8：统一模板只有一份；--v2 兼容参数被忽略（两处输出内容完全一致，供旧 DOM 检查脚本读取）
+// 2026-08-30 降级：默认渲染简报台模板；--factory 渲染原统一工作台模板（工厂 UI 回归测试用）。
+// --v2 兼容参数继续被忽略。
 void v2
-renderTemplate('../src/server/page.template.html', out)
+const factory = args.includes('--factory')
+renderTemplate(factory ? '../src/server/factory.template.html' : '../src/server/page.template.html', out)
 renderTemplate('../src/server/page.template.html', '/tmp/sparkos-wb-v2.html')
 if (fixtureRoot) rmSync(fixtureRoot, { recursive: true, force: true })

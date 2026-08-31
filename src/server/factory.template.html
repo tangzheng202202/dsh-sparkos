@@ -1,0 +1,2541 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SparkOS 统一工作台</title>
+<style>
+:root{
+  /* 语义色 */
+  --bg:#FBF6EF;--surface:#FFFFFF;--surface-2:#F7F0E3;--surface-3:#F1E8D8;
+  --ink:#241E17;--ink-2:#463D30;--ink-3:#5C5142;
+  --line:#E2D4BA;--line-strong:#CCB78F;
+  --accent:#E8563D;--accent-strong:#C9422C;--accent-soft:#FBE9E3;
+  --success:#3E7D56;--success-soft:#E7F0EA;
+  --warning:#A97B1F;--warning-soft:#F7EEDA;
+  --danger:#B23A26;--danger-soft:#F9E4DE;
+  --info:#2F6A94;--info-soft:#E4EEF5;
+  --muted:#9A8D78;--muted-soft:#EFEAE0;
+  /* 旧别名（兼容既有组件，语义同上） */
+  --orange:var(--accent);--orange-strong:var(--accent-strong);--orange-soft:var(--accent-soft);
+  --green:var(--success);--green-soft:var(--success-soft);
+  --amber:var(--warning);--amber-soft:var(--warning-soft);
+  --red:var(--danger);--red-soft:var(--danger-soft);
+  --blue:var(--info);--blue-soft:var(--info-soft);
+  --gray:var(--muted);--gray-soft:var(--muted-soft);
+  /* 间距 */
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;
+  /* 圆角 */
+  --r-xs:6px;--r-sm:8px;--r-md:10px;--r-lg:12px;--r-xl:16px;
+  --radius:var(--r-lg);--radius-s:var(--r-md);
+  /* 阴影层级 */
+  --shadow-sm:0 1px 2px rgba(43,36,28,.05);
+  --shadow-md:0 1px 3px rgba(43,36,28,.06),0 2px 10px rgba(43,36,28,.06);
+  --shadow-lg:0 4px 16px rgba(43,36,28,.12),0 8px 32px rgba(43,36,28,.08);
+  --shadow:var(--shadow-md);
+  /* 字体层级 */
+  --fs-title:20px;--fs-section:15px;--fs-card:14px;--fs-body:14px;--fs-meta:12px;--fs-tech:11.5px;
+  --font:'PingFang SC',-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+:focus-visible{outline:2px solid var(--orange);outline-offset:2px;border-radius:4px}
+.hidden{display:none!important}
+body.modal-open{overflow:hidden}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* ---- layout ---- */
+.app{display:flex;min-height:100vh}
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:220px;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:60;transition:transform .18s ease}
+.brand{display:flex;align-items:center;gap:9px;height:64px;padding:0 16px;border-bottom:1px solid var(--line);flex:none}
+.brand-mark{width:28px;height:28px;border-radius:8px;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.brand-name{font-size:15px;font-weight:700;line-height:1.2}
+.brand-sub{font-size:10px;color:var(--ink-3);letter-spacing:.06em;line-height:1}
+.nav{flex:1;overflow:auto;padding:10px 8px}
+.nav-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:var(--radius-s);color:var(--ink-2);font-size:13.5px;text-align:left}
+.nav-item:hover{background:var(--surface-2)}
+.nav-item.active{background:var(--orange-soft);color:var(--orange-strong);font-weight:600}
+.nav-item svg{flex:none;width:17px;height:17px}
+.nav-preview-note{margin:10px 12px;padding:9px 11px;border-radius:9px;background:var(--gray-soft);color:var(--ink-3);font-size:11px;line-height:1.6;flex:none}
+.main{flex:1;margin-left:220px;display:flex;flex-direction:column;min-width:0;min-height:100vh}
+.topbar{position:sticky;top:0;z-index:40;height:64px;background:rgba(251,246,239,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 22px;flex:none}
+.menu-toggle{display:none;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--surface)}
+.topbar-title{font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px;white-space:nowrap;flex:none;min-width:150px;max-height:48px;line-height:1.2}
+.topbar-title svg{width:22px;height:22px;flex:none}
+.topbar-title span{white-space:nowrap}
+.topbar-sub{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex-shrink:1;max-width:46vw}
+.topbar-meta{margin-left:auto;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 12px;color:var(--ink-3);font-size:12px;white-space:nowrap;min-width:0;flex-shrink:1}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+.pill-orange{background:var(--orange-soft);color:var(--orange-strong)}
+.pill-green{background:var(--green-soft);color:var(--green)}
+.pill-amber{background:var(--amber-soft);color:var(--amber)}
+.pill-red{background:var(--red-soft);color:var(--red)}
+.pill-blue{background:var(--blue-soft);color:var(--blue)}
+.pill-gray{background:var(--gray-soft);color:var(--ink-3)}
+.view{padding:28px 32px;max-width:1480px;width:100%;margin:0 auto}
+@media (max-width:1023px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:none;box-shadow:0 10px 40px rgba(43,36,28,.18)}
+  .main{margin-left:0}
+  .menu-toggle{display:inline-flex}
+  .view{padding:20px 24px}
+}
+@media (max-width:767px){
+  .topbar{padding:0 12px}
+  .topbar-sub{display:none}
+  .view{padding:14px 12px}
+  .hide-sm{display:none}
+  .topbar-meta{gap:8px}
+}
+
+/* ---- shared components ---- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+.card+.card{margin-top:14px}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.card-title{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.card-title svg{width:16px;height:16px;color:var(--orange)}
+.topic-section{margin:8px 0;padding:8px 10px;border-radius:8px;background:var(--surface-2);font-size:13.5px;line-height:1.7}
+.topic-section h5{font-size:12px;color:var(--ink-3);font-weight:600;margin-bottom:3px}
+.topic-section p{margin:0}
+.topic-meta{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.topic-risk{margin:8px 0;padding:8px 10px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:12.5px;line-height:1.6}
+.topic-risk b{font-weight:600}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px 15px}
+.stat-label{font-size:11.5px;color:var(--ink-3);font-weight:600;display:flex;align-items:center;gap:6px}
+.stat-label svg{width:13px;height:13px}
+.stat-value{font-size:23px;font-weight:700;margin-top:3px;line-height:1.2}
+.stat-sub{font-size:11px;color:var(--ink-3);margin-top:2px}
+.stat.metric-card{transition:border-color .15s ease,background .15s ease}
+.stat.metric-card:hover{border-color:var(--line-strong);background:var(--surface-2)}
+.stat-value.amber-num{color:var(--warning)}
+.stat-value.red-num{color:var(--danger)}
+.stat-value.dim-num{color:var(--ink-3)}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;line-height:18px;padding:0 8px;border-radius:999px;font-weight:600;white-space:nowrap}
+.badge-green{background:var(--green-soft);color:var(--green)}
+.badge-amber{background:var(--amber-soft);color:var(--amber)}
+.badge-red{background:var(--red-soft);color:var(--red)}
+.badge-blue{background:var(--blue-soft);color:var(--blue)}
+.badge-gray{background:var(--gray-soft);color:var(--ink-3)}
+.badge-orange{background:var(--orange-soft);color:var(--orange-strong)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.dot-green{background:var(--green)}.dot-amber{background:var(--amber)}.dot-red{background:var(--red)}.dot-blue{background:var(--blue)}.dot-gray{background:var(--gray)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--ink-3);font-size:11.5px;font-weight:600;padding:7px 8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.row-click{cursor:pointer}
+tr.row-click:hover{background:var(--surface-2)}
+.empty{border:1px dashed var(--line-strong);border-radius:var(--radius);padding:34px 20px;text-align:center;color:var(--ink-3);font-size:13px;background:var(--surface)}
+.empty svg{width:30px;height:30px;margin:0 auto 8px;display:block;color:var(--ink-3);opacity:.55}
+.review-notice{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:var(--amber-soft);color:var(--amber);font-size:12px;line-height:1.5;margin-bottom:12px}
+.review-notice svg{width:22px;height:22px;flex:none}
+.review-notice .rn-text{flex:1;min-width:0}
+.empty-note{font-size:11.5px;color:var(--ink-3);margin-top:6px;line-height:1.7;max-width:520px;margin-left:auto;margin-right:auto}
+.btn{display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.btn-ghost{border:1px solid var(--line);color:var(--ink-2);background:var(--surface)}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn-retry{background:var(--orange);color:#fff;border:1px solid var(--orange)}
+.btn-retry:hover{background:var(--orange-strong);border-color:var(--orange-strong)}
+.btn-retry:disabled{opacity:.55;cursor:not-allowed}
+.vis-note-box{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--danger-soft);border-left:3px solid var(--danger);font-size:12px;line-height:1.6;color:var(--ink-2);overflow-wrap:anywhere}
+.vis-note-box .vn-label{font-weight:700;color:var(--danger)}
+.vis-max-note{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--warning-soft);color:var(--warning);font-size:12px;line-height:1.6}
+.vis-stub-note{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--gray-soft);color:var(--ink-3);font-size:12px;line-height:1.6}
+.retry-dialog-thumb{width:100%;max-height:220px;object-fit:contain;border-radius:8px;border:1px solid var(--line);background:#1A140C;margin-bottom:10px}
+.retry-sup-counter{font-size:11px;color:var(--ink-3);margin-top:3px;text-align:right}
+.retry-sup-counter.over{color:var(--danger)}
+.poll-hint{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-3);margin-left:8px}
+.poll-hint .dot{animation:pulse-dot 1.6s ease infinite}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.25}}
+.md-p{margin:3px 0}.md-li{margin:2px 0 2px 14px}.md-table-line{font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.mono{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);word-break:break-all}
+.dim{color:var(--ink-3);font-size:12px}
+/* ---- 统一组件 ---- */
+.nav-group{padding:14px 12px 4px;font-size:11px;color:var(--ink-3);font-weight:600;letter-spacing:.05em}
+.nav-status-card{margin:8px 12px 12px;padding:8px 10px;border-radius:10px;background:var(--surface-2);font-size:11.5px;line-height:1.6;color:var(--ink-2)}
+.nav-status-card b{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-strong)}
+.notice{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;font-size:12.5px;line-height:1.5;margin-bottom:12px}
+.notice svg{width:18px;height:18px;flex:none}
+.notice .n-text{flex:1;min-width:0}
+.notice.warn{background:var(--warning-soft);color:var(--warning)}
+.notice.info{background:var(--info-soft);color:var(--info)}
+.notice.danger{background:var(--danger-soft);color:var(--danger)}
+.notice.success{background:var(--success-soft);color:var(--success)}
+.flowbar{display:flex;align-items:stretch;gap:4px;margin-bottom:16px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;max-width:100%}
+.flow-step{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2);white-space:nowrap;cursor:pointer;flex:none;transition:background .15s ease,border-color .15s ease}
+.flow-step:hover{background:var(--surface-2);border-color:var(--line-strong)}
+.flow-step.current{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-strong);font-weight:600}
+.flow-step .fs-count{font-size:11px;color:var(--ink-3)}
+.flow-step.current .fs-count{color:var(--accent-strong)}
+.flow-step .fs-reason{font-size:11px;color:var(--danger);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sk{display:inline-block;border-radius:6px;background:linear-gradient(90deg,var(--surface-2) 25%,var(--surface-3) 37%,var(--surface-2) 63%);background-size:400% 100%;animation:sk-shimmer 1.2s ease infinite}
+@keyframes sk-shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+.copy-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:11px;color:var(--ink-3);background:var(--surface);cursor:pointer;vertical-align:middle}
+.copy-btn:hover{background:var(--surface-2);color:var(--ink-2)}
+.copy-btn.copied{color:var(--success);border-color:var(--success)}
+.btn-approve{background:var(--success);color:#fff;border:1px solid var(--success)}
+.btn-approve:hover{background:#356E4B;border-color:#356E4B}
+.btn-approve:disabled{opacity:.55;cursor:not-allowed}
+.btn-reject{background:var(--surface);color:var(--danger);border:1px solid var(--danger)}
+.btn-reject:hover{background:var(--danger-soft)}
+.btn-reject:disabled{opacity:.55;cursor:not-allowed}
+.vis-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:10px}
+.vis-status{margin-top:auto;padding-top:10px;font-size:12px;color:var(--ink-2)}
+.vis-status .dim{display:block;margin-top:2px}
+.modal{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal.hidden{display:none}
+.modal-backdrop{position:absolute;inset:0;background:rgba(30,22,12,.5)}
+.modal-panel{position:relative;z-index:1;width:min(560px,94vw);max-height:88vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);animation:modal-in .15s ease}
+@keyframes modal-in{from{transform:translateY(10px);opacity:.4}to{transform:none;opacity:1}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.modal-title{font-size:14.5px;font-weight:700}
+.modal-close{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--surface-2)}
+.modal-body{padding:16px 18px;overflow:auto;flex:1}
+.modal-body .kv{font-size:12.5px;line-height:1.8}
+.modal-body .kv b{color:var(--ink-3);font-weight:600;display:inline-block;min-width:76px}
+.modal-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+.modal-note{width:100%;min-height:64px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:12.5px;line-height:1.5;background:var(--surface);color:var(--ink)}
+.modal-note:focus{outline:2px solid rgba(232,86,61,.2);border-color:var(--accent)}
+.modal-warn{margin:10px 0;padding:8px 10px;border-radius:8px;background:var(--warning-soft);color:var(--warning);font-size:12px;line-height:1.6}
+.modal-err{margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:12.5px;line-height:1.6;display:none}
+.modal-err.show{display:block}
+.review-thumb{width:100%;max-height:150px;object-fit:contain;background:var(--surface-2);border-radius:8px;margin-bottom:10px;display:block}
+.toast{position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:200;padding:9px 16px;border-radius:10px;font-size:13px;box-shadow:var(--shadow-lg);opacity:0;transition:opacity .18s ease;pointer-events:none;max-width:92vw}
+.toast.show{opacity:1}
+.toast.success{background:var(--success);color:#fff}
+.toast.error{background:var(--danger);color:#fff}
+.cluster-card{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:11px 13px;margin-bottom:8px}
+.cluster-card .cluster-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cluster-card .cluster-title{font-size:13px;font-weight:600}
+.cluster-card .cluster-meta{font-size:11.5px;color:var(--ink-3);margin-top:3px}
+.cluster-card .cluster-facts{font-size:12.5px;color:var(--ink-2);margin:6px 0 8px;line-height:1.6}
+.totals-strip{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.totals-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2)}
+.totals-chip b{font-size:13px}
+.table-scroll{overflow-x:auto}
+.table-scroll table{min-width:560px}
+.hint{font-size:11.5px;color:var(--ink-3);margin-top:6px;line-height:1.6}
+@media (prefers-reduced-motion:reduce){.sk{animation:none;background:var(--surface-2)}}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start}
+.grid-2>*,.grid-3>*{min-width:0}
+.grid-2 .span2{grid-column:1/-1}
+@media (max-width:900px){.grid-2 .todo-first{order:-1}}
+/* ---- 今日总览驾驶舱网格 ---- */
+.ov-dashboard{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:stretch}
+.ov-dashboard>.card{min-width:0;display:flex;flex-direction:column}
+.ov-dashboard>.card .card-head{flex:none}
+.ov-metrics{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,1fr);gap:12px;min-width:0}
+.ov-metrics .metric-card{display:flex;flex-direction:column;padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-sm);text-align:left;cursor:pointer;transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
+.ov-metrics .metric-card:hover{border-color:var(--line-strong);background:var(--surface-2);box-shadow:var(--shadow-md)}
+.ov-metrics .metric-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ov-metrics .metric-card .stat-label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3);font-weight:600;margin-bottom:10px}
+.ov-metrics .metric-card .stat-label svg{width:14px;height:14px}
+.ov-metrics .metric-card .stat-value{font-size:26px;font-weight:700;line-height:1.15;margin-bottom:6px}
+.ov-metrics .metric-card .stat-sub{font-size:11.5px;color:var(--ink-3);line-height:1.5}
+.ov-top5{grid-column:span 7}
+.ov-flow{grid-column:span 5}
+.ov-todo{grid-column:1/-1}
+.ov-sources{grid-column:span 4}
+.ov-jobs{grid-column:span 4}
+.ov-alerts{grid-column:span 4}
+.ov-dashboard .card-head{min-height:32px;align-items:center}
+@media (max-width:1240px){.ov-top5,.ov-flow{grid-column:1/-1}.ov-todo{order:-1}}
+@media (max-width:1024px){.ov-metrics{grid-template-columns:repeat(3,1fr)}.ov-sources,.ov-jobs,.ov-alerts{grid-column:span 6}}
+@media (max-width:767px){.ov-metrics{grid-template-columns:repeat(2,1fr)}.ov-sources,.ov-jobs,.ov-alerts{grid-column:1/-1}}
+@media (max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
+.creation-grid{display:grid;grid-template-columns:320px minmax(480px,1fr) 320px;grid-template-areas:"list preview fact";gap:14px;align-items:start}
+.creation-grid .cg-list{grid-area:list;min-width:0}
+.creation-grid .cg-preview{grid-area:preview;min-width:0}
+.creation-grid .cg-fact{grid-area:fact;min-width:0}
+.preview-frame{width:100%;max-width:720px;margin:0 auto;transition:max-width .15s ease}
+.preview-frame.mobile{max-width:375px}
+.preview-frame iframe{width:100%;height:460px;border:1px solid var(--line);border-radius:10px;background:#fff;display:block}
+.preview-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+@media (max-width:1450px){.creation-grid{grid-template-columns:320px 1fr;grid-template-areas:"list preview" "fact fact"}}
+@media (max-width:860px){.creation-grid{grid-template-columns:1fr;grid-template-areas:"list" "preview" "fact"}}
+details.tech{border:1px solid var(--line);border-radius:var(--radius-s);background:var(--surface-2);margin-top:8px}
+details.tech summary{cursor:pointer;padding:7px 11px;font-size:12px;color:var(--ink-2);font-weight:600;list-style:none;display:flex;align-items:center;gap:6px}
+details.tech summary::-webkit-details-marker{display:none}
+details.tech[open] summary{border-bottom:1px solid var(--line)}
+details.tech .tech-body{padding:9px 11px;font-size:12px;color:var(--ink-2);line-height:1.7;overflow-wrap:anywhere}
+.todo-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line)}
+.todo-row.sel{background:var(--orange-soft);border-radius:var(--radius-s);padding-left:8px;padding-right:8px}
+.todo-row:last-child{border-bottom:none}
+.todo-main{flex:1;min-width:0}
+.todo-title{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.todo-meta{font-size:11.5px;color:var(--ink-3);margin-top:1px}
+.pipeline{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.pipe{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-s);padding:10px;text-align:center}
+.pipe .p-name{font-size:12.5px;font-weight:700;margin-top:5px}
+.pipe .p-count{font-size:11px;color:var(--ink-3);margin-top:1px}
+.pipe.p-done{border-color:var(--green);background:var(--green-soft)}
+.pipe.p-running{border-color:var(--blue);background:var(--blue-soft)}
+.pipe.p-blocked{border-color:var(--red);background:var(--red-soft)}
+.pipe.p-gray{border-color:var(--line);background:var(--gray-soft)}
+@media (max-width:767px){.pipeline{grid-template-columns:repeat(3,1fr)}}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tab-btn{border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:12.5px;color:var(--ink-2);background:var(--surface)}
+.tab-btn.active{background:var(--orange);border-color:var(--orange);color:#fff;font-weight:600}
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.search-input{border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12.5px;background:var(--surface);color:var(--ink);min-width:200px}
+select.filter{border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12.5px;background:var(--surface);color:var(--ink)}
+.thumb-wrap{display:block;width:100%;padding:0;border:none;background:none;cursor:zoom-in;border-radius:9px}
+.thumb-wrap img{display:block;width:100%;height:180px;object-fit:contain;background:var(--surface-2);border-radius:9px}
+.thumb-wrap:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.vis-meta{font-size:11.5px;color:var(--ink-2);margin-top:4px;line-height:1.7;overflow-wrap:normal;word-break:normal}
+.vis-meta .mono{overflow-wrap:anywhere;word-break:break-all}
+.attempt-list td{overflow-wrap:normal;word-break:normal}
+.attempt-list td.mono{overflow-wrap:anywhere;word-break:break-all}
+.v-attempt-btn{margin-top:8px}
+.vis-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);padding:11px;overflow:hidden;display:flex;flex-direction:column}
+.vis-card .thumb-wrap{flex:none}
+.vis-card .vis-meta{flex:1}
+.vis-card .v-attempt-btn{margin-top:6px}
+.vis-card .v-title{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vis-meta{font-size:11px;color:var(--ink-3);margin-top:4px;line-height:1.65}
+.attempt-list{width:100%;font-size:11.5px;border-collapse:collapse}
+.attempt-list td,.attempt-list th{padding:4px 6px;border-bottom:1px solid var(--line)}
+.iframe-preview{width:100%;height:430px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.preview-empty{border:1px dashed var(--line-strong);border-radius:10px;padding:34px;text-align:center;color:var(--ink-3);font-size:12.5px;background:var(--surface-2);min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.platform-row{display:flex;align-items:flex-start;gap:12px;padding:12px 2px;border-bottom:1px solid var(--line)}
+.platform-row:last-child{border-bottom:none}
+.platform-name{font-size:13px;font-weight:700;min-width:84px}
+.blocker-chip{display:inline-block;border-radius:6px;background:var(--red-soft);color:var(--red);font-size:11px;padding:2px 8px;margin:2px 4px 0 0}
+.ok-chip{display:inline-block;border-radius:6px;background:var(--green-soft);color:var(--green);font-size:11px;padding:2px 8px;margin:2px 4px 0 0}
+.evidence-list{font-size:12px;line-height:1.8}
+.evidence-list a{word-break:break-all}
+
+/* ---- drawer ---- */
+.drawer{position:fixed;inset:0;z-index:80}
+.drawer-backdrop{position:absolute;inset:0;background:rgba(30,22,12,.45)}
+.drawer-panel{position:absolute;top:0;right:0;bottom:0;width:440px;max-width:92vw;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;box-shadow:-8px 0 34px rgba(43,36,28,.16);animation:drawer-in .16s ease}
+@keyframes drawer-in{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.drawer-title{font-size:14.5px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drawer-close{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);flex:none}
+.drawer-close:hover{background:var(--surface-2)}
+.drawer-body{padding:16px 18px;overflow:auto;flex:1}
+.drawer-body h4{font-size:12.5px;color:var(--ink-3);font-weight:600;margin:14px 0 6px}
+.drawer-body h4:first-child{margin-top:0}
+.drawer-body .kv{font-size:12.5px;line-height:1.8}
+.drawer-body .kv b{color:var(--ink-3);font-weight:600;display:inline-block;min-width:70px}
+.drawer-body ul{list-style:none}
+.drawer-body ul li{padding:3px 0;font-size:12.5px;line-height:1.7;padding-left:14px;position:relative}
+.drawer-body ul li:before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--line-strong)}
+
+/* ---- lightbox (fixed v1) ---- */
+#visual-lightbox .hidden{display:none}
+.visual-lightbox{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center}
+.visual-lightbox.hidden{display:none}
+.visual-lightbox-backdrop{position:absolute;inset:0;background:rgba(20,14,8,.88)}
+.visual-lightbox-inner{position:relative;z-index:1;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;padding:60px 72px 210px}
+.visual-lightbox-stage{pointer-events:auto;position:relative;max-width:90vw;max-height:85vh}
+.visual-lightbox-img{display:block;max-width:90vw;max-height:85vh;object-fit:contain;cursor:zoom-out;border-radius:6px;background:#1A140C;box-shadow:0 10px 50px rgba(0,0,0,.55)}
+.visual-lightbox-close{position:absolute;top:14px;right:16px;z-index:2;pointer-events:auto;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,248,239,.14);color:#fff;font-size:20px;line-height:1;cursor:pointer}
+.visual-lightbox-close:hover{background:rgba(232,86,61,.85)}
+.visual-lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;pointer-events:auto;width:44px;height:64px;border:none;border-radius:10px;background:rgba(255,248,239,.14);color:#fff;font-size:26px;cursor:pointer}
+.visual-lightbox-nav:hover{background:rgba(232,86,61,.85)}
+.visual-lightbox-prev{left:14px}.visual-lightbox-next{right:14px}
+.visual-lightbox-error{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#FFD9CE;font-size:14px;background:rgba(30,20,12,.9);border-radius:6px}
+.visual-lightbox-error.show{display:flex}
+.visual-lightbox-error a{pointer-events:auto;color:#fff;margin:0 3px}
+.visual-lightbox-info{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);pointer-events:auto;background:rgba(255,248,239,.97);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:9px 14px;max-width:min(620px,92vw);max-height:150px;overflow:auto;font-size:11.5px;line-height:1.6;overflow-wrap:anywhere}
+.visual-lb-row{display:flex;gap:8px}
+.visual-lb-row b{min-width:88px;color:var(--ink-3);font-weight:600;flex-shrink:0}
+.visual-lb-row a{color:var(--orange-strong);font-weight:600}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12a7 7 0 0 1 14 0"/><path d="M8.5 12a3.5 3.5 0 0 1 7 0"/><path d="M12 12l-3 9"/><path d="M12 12l3 9"/></svg></div>
+      <div><div class="brand-name">SparkOS</div><div class="brand-sub">AI 编辑部 · 统一工作台</div></div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="nav-status-card"><b><span class="dot dot-blue"></span>统一工作台 · 受控操作</b>已开放：必读采纳/忽略、选题审批、草稿审批/修订、视觉审核/受控重试、蒸馏采纳与待写回、交付包生成与发布台账。发布动作仍由人工在平台后台执行。</div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <button class="menu-toggle" id="menuToggle" type="button" aria-label="打开导航"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg></button>
+      <div class="topbar-title" id="topbarTitle"></div>
+      <div class="topbar-sub" id="topbarSub"></div>
+      <div class="topbar-meta">
+        <span class="pill pill-blue">统一工作台 · 必读/选题/草稿/视觉/蒸馏/交付/台账</span>
+        <span class="hide-sm" id="topbarTime"></span>
+        <span class="pill pill-gray hide-sm" id="topbarHealth"></span>
+      </div>
+    </header>
+    <main class="view" id="view"></main>
+  </div>
+</div>
+
+<div class="drawer hidden" id="drawer" role="dialog" aria-modal="true" aria-label="详情抽屉">
+  <div class="drawer-backdrop" data-drawer-backdrop></div>
+  <div class="drawer-panel">
+    <div class="drawer-head"><div class="drawer-title" id="drawerTitle"></div><button class="drawer-close" data-drawer-close type="button" aria-label="关闭抽屉">✕</button></div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </div>
+</div>
+
+<div id="review-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="视觉审核确认">
+  <div class="modal-backdrop" data-review-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="reviewDialogTitle"></div><button class="modal-close" data-review-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="reviewDialogBody"></div>
+    <div class="modal-foot" id="reviewDialogFoot"></div>
+  </div>
+</div>
+<div id="retry-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="按意见重试确认">
+  <div class="modal-backdrop" data-retry-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="retryDialogTitle">按意见重试</div><button class="modal-close" data-retry-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="retryDialogBody"></div>
+    <div class="modal-foot" id="retryDialogFoot"></div>
+  </div>
+</div>
+<div id="draft-decision-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="草稿审批确认">
+  <div class="modal-backdrop" data-draft-decision-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="draftDecisionTitle">草稿审批</div><button class="modal-close" data-draft-decision-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="draftDecisionBody"></div>
+    <div class="modal-foot" id="draftDecisionFoot"></div>
+  </div>
+</div>
+<div id="topic-decision-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="选题审批确认">
+  <div class="modal-backdrop" data-topic-decision-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="topicDecisionTitle">选题审批</div><button class="modal-close" data-topic-decision-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="topicDecisionBody"></div>
+    <div class="modal-foot" id="topicDecisionFoot"></div>
+  </div>
+</div>
+<div id="draft-revise-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="按意见修订确认">
+  <div class="modal-backdrop" data-draft-revise-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="draftReviseTitle">按意见修订</div><button class="modal-close" data-draft-revise-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="draftReviseBody"></div>
+    <div class="modal-foot" id="draftReviseFoot"></div>
+  </div>
+</div>
+<div id="delivery-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="生成交付包确认">
+  <div class="modal-backdrop" data-delivery-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="deliveryDialogTitle">生成交付包</div><button class="modal-close" data-delivery-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="deliveryDialogBody"></div>
+    <div class="modal-foot" id="deliveryDialogFoot"></div>
+  </div>
+</div>
+<div id="publish-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-label="创建发布任务确认">
+  <div class="modal-backdrop" data-publish-backdrop></div>
+  <div class="modal-panel">
+    <div class="modal-head"><div class="modal-title" id="publishDialogTitle">创建发布任务</div><button class="modal-close" data-publish-close type="button" aria-label="关闭">✕</button></div>
+    <div class="modal-body" id="publishDialogBody"></div>
+    <div class="modal-foot" id="publishDialogFoot"></div>
+  </div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<div id="visual-lightbox" class="visual-lightbox hidden" role="dialog" aria-modal="true" aria-label="视觉图片大图预览">
+  <div class="visual-lightbox-backdrop" data-lightbox-backdrop></div>
+  <div class="visual-lightbox-inner">
+    <button type="button" class="visual-lightbox-close" data-lightbox-close aria-label="关闭预览">✕</button>
+    <button type="button" class="visual-lightbox-nav visual-lightbox-prev" data-lightbox-prev aria-label="上一张（方向键 ←）">‹</button>
+    <div class="visual-lightbox-stage" data-lightbox-stage>
+      <img class="visual-lightbox-img" data-lightbox-img alt="">
+      <div class="visual-lightbox-error hidden" data-lightbox-error role="alert">
+        <div data-lightbox-error-msg>图片加载失败</div>
+        <div>
+          <a class="btn" data-lightbox-anchor data-lightbox-error-link href="#" target="_blank" rel="noopener noreferrer">打开原图</a>
+          <a class="btn" data-lightbox-anchor data-lightbox-error-current href="#">在当前标签查看原图</a>
+        </div>
+      </div>
+    </div>
+    <button type="button" class="visual-lightbox-nav visual-lightbox-next" data-lightbox-next aria-label="下一张（方向键 →）">›</button>
+    <div class="visual-lightbox-info" data-lightbox-info aria-live="polite"></div>
+  </div>
+</div>
+
+<script>
+
+'use strict';
+var $ = function(id){return document.getElementById(id);};
+var esc = function(s){return String(s==null?'':s).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;').split('"').join('&quot;').split("'").join('&#39;');};
+// 动态外链白名单：只允许 http/https 绝对地址；历史脏数据降级为普通转义文本（与服务端 isSafeExternalUrl 同一规则）
+function isSafeUrl(u){if(typeof u!=="string")return false;if(u===""||u.length>2048)return false;if(u!==u.trim())return false;if(/[\u0000-\u001f\u007f]/.test(u))return false;if(!/^https?:\/\//i.test(u))return false;try{var p=new URL(u);return p.protocol==="http:"||p.protocol==="https:";}catch(e){return false;}}
+function safeExtLink(u){return isSafeUrl(u)?"<a href=\""+esc(u)+"\" target=\"_blank\" rel=\"noopener noreferrer\">"+esc(u)+"</a>":"<span class=\"mono\">"+esc(u)+"</span>";}
+// 写端点请求包装：mutation POST 统一 application/json + CSRF token
+function apiFetch(url,opts){opts=opts||{};opts.headers=Object.assign({"content-type":"application/json","x-sparkos-csrf":(window._sparkosCsrf||"")},opts.headers||{});return fetch(url,opts);}
+function fmtISO(iso){if(!iso)return '—';var d=new Date(iso);if(isNaN(d.getTime()))return esc(iso);var p=function(n){return (n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}
+function safeDecode(v){try{return decodeURIComponent(v);}catch(e){return v;}}
+var ICONS={
+  overview:['M3 3h7v7H3z','M14 3h7v7h-7z','M3 14h7v7H3z','M14 14h7v7h-7z'],
+  intel:['M5 12a7 7 0 0 1 14 0','M8.5 12a3.5 3.5 0 0 1 7 0','M12 12l-3 9','M12 12l3 9'],
+  topics:['M5 3v18','M5 3h12l-2 5 2 5H5'],
+  creation:['M6 3h9l4 4v14H6z','M15 3v4h4','M9 12h6','M9 16h6'],
+  review:['M9 3h6v4H9z','M6 5h2v4h8V5h2v16H6z','M9 13l2 2 4-4'],
+  visual:['M4 4h16v16H4z','M4 15l5-5 4 4 3-3 4 4','M8.5 9.5a1.5 1.5 0 1 0 0-.01'],
+  publish:['M3 11l18-7-7 18-2.5-7.5z','M21 4l-9.5 10.5'],
+  growth:['M4 20V10','M10 20V4','M16 20v-7','M22 20H2'],
+  system:['M12 2v3','M12 19v3','M2 12h3','M19 12h3','M4.9 4.9l2.1 2.1','M17 17l2.1 2.1','M19.1 4.9L17 7','M7 17l-2.1 2.1','M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'],
+  search:['M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14z','M21 21l-5-5'],
+  close:['M6 6l12 12','M18 6L6 18'],
+  chev:['M9 6l6 6-6 6'],
+  ext:['M14 4h6v6','M20 4L10 14','M18 13v6H5V6h6'],
+  alert:['M12 3l10 18H2z','M12 10v5','M12 18.5v.5'],
+  clock:['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z','M12 7v5l3 2'],
+  check:['M4 12l5 5L20 6'],
+  filter:['M4 6h16','M7 12h10','M10 18h4'],
+  doc:['M6 3h9l4 4v14H6z','M15 3v4h4'],
+  image:['M4 4h16v16H4z','M4 15l5-5 4 4 3-3 4 4'],
+  send:['M3 11l18-7-7 18-2.5-7.5z','M21 4l-9.5 10.5'],
+  db:['M12 3c4 0 7 1.5 7 3.5S16 10 12 10 5 8.5 5 6.5 8 3 12 3z','M5 6.5V12c0 2 3 3.5 7 3.5s7-1.5 7-3.5V6.5','M5 12v5.5C5 19.5 8 21 12 21s7-1.5 7-3.5V12'],
+  sun:['M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z','M12 2v2','M12 20v2','M4 12H2','M22 12h-2','M5.6 5.6L4.2 4.2','M19.8 19.8l-1.4-1.4','M18.4 5.6l1.4-1.4','M4.2 19.8l1.4-1.4']
+};
+function icon(name){return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(ICONS[name]||[]).map(function(d){return '<path d="'+d+'"/>';}).join('')+'</svg>';}
+function badge(text,cls){return '<span class="badge '+(cls||'badge-gray')+'">'+esc(text)+'</span>';}
+function empty(title,note,ic){return '<div class="empty">'+icon(ic||'doc')+'<div>'+esc(title)+'</div>'+(note?'<div class="empty-note">'+esc(note)+'</div>':'')+'</div>';}
+function gradeBadge(g){var m={A:'badge-green',B:'badge-blue',C:'badge-amber',D:'badge-red'};return '<span class="badge '+(m[g]||'badge-gray')+'">'+esc(g)+'</span>';}
+// 只读内容工厂流程：状态与数量全部来自现有数据，点击仅 hash 跳转
+function flowStages(){
+  var fact=D.factory||{};
+  var srcs=((D.intel&&D.intel.health&&D.intel.health.sources)||[]);
+  var health=(D.intel&&D.intel.health&&D.intel.health.overall)||'pending';
+  var ed=(fact.editorial&&fact.editorial.cards)||[];
+  var drafts=(fact.drafts)||[];
+  var vis=(fact.visual&&fact.visual.batches)||[];
+  var pendingTopics=ed.filter(function(c){return !c.decision||c.decision==='pending';}).length;
+  var pendingDrafts=drafts.filter(function(p){return p.status==='waiting_approval';}).length;
+  var pendingVisual=0;vis.forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.state==='waiting_visual_approval')pendingVisual++;});});
+  var anyVisualRejected=vis.some(function(b){return b.status==='rejected';});
+  var pubReady=vis.some(function(b){return b.readiness&&b.readiness.readyForPublication;});
+  return [
+    {id:'intel',name:'情报',status:srcs.length?(health==='red'?'blocked':health==='green'?'done':'running'):'empty',count:srcs.length,reason:health==='red'?'信源异常':'',title:health==='red'?'情报源异常':'情报源 '+(health==='green'?'正常':'待接入')},
+    {id:'topics',name:'选题',status:ed.length?(pendingTopics?'running':'done'):'empty',count:ed.length,reason:'',title:ed.length?(pendingTopics?'策划卡待审批':'策划已完成'):'暂无策划卡'},
+    {id:'creation',name:'创作',status:drafts.length?(pendingDrafts?'running':'done'):'empty',count:drafts.length,reason:'',title:'草稿 '+(pendingDrafts?'待审批':'已完成')},
+    {id:'review',name:'审核',status:(pendingTopics||pendingDrafts)?'running':((ed.length||drafts.length)?'done':'empty'),count:pendingTopics+pendingDrafts,reason:'',title:'待审 '+(pendingTopics+pendingDrafts)+' 项'},
+    {id:'visual',name:'视觉',status:vis.length?(pendingVisual?'running':(anyVisualRejected?'blocked':'done')):'empty',count:pendingVisual,reason:anyVisualRejected?'有图片被驳回':'',title:'图片 '+(pendingVisual?'待审核':'已完成')},
+    {id:'publish',name:'发布准备',status:pubReady?'done':(vis.length?'blocked':'empty'),count:vis.length,reason:vis.length&&!pubReady?'存在发布阻塞':'',title:pubReady?'发布就绪（人工操作）':'发布存在阻塞'}
+  ];
+}
+function flowBar(current){
+  var st=flowStages();
+  var dot={done:'dot-green',running:'dot-blue',blocked:'dot-red',empty:'dot-gray'};
+  var name={done:'已完成',running:'进行中',blocked:'阻塞',empty:'无任务'};
+  return '<div class="flowbar" role="navigation" aria-label="内容生产流程">'+st.map(function(s){
+    return '<button type="button" class="flow-step'+(s.id===current?' current':'')+'" data-flow="'+s.id+'" data-flow-status="'+s.status+'" title="'+esc(s.title||name[s.status])+'"><span class="fs-dot '+(dot[s.status]||'dot-gray')+'"></span>'+s.name+'<span class="fs-count">'+s.count+'</span>'+(s.reason?'<span class="fs-reason">'+esc(s.reason)+'</span>':'')+'</button>';
+  }).join('')+'</div>';
+}
+function lineName(id){if(!id)return '—';var l=(D.lines||[]).filter(function(x){return x.id===id;})[0];return l?l.name:id;}
+/* ============ M8 统一工作台：V1 能力迁移的共享助手 ============ */
+function freshClass(h){if(h==null)return 'badge-gray';if(h<=24)return 'badge-green';if(h<=48)return 'badge-amber';return 'badge-red';}
+function freshLabel(h){if(h==null)return 'fresh=?';return h+'h';}
+function lineColor(id){var PALETTE=['#E8563D','#F5A95C','#7FA8C9','#7FA88A','#B58BC9','#D98BA0','#8AB5C9','#C9B58B','#8AC9A5','#C98B8B'];var h=0;for(var i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0;return PALETTE[h%PALETTE.length];}
+function decisionOf(kind,id){var ds=D.decisions||[];for(var i=ds.length-1;i>=0;i--){if(ds[i].kind===kind&&ds[i].id===id)return ds[i].action;}return null;}
+/* must_reads 采纳/忽略：处理中/成功/失败/可重试反馈，POST /sparkos/mutate */
+async function mustReadDecide(btn){
+  if(btn.disabled)return;btn.disabled=true;var old=btn.textContent;btn.textContent='处理中…';
+  var row=btn.closest('.todo-row');var siblings=row?row.querySelectorAll('button[data-mr-decide]'):[];
+  siblings.forEach(function(b){b.disabled=true;});
+  try{
+    var resp=await apiFetch('/sparkos/mutate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'topic',id:btn.getAttribute('data-mr-id'),action:btn.getAttribute('data-mr-decide')})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok)throw new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+    if(json.entry)D.decisions=(D.decisions||[]).concat([json.entry]);
+    showToast(btn.getAttribute('data-mr-decide')==='adopt'?'必读选题已采纳':'必读选题已忽略','success');
+    renderView(state.view);
+  }catch(err){
+    siblings.forEach(function(b){b.disabled=false;});
+    btn.disabled=false;btn.textContent=old;
+    showToast('操作失败：'+String(err.message||err)+'（可重试）','error');
+  }
+}
+/* 运行时草稿查看全文：切换展开/收起，GET /sparkos/draft 按需加载，失败显示错误并可重试 */
+async function toggleRuntimeDraft(btn){
+  if(btn.disabled)return;
+  var idx=Number(btn.getAttribute('data-rt-draft'));
+  var pre=document.querySelector('[data-rt-full="'+idx+'"]');
+  if(!pre)return;
+  if(pre.style.display==='block'){pre.style.display='none';btn.textContent='查看全文';return;}
+  var entry=(D.runtimeDrafts||[])[idx];
+  if(!entry)return;
+  btn.disabled=true;btn.textContent='读取中…';
+  try{
+    var resp=await apiFetch('/sparkos/draft?file='+encodeURIComponent(entry.file));
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok)throw new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+    pre.textContent=(json.value&&json.value.content)||'(空文件)';
+    pre.style.display='block';btn.textContent='收起';
+  }catch(err){
+    pre.textContent='加载失败：'+String(err.message||err)+'（点击按钮重试）';
+    pre.style.display='block';btn.textContent='重试';
+  }
+  btn.disabled=false;
+}
+/* 时间线知识卡客户端过滤（无请求，仅显示/隐藏行） */
+function filterTimelineCards(q){
+  var body=document.getElementById('tlBody');
+  if(!body)return;
+  var needle=(q||'').toLowerCase();
+  var rows=body.querySelectorAll('tr');
+  var shown=0;
+  rows.forEach(function(tr){
+    var hit=!needle||tr.textContent.toLowerCase().indexOf(needle)>=0;
+    tr.style.display=hit?'':'none';
+    if(hit)shown++;
+  });
+  var hint=document.getElementById('tlFilterHint');
+  if(hint)hint.textContent=needle?('匹配 '+shown+' / '+rows.length+' 张'):'';
+}
+/* 每日简报 markdown 安全渲染（全部 esc，无 innerHTML 注入面） */
+function renderBriefMd(text){
+  if(!text)return '';
+  var lines=String(text).split('\n'),out=[];
+  for(var i=0;i<lines.length;i++){var t=lines[i].trim();
+    if(t.indexOf('# ')===0)out.push('<h3>'+esc(t.slice(2))+'</h3>');
+    else if(t.indexOf('## ')===0)out.push('<h4>'+esc(t.slice(3))+'</h4>');
+    else if(t.indexOf('### ')===0)out.push('<h4>'+esc(t.slice(4))+'</h4>');
+    else if(t.indexOf('|')===0)out.push('<div class="md-table-line mono">'+esc(lines[i])+'</div>');
+    else if(t.indexOf('---')===0)out.push('<hr>');
+    else if(t.indexOf('- ')===0)out.push('<div class="md-li">• '+esc(t.slice(2))+'</div>');
+    else if(t!=='')out.push('<div class="md-p">'+esc(lines[i])+'</div>');
+  }
+  return out.join('');
+}
+function fmtDate(v){if(!v)return '—';var s=String(v);if(/^\d{8}$/.test(s))return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);return esc(v);}
+
+/* ============ data boot ============ */
+var D = null;
+function boot(){
+  if(window._embeddedDailyData){D=window._embeddedDailyData;renderRouter();return;}
+  // 无内嵌数据：显示加载态并经 GET /sparkos/data 兜底（只读）
+  var view=$('view');
+  view.innerHTML='<div class="empty">'+icon('clock')+'<div>正在加载工作台数据…</div></div>';
+  apiFetch('/sparkos/data').then(function(r){return r.json();}).then(function(j){
+    if(j&&j.ok&&j.value){D=j.value;renderRouter();}
+    else{renderFatal('数据端点返回异常：'+(j&&j.error&&j.error.message?j.error.message:'未知错误'));}
+  }).catch(function(e){renderFatal('无法读取 /sparkos/data：'+String(e&&e.message||e));});
+}
+function renderFatal(msg){
+  $('view').innerHTML='<div class="card"><div class="card-head"><div class="card-title">'+icon('alert')+'数据不可用</div></div><div class="empty">'+icon('alert')+'<div>'+esc(msg||'工作台数据缺失')+'</div><div class="empty-note">请刷新页面重试；若持续失败，请检查插件服务是否正常，或打开原版工作台 <a href="/sparkos/app">/sparkos/app</a> 对照。</div><div style="margin-top:12px"><button type="button" class="btn btn-ghost" data-reload-page>重新加载</button></div></div></div>';
+  var rb=$('view').querySelector('[data-reload-page]');if(rb){rb.onclick=function(){location.reload();};}
+}
+
+/* ============ router ============ */
+var VIEWS=[
+  {id:'overview',label:'今日总览',icon:'overview',desc:'今天系统运行得怎么样，我需要处理什么',group:'content'},
+  {id:'intel',label:'情报中心',icon:'intel',desc:'每日 Top 5 与情报簇：证据等级、事实、推断与风险',group:'content'},
+  {id:'topics',label:'选题策划',icon:'topics',desc:'周三 / 周六编辑策划卡：核心判断与 A/B 证据闸门',group:'content'},
+  {id:'creation',label:'创作中心',icon:'creation',desc:'草稿包三栏工作台：版本链、平台预览与事实边界',group:'content'},
+  {id:'review',label:'审核中心',icon:'review',desc:'编辑待办箱：选题、草稿、图片与蒸馏的待审汇总',group:'content'},
+  {id:'visual',label:'视觉中心',icon:'visual',desc:'图片审核网格：当前 attempt、历史与 Provider 区分',group:'content'},
+  {id:'publish',label:'发布准备',icon:'publish',desc:'平台就绪矩阵：文稿、视觉、交付包与风险检查',group:'content'},
+  {id:'growth',label:'增长分析',icon:'growth',desc:'真实发布表现数据；未接入时显示接入说明',group:'ops'},
+  {id:'system',label:'系统状态',icon:'system',desc:'信源健康、工作流任务、数据新鲜度与降级状态',group:'ops'}
+];
+var state={view:'overview',filters:{review:{type:'all',urgency:'all',time:'all',q:''},intel:{q:''},creation:{packageId:null,platform:'wechat',previewMode:'desktop'}}};
+function parseHash(){
+  var h=location.hash.replace(/^#\/?/,'');
+  var parts=h.split('?');
+  var view=parts[0]||'overview';
+  if(!VIEWS.some(function(v){return v.id===view;}))view='overview';
+  var params={};
+  if(parts[1])parts[1].split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0)params[safeDecode(kv.slice(0,i))]=safeDecode(kv.slice(i+1));});
+  return {view:view,params:params};
+}
+function setHashParams(params){
+  var r=parseHash();
+  var qs=Object.keys(params).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);}).join('&');
+  history.replaceState(null,'','#/'+r.view+(qs?'?'+qs:''));
+}
+function navigate(view){
+  if(!VIEWS.some(function(v){return v.id===view;}))view='overview';
+  if(view===state.view){renderView(view);return;}
+  location.hash='#/'+view;
+}
+window.addEventListener('hashchange',renderRouter);
+function renderRouter(){
+  var r=parseHash();
+  state.view=r.view;
+  if(r.params.type)state.filters.review.type=r.params.type;
+  if(r.params.urgency)state.filters.review.urgency=r.params.urgency;
+  if(r.params.time)state.filters.review.time=r.params.time;
+  if(r.params.q!=null)state.filters.review.q=r.params.q;
+  if(r.params.pkg)state.filters.creation.packageId=r.params.pkg;
+  if(r.params.pf)state.filters.creation.platform=r.params.pf;
+  if(r.params.pv)state.filters.creation.previewMode=r.params.pv;
+  renderView(r.view);
+}
+var NAV_GROUPS={content:'内容生产',ops:'运营'};
+function renderView(view){
+  state.view=view;
+  var cur=VIEWS.filter(function(v){return v.id===view;})[0];
+  var navHtml=[];
+  Object.keys(NAV_GROUPS).forEach(function(gk){
+    navHtml.push('<div class="nav-group">'+NAV_GROUPS[gk]+'</div>');
+    VIEWS.filter(function(v){return v.group===gk;}).forEach(function(v){
+      navHtml.push('<button type="button" class="nav-item'+(v.id===view?' active':'')+'" data-nav="'+v.id+'">'+icon(v.icon)+'<span>'+v.label+'</span></button>');
+    });
+  });
+  $('nav').innerHTML=navHtml.join('');
+  $('topbarTitle').innerHTML=icon(cur.icon)+'<span>'+cur.label+'</span>';
+  $('topbarSub').textContent=cur.desc||'';
+  $('topbarTime').textContent=D&&D.generatedAt?('数据 '+fmtISO(D.generatedAt)):'数据 —';
+  var overall=(D&&D.intel&&D.intel.health&&D.intel.health.overall)||'pending';
+  var overallName={green:'正常',red:'异常',pending:'待接入'}[overall]||overall;
+  $('topbarHealth').textContent='信源 '+overallName;
+  $('view').innerHTML=RENDER[view]();
+  if(view==='review')applyReviewFilters();
+  // M6.2：离开视觉页停止轮询；进入且存在 pipeline 任务时只读轮询
+  if(view==='visual')startVisualPolling();
+  else stopVisualPolling();
+  $('view').scrollTop=0;window.scrollTo(0,0);
+}
+
+/* ============ overview ============ */
+function renderOverview(){
+  var d=D||{};var daily=d.daily||{};var data=daily.data||{};
+  var intel=d.intel||{health:{sources:[],overall:'pending'}};
+  var health=intel.health||{sources:[],overall:'pending'};var srcs=health.sources||[];
+  var fact=d.factory||{};
+  var ed=(fact.editorial&&fact.editorial.cards)||[];
+  var drafts=(fact.drafts)||[];
+  var vis=(fact.visual&&fact.visual.batches)||[];
+  var pendingTopics=ed.filter(function(c){return !c.decision||c.decision==='pending';}).length;
+  var pendingDrafts=drafts.filter(function(p){return p.status==='waiting_approval';}).length;
+  // M6.2 计数语义：待审图片只统计等待视觉审核；被驳回可重试单独显示；进行中的 pipeline 单独显示
+  var pendingVisual=0;var rejectedRetryable=0;var visualInFlight=0;
+  vis.forEach(function(b){(b.tasks||[]).forEach(function(t){
+    if(t.state==='waiting_visual_approval')pendingVisual++;
+    if(t.state==='rejected'&&visualRetryInfo(t).eligible)rejectedRetryable++;
+    if(t.pipelineState==='queued'||t.pipelineState==='retry'||t.pipelineState==='generating'||t.pipelineState==='generated')visualInFlight++;
+  });});
+  var abCount=ed.filter(function(c){return c.verificationGrade==='A'||c.verificationGrade==='B';}).length;
+  var blockers=[];vis.forEach(function(b){var bl=(b.readiness&&b.readiness.blockers)||[];blockers=blockers.concat(bl);});
+  var greenSrc=srcs.filter(function(s){return s.status==='green';}).length;
+  var h=[];
+  var healthName={green:'正常',red:'异常',pending:'待接入'}[health.overall]||health.overall;
+  var pubReady=vis.some(function(b){return b.readiness&&b.readiness.readyForPublication;});
+  var todoCount=pendingVisual+rejectedRetryable+visualInFlight+pendingDrafts+pendingTopics+(d.distillQueue||[]).length+blockers.length;
+  var todos=[];
+  if(pendingVisual)todos.push({sev:0,type:'视觉',cls:'badge-orange',title:pendingVisual+' 张图片待审核',meta:'视觉中心 · 仅统计等待视觉审核的图片',target:'visual'});
+  if(rejectedRetryable)todos.push({sev:0,type:'视觉',cls:'badge-red',title:rejectedRetryable+' 张被驳回图片待重试',meta:'按驳回意见创建重试任务（受控操作）',target:'visual'});
+  if(visualInFlight)todos.push({sev:0,type:'视觉',cls:'badge-blue',title:visualInFlight+' 个视觉任务生成中',meta:'等待 DSH Agent 领取/生成（只读轮询）',target:'visual'});
+  if(pendingDrafts)todos.push({sev:1,type:'创作',cls:'badge-blue',title:pendingDrafts+' 个草稿包待审批',meta:'平台预览与事实边界，审批在创作中心',target:'creation'});
+  if(blockers.length)todos.push({sev:2,type:'交付',cls:'badge-red',title:'发布准备存在 '+blockers.length+' 项阻塞',meta:blockers.slice(0,3).map(function(x){return blockerLabel(x);}).join('；')+(blockers.length>3?' 等':''),target:'publish'});
+  if(pendingTopics)todos.push({sev:3,type:'选题',cls:'badge-amber',title:pendingTopics+' 张策划卡待审批',meta:'A/B 证据闸门，审批在选题策划',target:'topics'});
+  if((d.distillQueue||[]).length)todos.push({sev:4,type:'蒸馏',cls:'badge-gray',title:(d.distillQueue||[]).length+' 条蒸馏候选待审',meta:'四红线由人工执行',target:'review'});
+  if((d.writebackQueue||[]).length)todos.push({sev:5,type:'写回',cls:'badge-gray',title:(d.writebackQueue||[]).length+' 条待写回清单',meta:'人工核对后写回星火库',target:'review'});
+  todos.sort(function(a,b){return a.sev-b.sev;});
+  var flow=flowStages();
+  var fsName={done:{l:'已完成',c:'dot-green'},running:{l:'进行中',c:'dot-blue'},blocked:{l:'阻塞',c:'dot-red'},empty:{l:'无任务',c:'dot-gray'}};
+
+  // 第一行：五个关键指标（今日发生了什么 / 哪些值得做 / 等什么人工处理）
+  var metrics=[
+    {label:'事件账本',value:d.events||0,sub:'runtime events 累计（非今日新增）',ic:'intel',target:'intel',cls:''},
+    {label:'A/B 级选题',value:abCount,sub:'策划卡证据等级',ic:'topics',target:'topics',cls:abCount?'':'dim-num'},
+    {label:'待审草稿',value:pendingDrafts,sub:'工厂草稿包',ic:'creation',target:'creation',cls:pendingDrafts?'amber-num':''},
+    {label:'待审图片',value:pendingVisual,sub:'视觉 attempt',ic:'visual',target:'visual',cls:pendingVisual?'amber-num':''},
+    {label:'发布准备',value:pubReady?'就绪':(blockers.length?('阻塞 '+blockers.length):'—'),sub:pubReady?'人工发布':'readiness blockers',ic:'publish',target:'publish',cls:blockers.length?'red-num':''}
+  ];
+  /* M8 统一工作台：每日简报摘要（原 V1 brief 能力：dailyCycle 状态 + daily_briefing + daily_data 摘要） */
+  var dc=D.dailyCycle||{status:'idle'};
+  var mrCount=(data.must_reads||[]).length;
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('doc')+'每日简报</div><span class="pill pill-gray">daily_data '+esc(data.date||'—')+' · 必读 '+mrCount+' 条</span></div>');
+  if(dc.status==='due')h.push('<div class="notice warn">'+icon('alert')+'<span class="n-text">📣 今日融合已完成，内容循环待执行（'+esc(dc.fusionDate||'')+'）· '+esc(dc.note||'')+'</span></div>');
+  else if(dc.status==='done')h.push('<div class="notice success">'+icon('check')+'<span class="n-text">✅ 今日产物已就绪 · '+esc(dc.note||'')+'</span></div>');
+  if(D.daily&&D.daily.briefing){
+    h.push('<div class="dim" style="margin:6px 0">daily_briefing_'+esc(D.daily.briefingDate||'')+'.md（完整内容）</div>');
+    h.push('<div class="tech-body" style="max-height:280px;overflow:auto">'+renderBriefMd(D.daily.briefing)+'</div>');
+  }else{
+    h.push('<div class="dim">尚无每日简报（daily_briefing_*.md）——由每日内容循环产出。</div>');
+  }
+  if(data.line_updates&&data.line_updates.length){
+    h.push('<h4>主线增量</h4><div class="kv">'+data.line_updates.map(function(lu){return '<div>🛤️ '+esc(lineName(lu.line))+' <span class="badge '+(lu.status==='heating'?'badge-red':lu.status==='cooling'?'badge-blue':'badge-gray')+'">'+esc(lu.status||'')+'</span></div>';}).join('')+'</div>');
+  }
+  if(data.drafts&&data.drafts.length){
+    h.push('<h4>当日草稿（'+data.drafts.length+'）</h4><div class="kv">'+data.drafts.map(function(dr){return '<div>📝 <b>'+esc(dr.hook||dr.platform||'')+'</b> <span class="badge badge-gray">'+esc(dr.platform||'')+'</span></div>';}).join('')+'</div>');
+  }
+  if(data.distill_candidates&&data.distill_candidates.length){
+    h.push('<h4>蒸馏候选（待审 '+data.distill_candidates.length+'）</h4><div class="kv">'+data.distill_candidates.map(function(c){return '<div>🔥 '+esc(c.title||'')+' <span class="dim">'+esc(c.path||'')+'</span></div>';}).join('')+'</div>');
+  }
+  h.push('</div>');
+  h.push('<div class="ov-dashboard">');
+  // 第一行：五个等宽指标卡（整卡可点击，仅 hash 跳转）
+  h.push('<div class="ov-metrics" role="group" aria-label="关键指标">');
+  metrics.forEach(function(s){
+    h.push('<button type="button" class="metric-card" data-goto="'+s.target+'"><div class="stat-label">'+icon(s.ic)+esc(s.label)+'</div><div class="stat-value '+s.cls+'">'+esc(s.value)+'</div><div class="stat-sub">'+esc(s.sub)+'</div></button>');
+  });
+  h.push('</div>');
+  // 第二行：7/12 Top5 + 5/12 内容生产流程
+  h.push('<div class="card ov-top5"><div class="card-head"><div class="card-title">'+icon('intel')+'今日 Top 5</div><button type="button" class="btn btn-ghost" data-goto="intel">查看全部</button></div>');
+  if(fact.ranking&&(fact.ranking.top5||[]).length){
+    h.push('<div class="table-scroll"><table><tbody>');
+    (fact.ranking.top5||[]).slice(0,5).forEach(function(t){
+      h.push('<tr class="row-click" data-intel-drawer="'+esc(t.topicKey)+'" style="cursor:pointer"><td style="width:28px"><b style="color:'+(t.rank===1?'var(--accent)':'var(--ink-3)')+'">#'+t.rank+'</b></td><td>'+esc(t.topic)+'</td><td style="width:110px">'+gradeBadge(t.verificationGrade)+'</td><td style="width:64px" class="dim">热度 '+t.heatScore.toFixed(0)+'</td></tr>');
+    });
+    h.push('</tbody></table></div>');
+  }else{
+    h.push(empty('暂无排名数据','完成情报簇分析与 intel rank 后展示每日 Top 5；当前属于未开始阶段，属正常情况。','intel'));
+  }
+  h.push('</div>');
+  h.push('<div class="card ov-flow"><div class="card-head"><div class="card-title">'+icon('system')+'内容生产流程</div></div><div style="flex:1;display:flex;flex-direction:column;justify-content:center">'+flowBar('overview')+'<div class="hint">状态来自现有数据：'+flow.map(function(s){var m=fsName[s.status]||fsName.empty;return s.name+'（'+s.count+' · '+m.l+'）';}).join(' · ')+'</div></div></div>');
+  // 第三行：今日待办全宽
+  h.push('<div class="card ov-todo"><div class="card-head"><div class="card-title">'+icon('check')+'今日待办</div>'+(todos.length?'<span class="pill pill-amber">'+todos.length+' 项</span>':'<span class="pill pill-green">已清空</span>')+'</div>');
+  if(!todos.length){h.push('<div class="empty">'+icon('check')+'<div>今日无待办事项</div><div class="empty-note">审核队列为空、无发布阻塞——这是正常状态。</div></div>');}
+  else{todos.forEach(function(t){h.push('<div class="todo-row"><span class="badge '+t.cls+'">'+t.type+'</span><div class="todo-main"><div class="todo-title">'+esc(t.title)+'</div><div class="todo-meta">'+esc(t.meta)+'</div></div><button type="button" class="btn btn-ghost" data-goto="'+t.target+'">前往</button></div>');});}
+  h.push('</div>');
+  // 第四行：信源健康 / 任务记录 / 系统提醒（4/12 × 3，等高）
+  h.push('<div class="card ov-sources"><div class="card-head"><div class="card-title">'+icon('intel')+'信源健康</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
+  if(!srcs.length){h.push('<div class="dim">（无接入源）</div>');}
+  else{
+    srcs.slice(0,5).forEach(function(s){
+      var dotMap={green:'dot-green',red:'dot-red',pending:'dot-gray'};
+      var labelMap={green:'正常',red:'异常',pending:'待接入'};
+      h.push('<div class="todo-row"><span class="dot '+(dotMap[s.status]||'dot-gray')+'"></span><div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+esc(s.id)+'</div></div><span class="dim">'+(labelMap[s.status]||s.status)+'</span></div>');
+    });
+  }
+  h.push('</div>');
+  h.push('<div class="card ov-jobs"><div class="card-head"><div class="card-title">'+icon('system')+'任务记录</div><button type="button" class="btn btn-ghost" data-goto="system">详情</button></div>');
+  var jobName={queued:'排队中',running:'运行中',waiting_approval:'待审核',succeeded:'成功',failed:'失败',cancelled:'已取消'};
+  var jobBadge={queued:'badge-gray',running:'badge-blue',waiting_approval:'badge-amber',succeeded:'badge-green',failed:'badge-red',cancelled:'badge-gray'};
+  var jobs=(fact.database&&fact.database.jobs)||{};
+  var jobKeys=Object.keys(jobs);
+  if(!jobKeys.length){h.push('<div class="dim">（暂无任务记录）</div>');}
+  else{
+    jobKeys.forEach(function(k){
+      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+(jobName[k]||k)+'</div></div><span class="badge '+(jobBadge[k]||'badge-gray')+'">'+jobs[k]+'</span></div>');
+    });
+  }
+  h.push('<div class="hint">工作流任务（workflow job）记录，反映系统曾执行的任务状态，不等于当前待审核数量。</div>');
+  h.push('</div>');
+  /* M7 统一工作台：系统建议（只读，守卫⑤）——原 V1 advise 能力 */
+  var sug=(D.daily&&D.daily.data&&D.daily.data.suggestions)||[];
+  var decidedAdvise=((D.decisions||[]).filter(function(x){return x.kind==='advice';})||[]).length;
+  h.push('<div class="card ov-alerts"><div class="card-head"><div class="card-title">'+icon('doc')+'系统建议（只读）</div><span class="pill pill-gray">守卫⑤ · 永不自动改 config</span></div>');
+  if(!sug.length){h.push('<div class="dim">当日无系统建议</div>');}
+  else{
+    sug.forEach(function(s){
+      h.push('<div class="todo-row"><span class="badge badge-gray">'+esc(s.type||'generic')+'</span><div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+esc(s.note||'')+'</div></div></div>');
+    });
+  }
+  h.push('<div class="hint">建议只读（守卫⑤）· 已记录决策 '+decidedAdvise+' 条 · 任何采纳动作必须人工触发。</div>');
+  h.push('</div>');
+  h.push('<div class="card ov-alerts"><div class="card-head"><div class="card-title">'+icon('alert')+'系统提醒</div></div>');
+  var alerts=[];
+  if(health.overall==='red')alerts.push({cls:'badge-red',text:'情报源整体异常',target:'system'});
+  if(blockers.length)alerts.push({cls:'badge-red',text:'发布准备存在 '+blockers.length+' 项阻塞',target:'publish'});
+  if(anyVisualRejected())alerts.push({cls:'badge-red',text:'视觉批次存在已驳回图片',target:'visual'});
+  if(anyDraftRejected())alerts.push({cls:'badge-amber',text:'存在已驳回草稿包（可按意见创建修订版）',target:'creation'});
+  if(!alerts.length)alerts.push({cls:'badge-green',text:'无异常：系统运行正常',target:null});
+  alerts.forEach(function(a){
+    h.push('<div class="todo-row">'+(a.target?'<button type="button" class="btn btn-ghost" data-goto="'+a.target+'">查看</button>':'<span class="badge badge-green">正常</span>')+'<div class="todo-main"><div class="todo-title" style="font-size:12.5px">'+a.text+'</div></div></div>');
+  });
+  h.push('</div>');
+  h.push('</div>');return h.join('');
+}
+function anyVisualRejected(){var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];return vis.some(function(b){return b.status==='rejected';});}
+function anyDraftRejected(){var drafts=(D.factory&&D.factory.drafts)||[];return drafts.some(function(p){return p.status==='rejected';});}
+
+/* ============ intel ============ */
+function renderIntel(){
+  var fact=D.factory||{};var r=fact.ranking;
+  var h=[flowBar('intel')];
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('intel')+'每日 Top 5 · 上升榜 · 连续霸榜</div>'+(r?'<span class="pill pill-gray">'+esc(r.date)+'</span>':'')+'</div>');
+  if(!r){h.push(empty('暂无排名快照','执行情报簇分析并完成 intel rank 后，此处展示可解释的每日排名。','intel'));}
+  else{
+    h.push('<table><thead><tr><th>#</th><th>主题</th><th>热度</th><th>增速</th><th>证据</th><th>连榜</th><th>创作闸门</th></tr></thead><tbody>');
+    (r.top5||[]).forEach(function(t){
+      var first=t.rank===1?' style="background:var(--surface-2)"':'';
+      h.push('<tr class="row-click" data-intel-drawer="'+esc(t.topicKey)+'"'+first+'><td>'+(t.rank===1?'<span class="badge badge-orange">#1</span>':t.rank)+'</td><td><b>'+esc(t.topic)+'</b></td><td>'+t.heatScore.toFixed(1)+'</td><td>'+t.velocityScore.toFixed(1)+'</td><td>'+gradeBadge(t.verificationGrade)+'</td><td>'+t.consecutiveTopDays+' 天</td><td>'+(t.eligibleForCreation?'<span class="badge badge-green">可创作</span>':'<span class="badge badge-gray">待核验</span>')+'</td></tr>');
+    });
+    h.push('</tbody></table>');
+    h.push('<div class="dim" style="margin-top:6px">已展示 '+(r.top5||[]).length+' / 5 个主题 · 点击行查看详情与技术 ID</div>');
+    h.push('<div style="margin-top:10px;font-size:12.5px;color:var(--ink-3)">上升最快：'+(((r.rising||[]).slice(0,5).map(function(t){return '<b style="color:var(--ink-2)">'+esc(t.topic)+'</b>（'+t.velocityScore.toFixed(0)+'）';}).join(' · '))||'暂无')+'</div>');
+    h.push('<div style="margin-top:8px;font-size:12.5px;color:var(--ink-3)">连续霸榜：'+(((r.persistent||[]).map(function(t){return '<span class="badge badge-orange">'+esc(t.topic)+' · '+t.consecutiveTopDays+' 天</span>';}).join(' '))||'<span class="dim">暂无</span>')+'</div>');
+  }
+  h.push('</div>');
+  var cl=D.clusters||{items:[]};
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('db')+'情报簇（来源 · 事实 · 推断 · 风险）</div>'+(cl.date?'<span class="pill pill-gray">'+esc(cl.date)+'</span>':'')+'</div>');
+  if(!cl.items.length){h.push(empty('暂无情报簇','执行 sparkos_run intel analyze 生成骨架，模型分析后 submitCluster 写回。','db'));}
+  else{
+    cl.items.forEach(function(c){
+      var heatCls={high:'badge-red',medium:'badge-amber',low:'badge-gray'}[c.heat]||'badge-gray';
+      h.push('<div class="cluster-card"><div class="cluster-head"><div class="cluster-title">'+esc(c.topic||'(待分析)')+'</div><span class="badge '+heatCls+'">热度 '+esc(c.heat||'-')+'</span></div><div class="cluster-meta">'+fmtDate(c.date)+' · 来源 '+c.sourceCount+' · 事件 '+(c.eventKeys||[]).length+'</div>'+(c.coreFacts&&c.coreFacts.length?'<div class="cluster-facts">'+esc(c.coreFacts.slice(0,2).join('；'))+(c.coreFacts.length>2?' 等': '')+'</div>':'')+'<button type="button" class="btn btn-ghost" data-cluster-drawer="'+esc(c.clusterId)+'">详情</button></div>');
+    });
+  }
+  h.push('</div>');
+  /* M8 统一工作台：叙事线泳道（原 V1 lines 能力） */
+  var tl=(D.timeline||{}).cards||[];
+  var lineCount={};tl.forEach(function(c){var k=c.line||'—';lineCount[k]=(lineCount[k]||0)+1;});
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('intel')+'叙事主线（'+(D.lines||[]).length+' 条 · 卡片 '+tl.length+' 张）</div><span class="pill pill-gray">泳道视图</span></div>');
+  if(!(D.lines||[]).length){h.push('<div class="dim">尚无叙事主线（config/narrative_lines.json）。</div>');}
+  else{
+    h.push('<div class="kv">'+(D.lines||[]).map(function(l){
+      var cnt=lineCount[l.id]||0;
+      return '<div><span class="dot" style="background:'+lineColor(l.id)+'"></span> '+esc(lineName(l.id))+' <span class="badge badge-gray">'+cnt+' 卡</span></div>';
+    }).join('')+'</div>');
+  }
+  h.push('</div>');
+  /* M8：时间线知识卡 + 搜索筛选（原 V1 timeline 表） */
+  var kindName={observation:'观察',model:'模型',judgment:'判断'};
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('doc')+'时间线知识卡（'+tl.length+'）</div><input class="search-input" data-tl-q type="search" placeholder="搜索卡片/键/主线…" aria-label="搜索时间线卡片" style="max-width:220px;margin-left:auto"></div>');
+  if(!tl.length){h.push('<div class="dim">暂无时间线卡片（config/timeline_cards.json）。</div>');}
+  else{
+    h.push('<div class="table-scroll"><table><thead><tr><th>键</th><th>类型</th><th>日期</th><th>标题</th><th>主线</th></tr></thead><tbody id="tlBody">');
+    h.push(tl.slice(0,200).map(function(c){
+      return '<tr><td class="mono">'+esc(c.k||'—')+'</td><td>'+esc(kindName[c.kind]||c.kind||'—')+'</td><td>'+esc(c.date||'—')+'</td><td>'+esc(c.title||'—')+'</td><td><span class="dot" style="background:'+lineColor(c.line||'—')+'"></span> '+esc(lineName(c.line))+'</td></tr>';
+    }).join(''));
+    h.push('</tbody></table></div>');
+    h.push('<div class="hint" id="tlFilterHint"></div>');
+    if(tl.length>200)h.push('<div class="hint">仅显示前 200 张，共 '+tl.length+' 张（用搜索定位）。</div>');
+  }
+  h.push('</div>');
+  /* M8：融合产物 + 下发建议 + 归档计数（原 V1 intel 指挥所详情） */
+  var I=D.intel||{};
+  var F=D.fusion;
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('intel')+'融合产物</div>'+(F&&F.date?'<span class="pill pill-gray">'+esc(F.date)+'</span>':'')+'</div>');
+  if(F&&F.items&&F.items.length){
+    var dupSet={};(F.dupGroups||[]).forEach(function(gg){gg.forEach(function(k){dupSet[k]=true;});});
+    h.push('<div class="dim" style="margin-bottom:6px">'+F.items.length+' 条'+((F.notes||[]).length?' · '+esc(F.notes.join(' / ')):'')+'</div>');
+    h.push('<div class="table-scroll"><table><thead><tr><th>eventKey</th><th>源</th><th>状态</th><th>标题</th></tr></thead><tbody>');
+    h.push(F.items.map(function(it){return '<tr><td class="mono">'+esc(it.eventKey)+'</td><td>'+esc(it.source)+'</td><td>'+esc(it.status)+'</td><td>'+(dupSet[it.eventKey]?'🔁 ':'')+esc(it.title)+'</td></tr>';}).join(''));
+    h.push('</tbody></table></div>');
+  }else{h.push('<div class="dim">尚无融合产物 · 触发：sparkos_run {action:"intel", payload:{fusion:true}}。</div>');}
+  h.push('</div>');
+  var DP=D.dispatch;
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('overview')+'下发建议</div></div>');
+  if(DP&&DP.items&&DP.items.length){
+    h.push('<div class="dim" style="margin-bottom:6px">'+esc(DP.suggestion||'')+'</div>');
+    h.push(DP.items.map(function(it){return '<div class="todo-row"><div class="todo-main"><div class="todo-title" style="font-size:12.5px">🎯 '+esc(it.title)+'</div><div class="todo-meta">'+esc(it.source)+' · '+esc(it.eventKey)+'</div></div></div>';}).join(''));
+    h.push('<div class="hint">'+esc(DP.ownerNote||'')+'</div>');
+  }else{h.push('<div class="dim">暂无下发建议 · 先执行 fusion 再 dispatch。</div>');}
+  h.push('</div>');
+  if(I.archiveCounts&&I.archiveCounts.length){
+    h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'归档计数（快照 '+(I.snapshotCount||0)+' 条 · 14 天滚动）</div></div>');
+    h.push('<div class="table-scroll"><table><thead><tr><th>源</th><th>published</th><th>blocked</th><th>rejected</th><th>expired</th><th>合计</th></tr></thead><tbody>');
+    h.push(I.archiveCounts.map(function(c){return '<tr><td>'+esc(c.source)+'</td><td>'+c.published+'</td><td>'+c.blocked+'</td><td>'+c.rejected+'</td><td>'+(c.expired||0)+'</td><td>'+c.total+'</td></tr>';}).join(''));
+    h.push('</tbody></table></div></div>');
+  }
+  return h.join('');
+}
+function openIntelDrawer(topicKey){
+  if(!topicKey)return;
+  var r=D.factory&&D.factory.ranking;
+  var item=null;
+  if(r){(r.top5||[]).concat(r.rising||[]).concat(r.persistent||[]).concat(r.all||[]).forEach(function(t){if(t.topicKey===topicKey)item=t;});}
+  var cluster=null;
+  (D.clusters&&D.clusters.items||[]).forEach(function(c){if(c.clusterId===topicKey||c.topicKey===topicKey)cluster=c;});
+  var h=[];
+  if(item){
+    h.push('<h4>主题</h4><div class="kv"><div><b>主题</b>'+esc(item.topic)+'</div><div><b>证据</b>'+gradeBadge(item.verificationGrade)+'</div><div><b>热度</b>'+item.heatScore.toFixed(1)+' · <b>增速</b>'+item.velocityScore.toFixed(1)+'</div><div><b>提及</b>'+item.mentionCount+' · <b>来源</b>'+item.sourceCount+' · <b>连榜</b>'+item.consecutiveTopDays+' 天</div></div>');
+  }
+  if(cluster){
+    if(cluster.coreFacts&&cluster.coreFacts.length){h.push('<h4>事实</h4><ul>'+cluster.coreFacts.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+    var j=cluster.judgment;
+    if(j){
+      if(j.confirmedFacts&&j.confirmedFacts.length){h.push('<h4>已确认事实</h4><ul>'+j.confirmedFacts.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+      if(j.inferences&&j.inferences.length){h.push('<h4>推断</h4><ul>'+j.inferences.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+      if(j.editorialView){h.push('<h4>编辑视角</h4><div class="kv">'+esc(j.editorialView)+'</div>');}
+      if(j.counterArguments&&j.counterArguments.length){h.push('<h4>反方</h4><ul>'+j.counterArguments.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+      if(j.uncertainties&&j.uncertainties.length){h.push('<h4>不确定性</h4><ul>'+j.uncertainties.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+    }
+    if(cluster.risks&&cluster.risks.length){h.push('<h4 style="color:var(--red)">风险</h4><ul>'+cluster.risks.map(function(x){return '<li style="color:var(--red)">'+esc(x)+'</li>';}).join('')+'</ul>');}
+    if(cluster.evidenceUrls&&cluster.evidenceUrls.length){h.push('<h4>来源</h4><div class="evidence-list">'+cluster.evidenceUrls.map(function(u){return '<div>'+icon('ext')+' '+safeExtLink(u)+'</div>';}).join('')+'</div>');}
+    if(cluster.angleSuggestions&&cluster.angleSuggestions.length){h.push('<h4>选题角度</h4><div class="kv">'+esc(cluster.angleSuggestions.join('；'))+'</div>');}
+    if((cluster.evidence||[]).length){h.push('<h4>证据明细</h4><ul>'+cluster.evidence.map(function(e){return '<li>'+esc(e.claim||'')+' <span class="mono">'+esc(e.url)+'</span> <span class="badge '+(e.verified?'badge-green':'badge-gray')+'">'+(e.verified?'已核实':'未核实')+'</span>'+(e.contradicts?' <span class="badge badge-red">矛盾</span>':'')+'</li>';}).join('')+'</ul>');}
+    h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body"><div>clusterId：<span class="mono">'+esc(cluster.clusterId)+'</span></div><div>topicKey：<span class="mono">'+esc(cluster.topicKey||'—')+'</span></div><div>日期：'+esc(cluster.date)+' · 事件：'+esc((cluster.eventKeys||[]).join(', ')||'—')+' · 模型：'+esc(cluster.model||'—')+'</div></div></details>');
+  }
+  if(!item&&!cluster){h.push(empty('未找到详情','该主题暂无簇或排名详情。','doc'));}
+  openDrawer(item?(item.topic||'情报详情'):(cluster&&cluster.topic)||'情报详情',h.join(''));
+}
+function openClusterDrawer(clusterId){
+  var cluster=null;
+  (D.clusters&&D.clusters.items||[]).forEach(function(c){if(c.clusterId===clusterId)cluster=c;});
+  if(!cluster)return;
+  openDrawer(cluster.topic||'情报簇',intelClusterBody(cluster));
+}
+function intelClusterBody(c){
+  var h=[];
+  h.push('<div class="kv"><div><b>热度</b>'+esc(c.heat||'-')+' · <b>新颖度</b>'+esc(c.novelty||'-')+' · <b>可信度</b>'+esc(c.credibility||'-')+'</div><div><b>来源</b>'+c.sourceCount+' · <b>事件</b>'+(c.eventKeys||[]).length+'</div></div>');
+  if(c.coreFacts&&c.coreFacts.length){h.push('<h4>事实</h4><ul>'+c.coreFacts.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+  var j=c.judgment;
+  if(j){
+    if(j.confirmedFacts&&j.confirmedFacts.length){h.push('<h4>已确认事实</h4><ul>'+j.confirmedFacts.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+    if(j.inferences&&j.inferences.length){h.push('<h4>推断</h4><ul>'+j.inferences.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+    if(j.editorialView){h.push('<h4>编辑视角</h4><div class="kv">'+esc(j.editorialView)+'</div>');}
+  }
+  if(c.risks&&c.risks.length){h.push('<h4 style="color:var(--red)">风险</h4><ul>'+c.risks.map(function(x){return '<li style="color:var(--red)">'+esc(x)+'</li>';}).join('')+'</ul>');}
+  if(c.evidenceUrls&&c.evidenceUrls.length){h.push('<h4>来源</h4><div class="evidence-list">'+c.evidenceUrls.map(function(u){return '<div>'+icon('ext')+' '+safeExtLink(u)+'</div>';}).join('')+'</div>');}
+  if(c.angleSuggestions&&c.angleSuggestions.length){h.push('<h4>选题角度</h4><div class="kv">'+esc(c.angleSuggestions.join('；'))+'</div>');}
+  h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body"><div>clusterId：<span class="mono">'+esc(c.clusterId)+'</span> <button type="button" class="copy-btn" data-copy="'+esc(c.clusterId)+'">复制</button></div><div>topicKey：<span class="mono">'+esc(c.topicKey||'—')+'</span></div><div>日期：'+esc(c.date)+' · 模型：'+esc(c.model||'—')+'</div></div></details>');
+  return h.join('');
+}
+
+/* ============ topics ============ */
+function renderTopics(){
+  var ed=(D.factory&&D.factory.editorial)||null;
+  var h=[flowBar('topics')];
+  /* M8 统一工作台：当日必读选题 must_reads（原 V1 topics 能力，POST /sparkos/mutate） */
+  var mr=(D.daily&&D.daily.data&&D.daily.data.must_reads)||[];
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('topics')+'当日必读（must_reads）</div><span class="pill pill-gray">'+mr.length+' 条 · 采纳后进入决策账本</span></div>');
+  if(!mr.length){h.push('<div class="dim">今日无必读选题（daily_data 为空或缺失）· 由每日内容循环产出。</div>');}
+  else{
+    var mrSorted=mr.slice().sort(function(a,b){return (a.fresh_hours==null?99:a.fresh_hours)-(b.fresh_hours==null?99:b.fresh_hours);});
+    mrSorted.forEach(function(m){
+      var decided=decisionOf('topic',m.event_id);
+      var acts=decided?'<span class="badge '+(decided==='adopt'?'badge-green':'badge-gray')+'">'+(decided==='adopt'?'已采纳 ✓':'已忽略 ✗')+'</span>'
+        :'<button type="button" class="btn btn-approve" data-mr-decide="adopt" data-mr-id="'+esc(m.event_id)+'">✓ 采纳</button> <button type="button" class="btn btn-reject" data-mr-decide="ignore" data-mr-id="'+esc(m.event_id)+'">✗ 忽略</button>';
+      h.push('<div class="todo-row"><span class="badge '+freshClass(m.fresh_hours)+'">'+freshLabel(m.fresh_hours)+'</span><div class="todo-main"><div class="todo-title">'+esc(m.title||m.event_id)+'</div><div class="todo-meta">'+esc(lineName(m.primary_line))+(m.note?' · '+esc(m.note):'')+'</div></div><div>'+acts+'</div></div>');
+    });
+  }
+  h.push('</div>');
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('topics')+'周三 / 周六编辑策划</div>'+(ed?'<span class="pill pill-gray">'+esc(ed.mode)+' · '+esc(ed.periodStart)+' .. '+esc(ed.periodEnd)+'</span>':'')+'</div>');
+  if(!ed||!(ed.cards||[]).length){h.push(empty('暂无编辑策划','运行 sparkos_run topics（payload.editorial=midweek 或 weekly）生成 A/B 证据闸门策划卡。','topics'));}
+  else{
+    (ed.cards||[]).forEach(function(c){
+      var decision=c.decision==='approved'?'<span class="badge badge-green">已批准 ✓</span>':c.decision==='rejected'?'<span class="badge badge-red">已驳回 ✗</span>':'<span class="badge badge-amber">待审批</span>';
+      var pat={persistent:'连续霸榜',accelerating:'加速上升',resurfacing:'二次升温',reversal:'事实反转',structural:'结构议题',emerging:'新兴话题'}[c.trendPattern]||c.trendPattern;
+      h.push('<div class="card topic-card" data-topic-drawer="'+esc(c.id)+'" style="cursor:pointer"><div class="card-head"><div class="card-title">#'+c.rank+' '+esc(c.title)+' <span class="badge '+(c.verificationGrade==='A'?'badge-green':'badge-blue')+'">证据 '+esc(c.verificationGrade)+'</span> <span class="badge badge-amber">'+esc(pat)+'</span></div><div>'+decision+'</div></div>');
+      h.push('<div class="topic-section"><h5>核心判断</h5><p>'+esc(c.coreThesis)+'</p></div>');
+      h.push('<div class="topic-section"><h5>为什么现在值得写</h5><p>'+esc(c.whyNow)+'</p></div>');
+      var srcCount=0;(c.evidence||[]).forEach(function(e){if(e.url)srcCount++;});
+      h.push('<div class="topic-meta"><span class="badge badge-gray">证据 '+(c.evidence||[]).length+' 条 / 来源 '+srcCount+'</span> <span class="badge badge-gray">价值 '+Number(c.expectedValue).toFixed(1)+'</span> <span class="badge badge-gray">'+esc(c.contentFormat)+'</span> <span class="badge badge-gray">平台 '+esc((c.platforms||[]).join('、')||'待定')+'</span></div>');
+      if(c.risks&&c.risks.length)h.push('<div class="topic-risk"><b>风险摘要：</b>'+esc(c.risks.slice(0,2).join('；'))+(c.risks.length>2?' 等': '')+'</div>');
+      var extra='';
+      if(c.facts&&c.facts.length)extra+='<div class="topic-section"><h5>事实</h5><p>'+esc(c.facts.join('；'))+'</p></div>';
+      if(c.counterArguments&&c.counterArguments.length)extra+='<div class="topic-section"><h5>反方</h5><p>'+esc(c.counterArguments.join('；'))+'</p></div>';
+      if(c.risks&&c.risks.length)extra+='<div class="topic-section"><h5 style="color:var(--red)">风险明细</h5><p style="color:var(--red)">'+esc(c.risks.join('；'))+'</p></div>';
+      h.push(extra?'<details class="tech"><summary>事实 / 反方 / 风险明细</summary><div class="tech-body">'+extra+'</div></details>':'');
+      if(!c.decision||c.decision==='pending'){h.push('<div class="vis-actions" style="margin-top:10px"><button type="button" class="btn btn-approve" data-topic-decision="approved" data-card="'+esc(c.id)+'">批准选题</button><button type="button" class="btn btn-reject" data-topic-decision="rejected" data-card="'+esc(c.id)+'">驳回选题</button></div>');}
+      h.push('</div>');
+    });
+  }
+  h.push('</div>');
+  return h.join('');
+}
+function openTopicDrawer(cardId){
+  var ed=D.factory&&D.factory.editorial;
+  var card=null;
+  if(ed)(ed.cards||[]).forEach(function(c){if(c.id===cardId)card=c;});
+  if(!card)return;
+  var h=[];
+  h.push('<div class="kv"><div><b>证据</b>'+gradeBadge(card.verificationGrade)+' <b>价值</b>'+Number(card.expectedValue).toFixed(1)+'</div><div><b>趋势</b>'+esc(card.trendPattern)+' · <b>形式</b>'+esc(card.contentFormat)+'</div><div><b>平台</b>'+esc((card.platforms||[]).join(', ')||'待定')+'</div></div>');
+  h.push('<h4>核心判断</h4><div class="kv">'+esc(card.coreThesis)+'</div>');
+  h.push('<h4>为什么现在</h4><div class="kv">'+esc(card.whyNow)+'</div>');
+  if(card.facts&&card.facts.length){h.push('<h4>事实</h4><ul>'+card.facts.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+  if(card.counterArguments&&card.counterArguments.length){h.push('<h4>反方</h4><ul>'+card.counterArguments.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>');}
+  if(card.risks&&card.risks.length){h.push('<h4 style="color:var(--red)">风险</h4><ul>'+card.risks.map(function(x){return '<li style="color:var(--red)">'+esc(x)+'</li>';}).join('')+'</ul>');}
+  if(card.knowledgeCards&&card.knowledgeCards.length){h.push('<h4>知识卡</h4><div class="kv">'+esc(card.knowledgeCards.join('、'))+'</div>');}
+  if((card.evidence||[]).length){h.push('<h4>证据明细</h4><ul>'+card.evidence.map(function(e){return '<li>'+esc(e.claim||'')+' <span class="mono">'+esc(e.url)+'</span> <span class="badge '+(e.verified?'badge-green':'badge-gray')+'">'+(e.verified?'已核实':'未核实')+'</span>'+(e.contradicts?' <span class="badge badge-red">矛盾</span>':'')+'</li>';}).join('')+'</ul>');}
+  h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body"><div>cardId：<span class="mono">'+esc(card.id)+'</span> <button type="button" class="copy-btn" data-copy="'+esc(card.id)+'">复制</button></div><div>topicKey：<span class="mono">'+esc(card.topicKey||'—')+'</span></div><div>状态：'+esc(card.decision||'pending')+(card.decidedAt?' · '+fmtISO(card.decidedAt):'')+'</div></div></details>');
+  openDrawer('策划卡 #'+card.rank+' '+card.title,h.join(''));
+}
+
+/* ============ creation ============ */
+function renderCreation(){
+  var drafts=(D.factory&&D.factory.drafts)||[];
+  var h=[flowBar('creation')];
+  if(!drafts.length){h.push(empty('暂无草稿包','批准编辑选题后由 agent 创建草稿包；支持草稿审批与按意见修订。','creation'));return h.join('');}
+  var requestedId=state.filters.creation.packageId;
+  var curId=requestedId;
+  if(!curId||!drafts.some(function(p){return p.id===curId;})){curId=drafts[0].id;}
+  state.filters.creation.packageId=curId;
+  var cur=null;drafts.forEach(function(p){if(p.id===curId)cur=p;});
+  var plat=state.filters.creation.platform||'wechat';
+  var files={wechat:'wechat.html',telegram:'telegram.md',x:'x-thread.md',xiaohongshu:'xiaohongshu.md'};
+  var platformNames={wechat:'微信',telegram:'Telegram',x:'X',xiaohongshu:'小红书'};
+  // URL 规范化：pkg 缺失/非法时使用默认包并同步 hash（仅当 URL 与解析结果不一致时）
+  if(curId!==requestedId)setHashParams({pkg:curId});
+  h.push('<div class="creation-grid">');
+  h.push('<div class="card cg-list"><div class="card-title" style="margin-bottom:10px">'+icon('creation')+'草稿包</div>');
+  var chainMap={};
+  drafts.forEach(function(p){chainMap[p.id]=p;});
+  drafts.forEach(function(p){
+    var st=p.status==='approved'?'<span class="badge badge-green">已批准</span>':p.status==='rejected'?'<span class="badge badge-red">已驳回</span>':p.status==='waiting_approval'?'<span class="badge badge-amber">待审核</span>':'<span class="badge badge-gray">'+esc(p.status)+'</span>';
+    var rel=p.parentPackageId&&chainMap[p.parentPackageId]?(' · ← v'+chainMap[p.parentPackageId].revision):(p.revision>1?' · 首版':'');
+    h.push('<div class="todo-row'+(p.id===cur.id?' sel':'')+'" data-pkg="'+esc(p.id)+'" style="cursor:pointer" aria-current="'+(p.id===cur.id?'true':'false')+'"><div class="todo-main"><div class="todo-title">'+esc(p.title||p.id)+'</div><div class="todo-meta">v'+esc(p.revision)+rel+' · '+esc(p.id)+'</div></div>'+st+'</div>');
+  });
+  h.push('</div>');
+  h.push('<div class="card cg-preview"><div class="card-title" style="margin-bottom:10px">'+icon('doc')+'平台预览 · '+esc(platformNames[plat])+' <span class="mono" style="font-size:11px">'+esc(cur.id)+'</span></div>');
+  h.push('<div class="preview-tools"><div class="tabs" style="margin-bottom:0">');
+  Object.keys(files).forEach(function(k){h.push('<button type="button" class="tab-btn'+(k===plat?' active':'')+'" data-pf="'+k+'">'+platformNames[k]+'</button>');});
+  h.push('</div><span class="dim" style="margin-left:auto">预览：</span><button type="button" class="tab-btn'+(state.filters.creation.previewMode==='mobile'?'':' active')+'" data-pv="desktop">桌面阅读</button><button type="button" class="tab-btn'+(state.filters.creation.previewMode==='mobile'?' active':'')+'" data-pv="mobile">手机预览</button></div>');
+  var art=null;
+  (cur.artifacts||[]).forEach(function(a){if(a.relativePath.indexOf(files[plat])>=0)art=a;});
+  if(art){
+    var file=art.relativePath.split('/').pop();
+    var frameCls='preview-frame'+(state.filters.creation.previewMode==='mobile'?' mobile':'');
+    h.push('<div class="'+frameCls+'"><iframe title="'+esc(platformNames[plat])+'预览" src="/sparkos/creation/artifact?packageId='+encodeURIComponent(cur.id)+'&file='+encodeURIComponent(file)+'"></iframe></div>');
+  }else{
+    h.push('<div class="preview-empty">'+icon('doc')+'<div>该包（'+esc(cur.id)+'）暂无 '+esc(platformNames[plat])+' 产物预览</div><div class="dim">产物在草稿生成后写入，此处展示示。</div></div>');
+  }
+  var pHint={wechat:'微信预览：桌面阅读（约 720px）与手机预览（375px）可切换；正文按行宽排版。',telegram:'Telegram：频道短段落风格，以 md 原文渲染。',x:'X Thread：按编号分段预览（1–N），原文以 md 渲染。',xiaohongshu:'小红书：标题、正文、标签与轮播图占位在原文中标注，配图见视觉中心。'};
+  h.push('<div class="hint">'+pHint[plat]+'</div>');
+  h.push('</div>');
+  h.push('<div class="card cg-fact"><div class="card-title" style="margin-bottom:10px">'+icon('check')+'事实边界与产物信息</div>');
+  h.push('<div class="kv">');
+  h.push('<div><b>状态</b><span class="badge '+(cur.status==='approved'?'badge-green':cur.status==='rejected'?'badge-red':cur.status==='waiting_approval'?'badge-amber':'badge-gray')+'">'+esc(cur.status)+'</span></div>');
+  var chain=drafts.filter(function(p){return p.cardId===cur.cardId;}).sort(function(a,b){return Number(a.revision)-Number(b.revision);});
+  h.push('<div><b>版本</b>v'+esc(cur.revision)+(cur.parentPackageId?'（父版本 '+esc(cur.parentPackageId)+'）':'（首版）')+'</div>');
+  if(chain.length>1){h.push('<div><b>版本链</b>'+chain.map(function(p){return 'v'+esc(p.revision)+(p.id===cur.id?'（当前）':'');}).join(' → ')+'</div>');}
+  if(cur.parentReviewNote)h.push('<div><b>父驳回意见</b>'+esc(cur.parentReviewNote)+'</div>');
+  if(cur.reviewNote)h.push('<div><b>审核意见</b>'+esc(cur.reviewNote)+'</div>');
+  h.push('</div>');
+  // M6.3 受控审批/修订入口：操作入口放在卡片主体，不在列表行内
+  var draftActs=[];
+  if(cur.status==='waiting_approval'){
+    draftActs.push('<button type="button" class="btn btn-approve" data-draft-decision="approved" data-package="'+esc(cur.id)+'">批准草稿</button>');
+    draftActs.push('<button type="button" class="btn btn-reject" data-draft-decision="rejected" data-package="'+esc(cur.id)+'">驳回草稿</button>');
+  }else if(cur.status==='rejected'){
+    draftActs.push('<button type="button" class="btn btn-retry" data-draft-revise="'+esc(cur.id)+'">按意见修订</button>');
+  }
+  if(draftActs.length){h.push('<div class="vis-actions" style="margin-top:12px">'+draftActs.join('')+'</div>');}
+  if(cur.validation&&cur.validation.errors&&cur.validation.errors.length){h.push('<h4>校验错误</h4><ul>'+cur.validation.errors.map(function(e){return '<li style="color:var(--red)">'+esc(e)+'</li>';}).join('')+'</ul>');}
+  h.push('<h4>产物（'+(cur.artifacts||[]).length+'）</h4>');
+  if((cur.artifacts||[]).length){h.push('<table class="attempt-list"><thead><tr><th>文件</th><th>格式</th><th>字节</th></tr></thead><tbody>'+cur.artifacts.map(function(a){return '<tr><td class="mono">'+esc(a.relativePath.split('/').pop())+'</td><td>'+esc(a.format)+'</td><td>'+a.bytes+'</td></tr>';}).join('')+'</tbody></table>');}
+  else{h.push('<div class="dim">暂无产物。</div>');}
+  h.push('<h4>配图任务</h4><div class="dim">'+esc(cur.assetCount)+' 个资产槽位 · 图片见视觉中心</div>');
+  h.push('</div>');
+  h.push('</div>');
+  /* M8 统一工作台：运行时草稿（原 V1 draft 能力，GET /sparkos/draft 查看全文） */
+  var rt=D.runtimeDrafts||[];
+  h.push('<div class="card" style="margin-top:14px"><div class="card-head"><div class="card-title">'+icon('doc')+'运行时草稿（daily_brief / VAULT，'+rt.length+'）</div><span class="pill pill-gray">只读 · 查看全文按需加载</span></div>');
+  if(!rt.length){h.push('<div class="dim">暂无草稿（daily_brief/drafts/ 与 VAULT/drafts/ 均为空）。</div>');}
+  else{
+    rt.forEach(function(dr,idx){
+      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title">📝 '+esc(dr.file)+' <span class="badge badge-gray">'+esc(dr.platform||'—')+'</span></div><div class="todo-meta">'+esc(dr.preview||'')+' · '+(dr.bytes||0)+' B</div></div><div><button type="button" class="btn btn-ghost" data-rt-draft="'+idx+'">查看全文</button></div><pre class="rt-draft-full" data-rt-full="'+idx+'" style="display:none;white-space:pre-wrap;font-size:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px;max-height:280px;overflow:auto;margin:6px 0 0;flex:1 1 100%"></pre></div>');
+    });
+  }
+  h.push('</div>');
+  return h.join('');
+}
+
+/* ============ review ============ */
+function reviewItems(){
+  var items=[];
+  var ed=(D.factory&&D.factory.editorial&&D.factory.editorial.cards)||[];
+  ed.forEach(function(c){if(c.decision==='approved'||c.decision==='rejected')return;items.push({key:'topic',type:'选题',sev:1,time:null,title:c.title,id:c.id,target:'topics',note:'策划卡 #'+c.rank+' · 证据 '+c.verificationGrade,risk:c.risks&&c.risks.length?c.risks.slice(0,2).join('；'):''});});
+  var drafts=(D.factory&&D.factory.drafts)||[];
+  drafts.forEach(function(p){if(p.status!=='waiting_approval')return;items.push({key:'draft',type:'草稿',sev:1,time:p.createdAt,title:p.title||p.id,id:p.id,target:'creation',note:'v'+p.revision+' · '+p.id,risk:(p.reviewNote||(p.validation&&p.validation.errors&&p.validation.errors.join('；'))||'')});});
+  var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
+  vis.forEach(function(b){(b.tasks||[]).forEach(function(t){
+    var curA=null;(t.attempts||[]).forEach(function(a){if(Number(a.attemptNo)===Number(t.currentAttempt))curA=a;});
+    // 待审核（waiting_visual_approval）
+    if(t.state==='waiting_visual_approval')items.push({key:'visual',type:'图片',sev:0,time:curA?curA.createdAt:null,title:t.assetId,id:t.id,target:'visual',note:b.packageId+' · '+t.placement,risk:t.reviewNote||t.lastError||''});
+    // M6.2：被驳回且可重试 → “待处理：需要重试”；生成中不算待审核
+    if(t.state==='rejected'&&visualRetryInfo(t).eligible)items.push({key:'visual',type:'图片',sev:0,time:curA?curA.createdAt:null,title:t.assetId,id:t.id,target:'visual',note:'待处理：需要重试 · '+b.packageId+' · '+t.placement,risk:'按驳回意见创建重试任务'});
+  });});
+  (D.distillQueue||[]).forEach(function(e){items.push({key:'distill',type:'蒸馏',sev:2,time:null,title:e.file,id:e.file,target:'review',note:e.summary,risk:''});});
+  return items;
+}
+function waitLabel(iso){
+  if(!iso)return '—';
+  var t=new Date(iso);if(isNaN(t.getTime()))return '—';
+  var ms=Date.now()-t.getTime();if(ms<0)return '刚刚';
+  var h=Math.floor(ms/3600000);var d=Math.floor(h/24);
+  if(d>=1)return d+' 天前';if(h>=1)return h+' 小时前';return Math.max(1,Math.floor(ms/60000))+' 分钟前';
+}
+function applyReviewFilters(){
+  var f=state.filters.review;
+  var items=reviewItems();
+  var today=new Date();today.setHours(0,0,0,0);
+  var filtered=items.filter(function(it){
+    if(f.type!=='all'&&it.key!==f.type)return false;
+    if(f.urgency!=='all'){var sev=it.sev===0?'high':it.sev===1?'medium':'low';if(sev!==f.urgency)return false;}
+    if(f.time!=='all'){
+      if(it.time){var d=new Date(it.time);if(f.time==='today'&&d<today)return false;if(f.time==='older'&&d>=today)return false;}
+      else if(f.time==='older')return false;
+    }
+    if(f.q&&(it.title+' '+it.note).toLowerCase().indexOf(f.q.toLowerCase())<0)return false;
+    return true;
+  });
+  var cls={topic:'badge-amber',draft:'badge-blue',visual:'badge-orange',distill:'badge-gray'};
+  var list=$('reviewList');
+  if(!list)return;
+  if(!filtered.length){list.innerHTML=empty('没有匹配的待审项','调整筛选条件或搜索词后重试。','filter');return;}
+  list.innerHTML='<div class="dim" style="margin-bottom:8px">共 '+filtered.length+' 项待处理 · 在对应中心处理（视觉→视觉中心，草稿→创作中心）</div>'+filtered.map(function(it){
+    var sevDot=it.sev===0?'<span class="dot dot-red"></span>':it.sev===1?'<span class="dot dot-amber"></span>':'<span class="dot dot-gray"></span>';
+    var gotoAttr=it.key==='visual'?' data-goto-visual="'+esc(it.id)+'"':it.key==='draft'?' data-goto-creation="'+esc(it.id)+'"':it.key==='topic'?' data-goto-topic="'+esc(it.id)+'"':' data-goto="'+it.target+'"';
+    var riskHtml=it.risk?'<div class="todo-meta" style="color:var(--danger)">风险：'+esc(it.risk)+'</div>':'';
+    return '<div class="todo-row"><span class="badge '+cls[it.key]+'">'+it.type+'</span>'+sevDot+'<div class="todo-main"><div class="todo-title">'+esc(it.title)+'</div><div class="todo-meta">'+esc(it.note)+' · 等待 '+waitLabel(it.time)+'</div>'+riskHtml+'</div><button type="button" class="btn btn-ghost"'+gotoAttr+'>前往</button></div>';
+  }).join('');
+}
+function renderReview(){
+  var f=state.filters.review;
+  var h=[flowBar('review')];
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('review')+'审核中心 · 编辑待办箱</div><span class="pill pill-blue">受控操作已全面开放</span></div>');
+  h.push('<div class="notice info">'+icon('check')+'<span class="n-text">统一工作台受控操作：必读采纳（选题策划页）、选题审批（选题策划页）、蒸馏采纳/驳回与待写回（本页下方）、视觉审批/重试（视觉中心）、草稿审批/修订（创作中心）、交付与发布台账（发布准备）均已开放；发布动作由人工在平台后台执行。</span></div>');
+  var all=reviewItems();
+  var totalC=all.length;
+  var cTopic=all.filter(function(x){return x.key==='topic';}).length;
+  var cDraft=all.filter(function(x){return x.key==='draft';}).length;
+  var cVisual=all.filter(function(x){return x.key==='visual';}).length;
+  var cDistill=all.filter(function(x){return x.key==='distill';}).length;
+  h.push('<div class="totals-strip"><span class="totals-chip">待处理 <b>'+totalC+'</b></span><span class="totals-chip"><span class="dot dot-amber"></span>选题 <b>'+cTopic+'</b></span><span class="totals-chip"><span class="dot dot-blue"></span>草稿 <b>'+cDraft+'</b></span><span class="totals-chip"><span class="dot dot-red"></span>图片 <b>'+cVisual+'</b></span><span class="totals-chip"><span class="dot dot-gray"></span>蒸馏 <b>'+cDistill+'</b></span></div>');
+  h.push('<div class="filter-bar">');
+  h.push('<select class="filter" data-rf="type" aria-label="按类型筛选"><option value="all"'+(f.type==='all'?' selected':'')+'>全部类型</option><option value="topic"'+(f.type==='topic'?' selected':'')+'>选题</option><option value="draft"'+(f.type==='draft'?' selected':'')+'>草稿</option><option value="visual"'+(f.type==='visual'?' selected':'')+'>图片</option><option value="distill"'+(f.type==='distill'?' selected':'')+'>蒸馏</option></select>');
+  h.push('<select class="filter" data-rf="urgency" aria-label="按紧急程度筛选"><option value="all"'+(f.urgency==='all'?' selected':'')+'>全部紧急度</option><option value="high"'+(f.urgency==='high'?' selected':'')+'>紧急（图片）</option><option value="medium"'+(f.urgency==='medium'?' selected':'')+'>一般（选题/草稿）</option><option value="low"'+(f.urgency==='low'?' selected':'')+'>低（蒸馏）</option></select>');
+  h.push('<select class="filter" data-rf="time" aria-label="按时间筛选"><option value="all"'+(f.time==='all'?' selected':'')+'>全部时间</option><option value="today"'+(f.time==='today'?' selected':'')+'>今天</option><option value="older"'+(f.time==='older'?' selected':'')+'>更早</option></select>');
+  h.push('<input class="search-input" data-rf="q" type="search" value="'+esc(f.q)+'" placeholder="搜索标题/备注…" aria-label="搜索待审项">');
+  h.push('</div><div id="reviewList"></div></div>');
+  /* M7 统一工作台：蒸馏候选 + 待写回（原 V1 cards 能力，人工闸门不变） */
+  var dq=D.distillQueue||[];
+  var rv=D.distillReviewed||{approved:[],rejected:[]};
+  h.push('<div class="card" style="margin-top:14px"><div class="card-head"><div class="card-title">'+icon('review')+'蒸馏候选（四红线人工执行）</div><span class="pill pill-gray">采纳入待写回 · 驳回即弃</span></div>');
+  if(!dq.length){h.push('<div class="dim">队列已清空 · 已采纳 '+rv.approved.length+' 项 · 已驳回 '+rv.rejected.length+' 项（见下方待写回）</div>');}
+  else{
+    h.push('<div class="hint">采纳前必须人工确认四红线：无时效污染、无主线冲突、无重复入库、无事实错误。</div>');
+    dq.forEach(function(e){
+      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title">'+esc(e.file)+' <span class="badge badge-gray">'+esc(e.dir)+'</span>'+((e.targets||[]).length?' <span class="badge badge-blue">主线 '+esc(e.targets.join(','))+'</span>':'')+'</div><div class="todo-meta">'+esc(e.summary||'')+'</div></div><div><button type="button" class="btn btn-approve" data-distill-decide="adopt" data-distill-id="'+esc(e.file)+'">采纳</button> <button type="button" class="btn btn-reject" data-distill-decide="ignore" data-distill-id="'+esc(e.file)+'">驳回</button></div></div>');
+    });
+  }
+  h.push('</div>');
+  var wb=D.writebackQueue||[];
+  h.push('<div class="card" style="margin-top:14px"><div class="card-head"><div class="card-title">'+icon('doc')+'待写回清单（人工核对后写入星火库）</div><span class="pill pill-gray">只读复制 · 不自动写入</span></div>');
+  if(!wb.length){h.push('<div class="dim">暂无待写回条目（采纳蒸馏候选后自动入列）</div>');}
+  else{
+    wb.forEach(function(e,idx){
+      h.push('<div class="todo-row"><div class="todo-main"><div class="todo-title">'+esc(e.file)+' <span class="badge badge-gray">'+esc(e.dir||'')+'</span></div><div class="todo-meta">'+esc(e.target||'')+'</div></div><div><button type="button" class="btn btn-ghost" data-wb-copy="'+idx+'">复制全文</button> <button type="button" class="btn btn-reject" data-wb-remove="'+idx+'" data-wb-file="'+esc(e.file)+'">已写回并移除</button></div></div>');
+    });
+  }
+  h.push('</div>');
+  return h.join('');
+}
+
+/* ============ visual ============ */
+function currentAttempt(task){return (task.attempts||[]).filter(function(a){return Number(a.attemptNo)===Number(task.currentAttempt);})[0]||null;}
+function dimsOf(a){return (a&&a.sourceWidth&&a.sourceHeight)?a.sourceWidth+'×'+a.sourceHeight:'—';}
+/* M6.2 受控重试：以后端 t.retry 为准（服务端权威判定），fixture/旧数据回退到客户端镜像。 */
+function visualRetryInfo(t){
+  if(t&&t.retry&&typeof t.retry.eligible==='boolean')return t.retry;
+  var a=currentAttempt(t);
+  var note=((a&&a.approval&&a.approval.note)||'').trim();
+  var eligible=!!t&&!!a&&t.state==='rejected'
+    &&Number(a.attemptNo)===Number(t.currentAttempt)
+    &&a.approval&&a.approval.decision==='rejected'&&!!note
+    &&Number(t.currentAttempt)<Number(t.maxAttempts)
+    &&(!t.pipelineState||t.pipelineState==='waiting_visual_approval')
+    &&a.provider!=='stub';
+  return {eligible:eligible,reason:eligible?null:'客户端镜像判定不可重试',code:eligible?null:'invalid-state',expectedNextAttemptNo:t?Number(t.currentAttempt)+1:null};
+}
+/* 明确区分阶段：排队中 / 等待 Agent 领取 / 生成中 / 附件校验中，绝不统称“处理中”。 */
+function visualStateBadge(t){
+  var s=t.state;
+  if(s==='waiting_visual_approval')return '<span class="badge badge-amber">等待视觉审核</span>';
+  if(s==='approved')return '<span class="badge badge-green">已批准</span>';
+  if(s==='rejected')return '<span class="badge badge-red">已驳回</span>';
+  if(s==='retry')return '<span class="badge badge-blue">等待 Agent 领取</span>';
+  if(s==='queued')return '<span class="badge badge-gray">排队中</span>';
+  if(s==='generating')return '<span class="badge badge-blue">生成中</span>';
+  if(s==='generated')return '<span class="badge badge-blue">附件校验中</span>';
+  if(s==='failed')return '<span class="badge badge-red">重试失败</span>';
+  return '<span class="badge badge-gray">'+esc(s)+'</span>';
+}
+function techDetails(t,a){
+  // 卡片内只保留当前 attempt 的技术信息（折叠）；完整 attempt 历史与事件在抽屉
+  return '<details class="tech"><summary>技术信息（当前 attempt）</summary><div class="tech-body"><div>attemptId：<span class="mono">'+esc(a?a.id:'—')+'</span> <button type="button" class="copy-btn" data-copy="'+esc(a?a.id:'')+'">复制</button></div><div>SHA：<span class="mono">'+esc(a&&a.importedSha256?a.importedSha256.slice(0,12):'—')+'</span> · '+esc(a&&a.sourceMediaType||'—')+' · '+(a&&a.sourceBytes||0)+' B</div><div>provider/model：'+esc((a&&a.provider||'—')+' / '+(a&&a.model||'—'))+'</div></div></details>';
+}
+function openVisualAttemptDrawer(taskId){
+  var found=null;
+  (D.factory&&D.factory.visual&&D.factory.visual.batches||[]).forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.id===taskId)found={batch:b,task:t};});});
+  if(!found)return;
+  var t=found.task;
+  var h=[];
+  h.push('<div class="kv"><div><b>资产</b>'+esc(t.assetId)+'</div><div><b>放置</b>'+esc(t.placement)+'</div><div><b>包</b><span class="mono">'+esc(found.batch.packageId)+'</span> <button type="button" class="copy-btn" data-copy="'+esc(found.batch.packageId)+'">复制</button></div></div>');
+  h.push('<h4>attempt 历史（共 '+(t.attempts||[]).length+' 次，仅查看不可操作）</h4>');
+  if(!(t.attempts||[]).length){h.push(empty('暂无 attempt 记录','','doc'));}
+  else{
+    h.push('<table class="attempt-list"><thead><tr><th>attempt</th><th>状态</th><th>provider</th><th>尺寸</th><th>id</th><th></th></tr></thead><tbody>');
+    (t.attempts||[]).forEach(function(x){
+      var isCurrent=Number(x.attemptNo)===Number(t.currentAttempt);
+      var dimmed=(x.status==='failed'||x.status==='retry');
+      var st=x.status==='waiting_visual_approval'?'<span class="badge badge-amber">待审核</span>':x.status==='approved'?'<span class="badge badge-green">已批准</span>':x.status==='rejected'?'<span class="badge badge-red">已驳回</span>':'<span class="badge badge-gray">'+esc(x.status)+'</span>';
+      h.push('<tr'+(dimmed?' style="opacity:.55"':'')+'><td>#'+x.attemptNo+(isCurrent?' <span class="badge badge-blue">当前 attempt</span>':'')+(dimmed?' <span class="badge badge-gray">历史</span>':'')+'</td><td>'+st+'</td><td>'+esc(x.provider||'—')+'</td><td>'+dimsOf(x)+'</td><td class="mono">'+esc(x.id)+'</td><td><button type="button" class="copy-btn" data-copy="'+esc(x.id)+'" aria-label="复制 attempt ID">复制</button></td></tr>');
+    });
+    h.push('</tbody></table>');
+  }
+  // 技术抽屉：历史事件（审计）
+  h.push('<h4>事件记录（'+(t.events||[]).length+'）</h4>');
+  if(!(t.events||[]).length){h.push('<div class="dim">暂无事件记录。</div>');}
+  else{
+    h.push('<div style="font-size:11.5px;line-height:1.8">'+t.events.map(function(ev){
+      var arrow=ev.fromState?esc(ev.fromState)+' → '+esc(ev.toState):esc(ev.toState);
+      return '<div><span class="dim">'+esc(fmtISO(ev.createdAt))+'</span> · '+arrow+(ev.attemptId?' · <span class="mono">'+esc(ev.attemptId)+'</span>':'')+(ev.reason?'<div style="color:var(--ink-3)">'+esc(ev.reason)+'</div>':'')+'</div>';
+    }).join('')+'</div>');
+  }
+  openDrawer(t.assetId+' · 详情',h.join(''));
+}
+function renderVisual(){
+  var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
+  var h=[flowBar('visual')];
+  if(!vis.length){h.push(empty('暂无视觉批次','批准草稿包后创建视觉任务；支持视觉审核与按意见重试。','visual'));return h.join('');}
+  vis.forEach(function(b){
+    var rd=b.readiness||{};
+    var statusName={partially_approved:'部分批准',visual_approved_test:'视觉已批准（测试）',visual_approved:'视觉已批准',waiting_visual_approval:'等待视觉审核',rejected:'有图片被驳回',queued:'排队中',generating:'生成中',failed:'失败'};
+    h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('visual')+'视觉批次 · '+esc(statusName[b.status]||b.status)+'</div><div><button type="button" class="btn btn-ghost" data-visual-refresh aria-label="只读刷新视觉状态">刷新状态</button> <span class="badge badge-gray">'+esc(b.packageId)+'</span> <span class="badge badge-amber">'+esc(b.approvedCount)+' / '+esc(b.requiredCount)+' 已批准</span>'+(rd.testOnly?' <span class="badge badge-red">测试图片不可发布</span>':'')+'</div></div>');
+    h.push('<div class="vgrid">');
+    (b.tasks||[]).forEach(function(t){
+      var a=currentAttempt(t);
+      var img=a&&a.importedRelativePath?('<button type="button" class="thumb-wrap" data-visual-thumb="'+esc(a.id)+'" aria-label="查看大图：'+esc(t.altText)+'"><img loading="lazy" alt="'+esc(t.altText)+'" src="'+visualAssetUrl(a.id)+'"></button>'):('<div class="preview-empty" style="min-height:170px">'+icon('image')+'<div>尚无图片</div></div>');
+      var stub=!!a&&a.provider==='stub';
+      var providerCell=stub?'<span class="badge badge-red">测试 stub</span>':('<span class="badge badge-blue">'+esc(a?a.provider:'—')+'</span>');
+      h.push('<div class="vis-card" data-vis-task="'+esc(t.id)+'">'+img+'<div class="v-title">'+esc(t.assetId)+' '+visualStateBadge(t)+'</div><div class="vis-meta">'+providerCell+' <span class="dim">'+esc(a&&a.model||'—')+'</span><br>'+dimsOf(a)+' · '+esc(t.placement)+'<br>当前 attempt #'+esc(t.currentAttempt)+' · 失败 '+(t.failureCount||0)+' · retry '+(t.retryCount||0)+'</div>'+techDetails(t,a)+'<div class="v-attempt-btn"><button type="button" class="btn btn-ghost" data-attempt-history="'+esc(t.id)+'">查看 attempt 历史</button></div>'+visActions(t,a)+'</div>');
+    });
+    h.push('</div></div>');
+  });
+  return h.join('');
+}
+
+/* ============ publish ============ */
+// blocker 平台归属：按 code 中的平台子串归类；返回 null 表示全局阻塞
+function blockerPlatform(code){
+  if(code.indexOf('wechat')>=0)return 'wechat';
+  if(code.indexOf('telegram')>=0)return 'telegram';
+  if(code.indexOf('xiaohongshu')>=0)return 'xiaohongshu';
+  if(code.indexOf(':x-')>=0||code.indexOf('x-')===0)return 'x';
+  return null;
+}
+var BLOCKER_LABEL={
+  'draft-package-not-approved':'草稿包未批准',
+  'draft-package-missing':'草稿包记录缺失',
+  'required-visual-assets-not-approved':'视觉资产未全部批准',
+  'stub-visual-assets-test-only':'测试图片（stub）不可发布',
+  'wechat-production-delivery-missing':'微信公众号生产交付包缺失',
+  'telegram-production-delivery-missing':'Telegram 生产交付包缺失',
+  'x-production-delivery-missing':'X 生产交付包缺失',
+  'xiaohongshu-production-delivery-missing':'小红书生产交付包缺失',
+  'legacy-contract-v1-cannot-prove-xiaohongshu-complete':'旧版契约 v1 无法证明小红书交付完整',
+  'contract-v2-missing:wechat-cover':'缺少微信封面资产槽位',
+  'contract-v2-missing:wechat-inline':'缺少微信正文配图资产槽位',
+  'contract-v2-missing:xiaohongshu-order-1':'缺少小红书首图资产槽位',
+  'contract-v2-missing:xiaohongshu-carousel-order-2+':'缺少小红书轮播图槽位（第 2 张起）'
+};
+function blockerLabel(code){return BLOCKER_LABEL[code]||code;}
+function blockerChip(code,cls){return '<span class="'+(cls||'blocker-chip')+'">'+esc(blockerLabel(code))+'</span>';}
+function publishStatusLabel(status){
+  var m={queued:'排队中',running:'进行中',waiting_approval:'待确认',succeeded:'已完成',failed:'失败',cancelled:'已取消'};
+  return m[status]||status;
+}
+function renderPublish(){
+  var vis=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
+  var h=[flowBar('publish')];
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('publish')+'发布准备（受控）</div><span class="pill pill-orange">发布仍需人工操作</span></div>');
+  if(!vis.length){h.push(empty('暂无视觉批次','视觉审核通过后在此查看各平台发布就绪状态，并可受控生成交付包（不自动发布）。','publish'));}
+  else{
+    vis.forEach(function(b){
+      var rd=b.readiness||{};
+      var all=(rd.blockers||[]).filter(function(x){return x;});
+      var globalBl=all.filter(function(x){return blockerPlatform(x)===null;});
+      var byPlat={wechat:[],telegram:[],x:[],xiaohongshu:[]};
+      all.forEach(function(x){var p=blockerPlatform(x);if(p&&byPlat[p])byPlat[p].push(x);});
+      var platforms=[['wechat','微信公众号'],['telegram','Telegram'],['x','X'],['xiaohongshu','小红书']];
+      h.push('<h4 style="margin:14px 0 2px">'+esc(b.packageId)+'（v'+esc(b.revision)+' · '+esc(b.status)+'）</h4>');
+      // 全局阻塞只显示一次
+      h.push('<div style="margin:6px 0 2px"><span class="badge badge-gray">全局阻塞</span> '+(globalBl.length?globalBl.map(function(x){return blockerChip(x);}).join(' '):'<span class="ok-chip">无</span>')+'</div>');
+      var textApproved=globalBl.indexOf('draft-package-not-approved')<0;
+      h.push('<div class="table-scroll"><table class="readiness-matrix"><thead><tr><th>平台</th><th>文稿</th><th>视觉</th><th>交付包</th><th>风险检查</th><th>最终状态</th></tr></thead><tbody>');
+      platforms.forEach(function(p){
+        var ready=rd.readyByPlatform&&rd.readyByPlatform[p[0]];
+        var own=byPlat[p[0]]||[];
+        var deliverable=p[0]==='wechat'||p[0]==='xiaohongshu';
+        var delChips=own.filter(function(x){return x.indexOf('delivery-missing')>=0||x.indexOf('legacy-contract')>=0;});
+        var riskChips=own.filter(function(x){return x.indexOf('delivery-missing')<0&&x.indexOf('legacy-contract')<0;});
+        var finalHtml=ready?'<span class="ok-chip">就绪</span>':(own.length?'<span class="blocker-chip">阻塞</span>':'<span class="blocker-chip">阻塞</span>');
+        h.push('<tr><td><b>'+p[1]+'</b></td>'+
+          '<td>'+(textApproved?'<span class="ok-chip">就绪</span>':'<span class="blocker-chip">未批准</span>')+'</td>'+
+          '<td>'+(rd.visualApproved?'<span class="ok-chip">已批准</span>':'<span class="blocker-chip">待批准</span>')+'</td>'+
+          '<td>'+(deliverable?(delChips.length?delChips.map(function(x){return blockerChip(x);}).join(''):'<span class="ok-chip">就绪</span>'):'<span class="dim">—</span>')+'</td>'+
+          '<td>'+(riskChips.length?riskChips.map(function(x){return blockerChip(x);}).join(''):'<span class="dim">—</span>')+'</td>'+
+          '<td>'+finalHtml+(own.length?own.map(function(x){return blockerChip(x);}).join(''):(ready?'<span class="dim">无阻塞</span>':''))+'</td></tr>');
+      });
+      h.push('</tbody></table></div>');
+      h.push('<div class="hint">“为什么不能发布”：最终状态为阻塞时，查看该平台行的文稿/视觉/交付包/风险检查列与全局阻塞。</div>');
+      h.push('<div class="kv" style="font-size:12.5px;margin-top:8px">');
+      h.push('<div><b>缺失槽位</b>'+(Math.max(0,Number(b.requiredCount)-Number(b.approvedCount)))+' 个（'+esc(b.approvedCount)+' / '+esc(b.requiredCount)+' 已批准）</div>');
+      h.push('<div><b>交付包</b>'+(b.deliveryLink?'<a data-delivery-download href="'+esc(b.deliveryLink)+'" target="_blank" rel="noopener noreferrer">下载最新交付 ZIP</a>':'尚未生成（可在下方受控生成）')+'</div>');
+      h.push('<div><b>就绪状态</b>'+(rd.readyForPublication?'<span class="badge badge-green">可发布（人工操作）</span>':'<span class="badge badge-red">尚未全部就绪</span>')+'</div>');
+      h.push('<div><b>视觉批准</b>'+(rd.visualApproved?'<span class="badge badge-green">已批准</span>':'<span class="badge badge-amber">等待批准</span>')+(rd.testOnly?' · <span class="badge badge-red">TEST ONLY</span>':'')+'</div>');
+      h.push('</div>');
+      // M6.4 受控交付生成：只生成交付包，不自动发布
+      h.push('<div class="vis-actions" style="margin-top:12px">');
+      if(rd.visualApproved){h.push('<button type="button" class="btn btn-ghost" data-delivery-action="preview" data-package="'+esc(b.packageId)+'">生成预览交付包</button>');}
+      else{h.push('<button type="button" class="btn btn-ghost" data-delivery-action="preview" data-package="'+esc(b.packageId)+'" disabled title="需先批准全部视觉">生成预览交付包</button>');}
+      if(rd.deliveryReady){h.push('<button type="button" class="btn btn-retry" data-delivery-action="production" data-package="'+esc(b.packageId)+'">生成生产交付包</button>');}
+      else{h.push('<button type="button" class="btn btn-retry" data-delivery-action="production" data-package="'+esc(b.packageId)+'" disabled title="'+(rd.testOnly?'测试图片（stub）不可生产交付':'需非 stub 图片且契约完整')+'">生成生产交付包</button>');}
+      h.push('</div>');
+      // M6.6 受控发布任务创建：仅创建台账，不自动发布
+      if(rd.readyForPublication&&!rd.testOnly){
+        h.push('<div class="vis-actions" style="margin-top:6px"><button type="button" class="btn btn-approve" data-publish-action="'+esc(b.packageId)+'">创建发布任务</button>'+(b.publishTask?'<span class="dim">发布任务：#'+esc(b.publishTask.id)+' · '+esc(publishStatusLabel(b.publishTask.status))+'</span>':'')+'</div>');
+      }else if(b.publishTask){
+        h.push('<div class="vis-status" style="margin-top:6px"><span class="dim">发布任务：#'+esc(b.publishTask.id)+' · '+esc(publishStatusLabel(b.publishTask.status))+'</span></div>');
+      }
+      if(all.length){
+        h.push('<details class="tech"><summary>技术详情 · 原始阻塞码（'+all.length+'）</summary><div class="tech-body">'+all.map(function(x){return '<div class="mono">'+esc(x)+'</div>';}).join('')+'</div></details>');
+      }
+    });
+    h.push('<div class="empty" style="margin-top:14px"><div>发布仍需人工操作</div><div class="empty-note">工作台不提供发布按钮：任何平台发布均由人工在对应后台完成，插件只做就绪度提示。</div></div>');
+  }
+  h.push('</div>');
+  return h.join('');
+}
+
+/* ============ growth ============ */
+function renderGrowth(){
+  var perf=D.perf||{files:0,totalPosts:0,platforms:[]};
+  var h=[];
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('growth')+'发布表现（真实数据）</div>'+(perf.platforms&&perf.platforms.length?'<span class="pill pill-gray">'+perf.files+' 个数据文件 · '+perf.totalPosts+' 篇</span>':'')+'</div>');
+  if(!perf.platforms||!perf.platforms.length){h.push(empty('尚未接入真实平台表现数据','当前为空属于正常状态：系统不会展示示例数据。接入方式：在各平台后台导出发布数据（JSON，含 posts 数组，字段如 published_at、read_count、like_count、share_count），放入 PERF_DIR（默认 contentos-x/perf/），插件自动汇总出指标、趋势与平台对比。','growth'));}
+  else{
+    h.push('<table><thead><tr><th>平台</th><th>篇数</th><th>总阅读</th><th>平均阅读</th><th>最近发布</th></tr></thead><tbody>');
+    perf.platforms.forEach(function(p){h.push('<tr><td>'+esc(p.platform)+'</td><td>'+p.posts+'</td><td>'+p.totalReads+'</td><td>'+p.avgReads+'</td><td>'+esc(p.last||'—')+'</td></tr>');});
+    h.push('</tbody></table>');
+  }
+  h.push('</div>');
+  return h.join('');
+}
+
+/* ============ system ============ */
+function renderSystem(){
+  var intel=D.intel||{health:{sources:[],overall:'pending'},lastRun:null,archiveCounts:[],snapshotCount:0};
+  var health=intel.health||{sources:[],overall:'pending'};
+  var fact=D.factory||{};var db=fact.database||{schemaVersion:0,jobs:{},path:'—'};
+  var h=[];
+  var overall=health.overall==='green'?'正常':health.overall==='red'?'注意':'待接入';
+  h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('system')+'系统状态</div><span class="pill '+(health.overall==='green'?'pill-green':health.overall==='red'?'pill-red':'pill-gray')+'">'+esc(overall)+'</span></div>');
+  h.push('<div class="notice '+(health.overall==='red'?'danger':health.overall==='green'?'success':'info')+'">'+icon(health.overall==='red'?'alert':'check')+'<span class="n-text">'+(health.overall==='red'?'情报源存在异常，请查看下方信源健康与最近错误。':health.overall==='green'?'各系统运行正常，无需要关注的事项。':'情报源尚未全部接入，属正常初始状态。')+'</span></div>');
+  // 信源健康
+  h.push('<h4>信源健康</h4>');
+  h.push('<div class="table-scroll"><table><thead><tr><th>信源</th><th>状态</th><th>新鲜度</th><th>阈值</th><th>连败</th></tr></thead><tbody>');
+  var dotMap={green:'dot-green',red:'dot-red',pending:'dot-gray'};
+  var labelMap={green:'正常',red:'异常',pending:'待接入'};
+  (health.sources||[]).forEach(function(s){
+    h.push('<tr><td>'+esc(s.id)+'</td><td><span class="dot '+(dotMap[s.status]||'dot-gray')+'"></span> '+esc(labelMap[s.status]||s.status)+(s.note?' <span class="dim">· '+esc(s.note)+'</span>':'')+'</td><td>'+(s.stalenessHours==null?'—':s.stalenessHours+'h')+'</td><td>≤'+s.maxStalenessHours+'h</td><td>'+(s.failStreak||0)+' 次</td></tr>');
+  });
+  if(!health.sources.length)h.push('<tr><td colspan="5" class="dim">（无接入源，属正常初始状态）</td></tr>');
+  h.push('</tbody></table></div>');
+  // 工作流任务
+  h.push('<h4>工作流任务</h4>');
+  var jobKeys=Object.keys(db.jobs||{});
+  h.push('<div class="totals-strip" style="margin-top:6px">'+(jobKeys.length?jobKeys.map(function(k){return '<span class="totals-chip">'+esc(k)+' <b>'+db.jobs[k]+'</b></span>';}).join(''):'<span class="dim">（暂无任务记录）</span>')+'</div>');
+  var last=intel.lastRun;
+  h.push('<div class="kv"><div><b>最近 run</b>'+(last?(last.ok?'<span class="badge badge-green">ok</span>':'<span class="badge badge-red">FAIL</span>')+' @ '+esc(fmtISO(last.at))+(last.stage?' · '+esc(last.stage):'')+(last.error?' · '+esc(last.error):''):'—（尚无调度记录）')+'</div></div>');
+  // 数据新鲜度
+  h.push('<h4>数据新鲜度</h4>');
+  var cycleName={done:'今日产物已就绪',due:'今日融合完成待跑内容循环',idle:'无待办'};
+  h.push('<div class="kv"><div><b>内容循环</b>'+(D.dailyCycle?(cycleName[D.dailyCycle.status]||D.dailyCycle.status):'—')+(D.dailyCycle&&D.dailyCycle.note?' · '+esc(D.dailyCycle.note):'')+'</div><div><b>情报快照</b>'+(intel.snapshotCount||0)+' 条（14 天滚动）</div><div><b>调度</b>由宿主 cron / agent 触发（只读展示，工作台不提供开关）</div></div>');
+  // 降级状态
+  h.push('<h4>降级状态与最近错误</h4>');
+  var errs=[];
+  if(health.overall==='red')errs.push('情报源整体异常（overall=red）');
+  (health.sources||[]).forEach(function(s){if(s.failStreak>0)errs.push(esc(s.id)+' 连续失败 '+s.failStreak+' 次');});
+  if(last&&last.error)errs.push('最近 run 错误：'+esc(last.error));
+  if(!errs.length)h.push('<div class="notice success">'+icon('check')+'<span class="n-text">无降级或错误记录。</span></div>');
+  else{h.push('<ul style="list-style:none">'+errs.map(function(e){return '<li style="padding:4px 0;font-size:12.5px;color:var(--danger)">'+e+'</li>';}).join('')+'</ul>');}
+  // 数据库与插件
+  /* M8 统一工作台：来源注册表（原 V1 sources 能力，info_sources.json 只读） */
+  var info=D.infoSources;
+  h.push('<h4>来源注册表（只读）</h4>');
+  if(!info){h.push('<div class="dim">config/info_sources.json 缺失或不可读。</div>');}
+  else{
+    var regHtml=[];
+    if(info.rss&&info.rss.length){regHtml.push('<div class="kv">'+info.rss.map(function(r){return '<div>📡 '+esc(r.name||'?')+' <span class="dim">'+esc(r.url||'')+'</span> <span class="badge badge-gray">'+esc((r.tags||[]).join(','))+'</span></div>';}).join('')+'</div>');}
+    if(info.x_lists&&info.x_lists.length){regHtml.push('<div class="kv">'+info.x_lists.map(function(x){return '<div>🐦 '+esc(x.name||'?')+' <span class="dim">'+esc((x.accounts||[]).join(' '))+'</span></div>';}).join('')+'</div>');}
+    if(info.local_knowledge){regHtml.push('<div class="kv">'+Object.keys(info.local_knowledge).map(function(k){return '<div>📚 '+esc(k)+' = <span class="dim">'+esc(info.local_knowledge[k])+'</span></div>';}).join('')+'</div>');}
+    h.push(regHtml.length?regHtml.join(''):'<div class="dim">（注册表为空）</div>');
+  }
+  h.push('<h4>数据库与插件</h4>');
+  h.push('<div class="kv"><div><b>数据库 schema</b>v'+esc(db.schemaVersion)+'</div><div><b>归档</b>'+(intel.archiveCounts&&intel.archiveCounts.length?intel.archiveCounts.map(function(c){return esc(c.source)+' '+c.total+' 条';}).join(' · '):'—')+'</div></div>');
+  h.push('<details class="tech"><summary>技术详情</summary><div class="tech-body">');
+  h.push('<div>数据生成：'+esc(fmtISO(D.generatedAt))+'</div>');
+  h.push('<div>VAULT：<span class="mono">'+esc(D.vaultRoot)+'</span></div>');
+  h.push('<div>工厂库：<span class="mono">'+esc(db.path||'—')+'</span></div>');
+  h.push('<div>视觉资产 SHA 短摘要见视觉中心 · 技术信息。</div>');
+  h.push('</div></details>');
+  h.push('</div>');
+  return h.join('');
+}
+
+/* ============ drawer ============ */
+var drawer={open:false,lastFocus:null};
+function openDrawer(title,html){
+  drawer.lastFocus=document.activeElement;
+  $('drawerTitle').innerHTML=esc(title);
+  $('drawerBody').innerHTML=html;
+  $('drawer').classList.remove('hidden');
+  drawer.open=true;
+  document.body.classList.add('modal-open');
+  var c=$('drawer').querySelector('[data-drawer-close]');if(c)c.focus();
+}
+function closeDrawer(){
+  if(!drawer.open)return;
+  $('drawer').classList.add('hidden');
+  drawer.open=false;
+  document.body.classList.remove('modal-open');
+  var last=drawer.lastFocus;
+  drawer.lastFocus=null;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+
+/* ============ lightbox（受控 attemptId 端点，只读） ============ */
+var visualLightbox={items:[],index:-1,lastFocused:null};
+var ATTEMPT_ID_RE=/^va-[a-f0-9]{20}$/;
+function visualTaskForAttempt(attemptId){var found=null;(D.factory&&D.factory.visual&&D.factory.visual.batches||[]).some(function(batch){return (batch.tasks||[]).some(function(task){var attempt=currentAttempt(task);if(attempt&&attempt.id===attemptId){found={batch:batch,task:task,attempt:attempt};return true;}return false;});});return found;}
+function visualLightboxItems(attemptId){
+  if(!ATTEMPT_ID_RE.test(attemptId))return [];
+  var found=visualTaskForAttempt(attemptId);
+  if(!found)return [];
+  return (found.batch.tasks||[]).map(function(t){var a=currentAttempt(t);if(!a||!a.importedRelativePath)return null;return {task:t,attempt:a,attemptId:a.id};}).filter(Boolean);
+}
+function visualLightboxCurrent(){return visualLightbox.items[visualLightbox.index];}
+function visualAssetUrl(attemptId){if(typeof attemptId!=='string'||!ATTEMPT_ID_RE.test(attemptId))return null;return '/sparkos/visual/asset?attemptId='+encodeURIComponent(attemptId);}
+function renderVisualLightboxImage(){
+  var lb=$('visual-lightbox');
+  var item=visualLightboxCurrent();
+  if(!lb||!item)return;
+  var img=lb.querySelector('[data-lightbox-img]');
+  var error=lb.querySelector('[data-lightbox-error]');
+  var msg=lb.querySelector('[data-lightbox-error-msg]');
+  var link=lb.querySelector('[data-lightbox-error-link]');
+  var linkCurrent=lb.querySelector('[data-lightbox-error-current]');
+  var url=visualAssetUrl(item.attemptId);
+  img.alt=item.task.altText||'';
+  img.classList.remove('hidden');
+  error.classList.remove('show');
+  if(!url){
+    msg.textContent='图片加载失败（attemptId 非法：'+item.attemptId+'）';
+    img.classList.add('hidden');
+    error.classList.add('show');
+    return;
+  }
+  img.src=url;
+  link.href=url;
+  linkCurrent.href=url;
+  img.onerror=function(){
+    img.classList.add('hidden');
+    msg.textContent='图片加载失败（无法加载视觉资产 '+item.attemptId+'，请用下方链接重试）';
+    error.classList.add('show');
+  };
+}
+function renderVisualLightboxInfo(){
+  var lb=$('visual-lightbox');
+  var item=visualLightboxCurrent();
+  if(!lb||!item)return;
+  var a=item.attempt,t=item.task;
+  var sha=a.importedSha256?esc(String(a.importedSha256).slice(0,12)):'—';
+  var rows=[
+    ['assetId',esc(t.assetId)],
+    ['attempt 编号',esc(String(a.attemptNo))],
+    ['provider/model',esc((a.provider||'—')+' / '+(a.model||'—'))],
+    ['尺寸',esc(dimsOf(a))],
+    ['MIME',esc(a.sourceMediaType||'—')],
+    ['bytes',esc(String(a.sourceBytes==null?0:a.sourceBytes))],
+    ['SHA',sha],
+    ['altText',esc(t.altText)],
+    ['placement',esc(t.placement)],
+    ['prompt',esc(t.prompt)]
+  ].map(function(r){return '<div class="visual-lb-row"><b>'+r[0]+'</b><span>'+r[1]+'</span></div>';}).join('');
+  var indexLabel='<div class="visual-lb-row"><b>图片</b><span>'+(visualLightbox.index+1)+' / '+visualLightbox.items.length+'</span></div>';
+  var url=visualAssetUrl(a.id);
+  var openLink=url?'<div class="visual-lb-row"><b>原图</b><a data-lightbox-anchor data-lightbox-open href="'+url+'" target="_blank" rel="noopener noreferrer">打开原图</a> <a data-lightbox-anchor data-lightbox-open-current href="'+url+'">在当前标签查看原图</a></div>':'';
+  var reviewRow=isReviewable(item.task,item.attempt)?'<div class="visual-lb-row"><b>审核</b><button type="button" class="btn btn-approve" data-visual-approve="'+esc(item.attemptId)+'">批准图片</button> <button type="button" class="btn btn-reject" data-visual-reject="'+esc(item.attemptId)+'">驳回图片</button></div>':'';
+  lb.querySelector('[data-lightbox-info]').innerHTML=indexLabel+rows+openLink+reviewRow;
+}
+function openVisualLightbox(attemptId,trigger){
+  if(!ATTEMPT_ID_RE.test(attemptId))return;
+  var items=visualLightboxItems(attemptId);
+  if(!items.length)return;
+  var index=-1;
+  for(var i=0;i<items.length;i++){if(items[i].attemptId===attemptId){index=i;break;}}
+  if(index<0)return;
+  visualLightbox.items=items;visualLightbox.index=index;visualLightbox.lastFocused=trigger||document.activeElement;
+  var lb=$('visual-lightbox');
+  lb.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  renderVisualLightboxImage();
+  renderVisualLightboxInfo();
+  var close=lb.querySelector('[data-lightbox-close]');
+  if(close)close.focus();
+}
+function closeVisualLightbox(){
+  if(visualLightbox.index<0)return;
+  var lb=$('visual-lightbox');
+  lb.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+  var img=lb.querySelector('[data-lightbox-img]');
+  if(img)img.removeAttribute('src');
+  var last=visualLightbox.lastFocused;
+  visualLightbox.items=[];visualLightbox.index=-1;visualLightbox.lastFocused=null;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function copyTechId(btn){
+  var val=btn.getAttribute('data-copy')||'';
+  if(!val)return;
+  var done=function(){var old=btn.textContent;btn.textContent='已复制';btn.classList.add('copied');setTimeout(function(){btn.textContent=old;btn.classList.remove('copied');},1400);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(val).then(done,function(){fallbackCopy(val,done);});}
+  else{fallbackCopy(val,done);}
+}
+function fallbackCopy(text,done){
+  var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');}catch(e){}
+  document.body.removeChild(ta);done();
+}
+function stepVisualLightbox(delta){
+  var count=visualLightbox.items.length;
+  if(!count||visualLightbox.index<0)return;
+  visualLightbox.index=(visualLightbox.index+delta+count)%count;
+  renderVisualLightboxImage();
+  renderVisualLightboxInfo();
+}
+
+var RENDER={overview:renderOverview,intel:renderIntel,topics:renderTopics,creation:renderCreation,review:renderReview,visual:renderVisual,publish:renderPublish,growth:renderGrowth,system:renderSystem};
+
+
+/* ============ 视觉审核与按意见重试（受控操作） ============ */
+var reviewDialog={attemptId:null,decision:null,batch:null,task:null,attempt:null,lastFocus:null,busy:false};
+var toastTimer=null;
+function isReviewable(task,attempt){
+  return !!task&&!!attempt&&task.state==='waiting_visual_approval'
+    &&Number(task.currentAttempt)===Number(attempt.attemptNo)
+    &&!!attempt.importedRelativePath
+    &&(!attempt.approval||attempt.approval.decision==='pending');
+}
+function showToast(msg,type){
+  var t=$('toast');t.textContent=msg;t.className='toast '+(type||'success');t.classList.add('show');
+  if(toastTimer)clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){t.classList.remove('show');},2600);
+}
+async function refreshVisual(packageId){
+  var resp=await apiFetch('/sparkos/visual/status?packageId='+encodeURIComponent(packageId));
+  var json=await resp.json();
+  if(!resp.ok||!json||!json.ok)throw new Error('刷新视觉状态失败');
+  var fresh=json.value.batches||[];
+  var kept=(D.factory&&D.factory.visual&&D.factory.visual.batches||[]).filter(function(b){return b.packageId!==packageId;});
+  D.factory=D.factory||{};D.factory.visual=D.factory.visual||{batches:[]};
+  D.factory.visual.batches=kept.concat(fresh);
+}
+/* M6.3：草稿决策/修订后只读重读工作台数据（GET /sparkos/data，不产生 POST）。 */
+async function refreshWorkbenchData(){
+  var resp=await apiFetch('/sparkos/data');
+  var json=await resp.json();
+  if(!resp.ok||!json||!json.ok)throw new Error('刷新工作台数据失败');
+  D=json.value;
+}
+function openVisualReviewDialog(attemptId,decision,trigger){
+  var found=visualTaskForAttempt(attemptId);
+  if(!found)return;
+  var t=found.task,a=found.attempt,b=found.batch;
+  if(!isReviewable(t,a)){
+    showToast('该图片当前不可审核，正在刷新最新状态','error');
+    refreshVisual(b.packageId).then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  reviewDialog.attemptId=attemptId;reviewDialog.decision=decision;
+  reviewDialog.batch=b;reviewDialog.task=t;reviewDialog.attempt=a;
+  reviewDialog.lastFocus=trigger||document.activeElement;reviewDialog.busy=false;
+  renderReviewDialog();
+  var dlg=$('review-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-review-close]');if(close)close.focus();
+}
+function renderReviewDialog(){
+  var d=reviewDialog;
+  var t=d.task,a=d.attempt,b=d.batch;
+  var approve=d.decision==='approved';
+  $('reviewDialogTitle').textContent=approve?'批准图片':'驳回图片';
+  var url=visualAssetUrl(a.id);
+  var pkgShort=b.packageId?String(b.packageId).slice(0,10):'—';
+  var h=[];
+  if(url)h.push('<img class="review-thumb" alt="'+esc(t.altText||'')+'" src="'+url+'">');
+  h.push('<div class="kv"><div><b>assetId</b>'+esc(t.assetId)+'</div><div><b>placement</b>'+esc(t.placement)+'</div><div><b>attempt</b>#'+esc(String(a.attemptNo))+'</div><div><b>provider/model</b>'+esc((a.provider||'—')+' / '+(a.model||'—'))+'</div><div><b>尺寸</b>'+esc(dimsOf(a))+'</div><div><b>packageId</b><span class="mono">'+esc(pkgShort)+'</span></div></div>');
+  if(!approve&&t.prompt)h.push('<div class="kv" style="margin-top:8px"><b>原 prompt 摘要</b><span>'+esc(String(t.prompt).slice(0,120))+(String(t.prompt).length>120?'…':'')+'</span></div>');
+  h.push('<div style="margin-top:12px"><label for="review-note" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">'+(approve?'审核意见（可选）':'驳回意见（必填）')+'</label><textarea id="review-note" class="modal-note" maxlength="2000" placeholder="'+(approve?'可填写备注，留空也可以':'请说明需要修改的内容')+'"></textarea></div>');
+  h.push('<div class="modal-warn">'+(approve?'批准后将计入视觉审核进度，但不会自动发布。':'图片已驳回，可按驳回意见创建受控重试任务（重试仍需人工发起）。')+'</div>');
+  h.push('<div class="modal-err" id="reviewDialogErr"></div>');
+  $('reviewDialogBody').innerHTML=h.join('');
+  $('reviewDialogFoot').innerHTML='<button type="button" class="btn btn-ghost" data-review-cancel>取消</button><button type="button" class="btn '+(approve?'btn-approve':'btn-reject')+'" data-review-confirm>'+(approve?'确认批准':'确认驳回')+'</button>';
+}
+function closeReviewDialog(){
+  if(!reviewDialog.attemptId)return;
+  var dlg=$('review-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open)document.body.classList.remove('modal-open');
+  var last=reviewDialog.lastFocus;
+  reviewDialog.attemptId=null;reviewDialog.decision=null;reviewDialog.batch=null;reviewDialog.task=null;reviewDialog.attempt=null;reviewDialog.lastFocus=null;reviewDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showReviewDialogError(msg){
+  var e=$('reviewDialogErr');
+  if(e){e.textContent=msg;e.classList.add('show');}
+}
+function setReviewBusy(busy,label){
+  reviewDialog.busy=busy;
+  var dlg=$('review-dialog');
+  var btn=dlg.querySelector('[data-review-confirm]');
+  var cancel=dlg.querySelector('[data-review-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleReviewError(err){
+  var code=err&&err.code;
+  var msg='请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='not-found'){msg='任务或图片不存在，可能已变化，正在刷新最新状态';needsRefresh=true;}
+  else if(code==='not-current-attempt'||code==='decision-conflict'||code==='invalid-state'||code==='conflict'){msg='该图片状态已变化，正在刷新最新状态';needsRefresh=true;}
+  else if(code==='review-note-required'){msg='驳回图片必须填写审核意见';}
+  else if(code==='payload-too-large'){msg='意见过长（超过 2000 字）';}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  else if(String(code).indexOf('http-4')===0){msg='请求被拒绝（'+String(code).replace('http-','HTTP ')+'），请检查后重试';}
+  showReviewDialogError(msg);
+  if(needsRefresh&&reviewDialog.batch){
+    refreshVisual(reviewDialog.batch.packageId).then(function(){renderRouter();}).catch(function(){});
+  }
+  // 不关闭对话框；409 后由刷新结果决定下一步
+}
+async function submitVisualReview(){
+  if(!reviewDialog.attemptId||reviewDialog.busy)return;
+  var d=reviewDialog;
+  var noteEl=$('review-note');
+  var note=noteEl?noteEl.value.trim():'';
+  if(d.decision==='rejected'&&!note){showReviewDialogError('驳回意见必填');if(noteEl)noteEl.focus();return;}
+  if(note.length>2000){showReviewDialogError('意见不能超过 2000 字');return;}
+  var errEl=$('reviewDialogErr');if(errEl)errEl.classList.remove('show');
+  setReviewBusy(true,'提交中…');
+  try{
+    var resp=await apiFetch('/sparkos/visual/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({attemptId:d.attemptId,decision:d.decision,note:note})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var pkg=d.batch.packageId;
+    var approved=d.decision==='approved';
+    closeReviewDialog();
+    if(visualLightbox.index>=0)closeVisualLightbox();
+    showToast(approved?'图片已批准':'图片已驳回','success');
+    try{await refreshVisual(pkg);}catch(e2){showToast('已提交，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setReviewBusy(false);
+    handleReviewError(err);
+  }
+}
+/* ============ M6.2 受控重试对话框（正式 modal，不用 window.confirm） ============ */
+var retryDialog={taskId:null,batch:null,task:null,attempt:null,lastFocus:null,busy:false};
+var RETRY_SUP_MAX=500;
+function openVisualRetryDialog(taskId,trigger){
+  var found=null;
+  (D.factory&&D.factory.visual&&D.factory.visual.batches||[]).forEach(function(b){(b.tasks||[]).forEach(function(t){if(t.id===taskId)found={batch:b,task:t};});});
+  if(!found)return;
+  var t=found.task,a=currentAttempt(t);
+  var info=visualRetryInfo(t);
+  if(!info.eligible||!a){
+    showToast('该图片当前不可重试，正在刷新最新状态','error');
+    refreshVisual(found.batch.packageId).then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  retryDialog.taskId=taskId;retryDialog.batch=found.batch;retryDialog.task=t;retryDialog.attempt=a;
+  retryDialog.lastFocus=trigger||document.activeElement;retryDialog.busy=false;
+  renderRetryDialog();
+  var dlg=$('retry-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-retry-close]');if(close)close.focus();
+}
+function renderRetryDialog(){
+  var d=retryDialog;var t=d.task,a=d.attempt,b=d.batch;
+  var url=visualAssetUrl(a.id);
+  var note=(a.approval&&a.approval.note)||t.reviewNote||'';
+  var info=visualRetryInfo(t);
+  var h=[];
+  if(url)h.push('<img class="retry-dialog-thumb" alt="'+esc(t.altText||'')+'" src="'+url+'">');
+  h.push('<div class="kv">');
+  h.push('<div><b>assetId</b>'+esc(t.assetId)+'</div><div><b>用途</b>'+esc(t.placement)+'</div>');
+  h.push('<div><b>attempt</b>#'+esc(String(a.attemptNo))+'（当前）</div><div><b>provider/model</b>'+esc((a.provider||'—')+' / '+(a.model||'—'))+'</div>');
+  h.push('<div><b>尺寸</b>'+esc(dimsOf(a))+'</div><div><b>下一 attempt</b>#'+esc(String(info.expectedNextAttemptNo))+'</div>');
+  h.push('<div><b>尝试上限</b>已用 '+esc(String(t.currentAttempt))+' / '+esc(String(t.maxAttempts))+' 次</div>');
+  h.push('</div>');
+  if(t.prompt)h.push('<div style="margin-top:8px"><b style="font-size:12px">原 prompt 摘要</b><div class="dim" style="font-size:11.5px">'+esc(String(t.prompt).slice(0,120))+(String(t.prompt).length>120?'…':'')+'</div></div>');
+  if(note)h.push('<div class="vis-note-box"><span class="vn-label">驳回意见全文：</span>'+esc(note)+'</div>');
+  h.push('<div class="modal-warn">本操作只创建重试任务，不会在浏览器中直接生图；DSH Agent 领取后按 authoritative prompt 生成，并重新进入人工视觉审核。补充要求仅作为附加说明，不能覆盖或删除原驳回意见。</div>');
+  h.push('<div style="margin-top:12px"><label for="retry-supplementary" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">补充重试要求（可选）</label><textarea id="retry-supplementary" class="modal-note" maxlength="'+RETRY_SUP_MAX+'" placeholder="例如：加强主体占比、去除左下角杂物；不得填写本地路径、URL、附件 ID 或密钥"></textarea><div class="retry-sup-counter" id="retrySupCounter">0 / '+RETRY_SUP_MAX+'</div></div>');
+  h.push('<div class="modal-err" id="retryDialogErr"></div>');
+  $('retryDialogBody').innerHTML=h.join('');
+  $('retryDialogFoot').innerHTML='<button type="button" class="btn btn-ghost" data-retry-cancel>取消</button><button type="button" class="btn btn-retry" data-retry-confirm>确认创建重试任务</button>';
+  var sup=$('retry-supplementary');
+  if(sup)sup.addEventListener('input',function(){var c=$('retrySupCounter');if(c){c.textContent=sup.value.length+' / '+RETRY_SUP_MAX;c.classList.toggle('over',sup.value.length>RETRY_SUP_MAX);}});
+}
+function closeRetryDialog(){
+  if(!retryDialog.taskId)return;
+  var dlg=$('retry-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId)document.body.classList.remove('modal-open');
+  var last=retryDialog.lastFocus;
+  retryDialog.taskId=null;retryDialog.batch=null;retryDialog.task=null;retryDialog.attempt=null;retryDialog.lastFocus=null;retryDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showRetryDialogError(msg){var e=$('retryDialogErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setRetryBusy(busy,label){
+  retryDialog.busy=busy;
+  var dlg=$('retry-dialog');
+  var btn=dlg.querySelector('[data-retry-confirm]');
+  var cancel=dlg.querySelector('[data-retry-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleRetryError(err){
+  var code=err&&err.code;
+  var msg='请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='not-found'){msg='任务或图片不存在，可能已变化，正在刷新最新状态';needsRefresh=true;}
+  else if(code==='not-current-attempt'||code==='retry-conflict'||code==='retry-identity-mismatch'||code==='invalid-state'||code==='idempotency-conflict'){msg='任务状态已变化，正在刷新';needsRefresh=true;}
+  else if(code==='approved-cannot-retry'){msg='该图片已批准，不能重试';needsRefresh=true;}
+  else if(code==='max-attempts-reached'){msg='已达到最大重试次数，需要人工处理';needsRefresh=true;}
+  else if(code==='retry-note-required'){msg='缺少有效的驳回意见，不能重试';needsRefresh=true;}
+  else if(code==='stub-cannot-retry'){msg='测试图片不能重试';}
+  else if(code==='supplementary-too-long'){msg='补充要求不能超过 '+RETRY_SUP_MAX+' 字';}
+  else if(code==='supplementary-forbidden'){msg=err.message||'补充要求包含不允许的内容';}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(code==='payload-too-large'){msg='请求体过大';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showRetryDialogError(msg);
+  if(needsRefresh&&retryDialog.batch){
+    refreshVisual(retryDialog.batch.packageId).then(function(){renderRouter();}).catch(function(){});
+  }
+}
+async function submitVisualRetry(){
+  if(!retryDialog.taskId||retryDialog.busy)return;
+  var d=retryDialog;var t=d.task,a=d.attempt,b=d.batch;
+  var supEl=$('retry-supplementary');var sup=supEl?supEl.value.trim():'';
+  if(sup.length>RETRY_SUP_MAX){showRetryDialogError('补充要求不能超过 '+RETRY_SUP_MAX+' 字');return;}
+  if(/^(?:[a-z]:[\\/]|\/)/i.test(sup)||/^(?:https?|file):\/\//i.test(sup)||/sha256:[a-f0-9]{64}/i.test(sup)||/attachment\s*id/i.test(sup)||/(?:api[_-]?key|secret|access[_-]?token|bearer)\s*[:=]/i.test(sup)){
+    showRetryDialogError('补充要求不得包含本地路径、URL、附件 ID 或 Provider 密钥');return;
+  }
+  var errEl=$('retryDialogErr');if(errEl)errEl.classList.remove('show');
+  setRetryBusy(true,'正在创建重试任务');
+  try{
+    var payload={packageId:b.packageId,taskId:t.id,currentAttemptId:a.id,assetId:t.assetId,idempotencyKey:'retry:'+t.id+':'+a.id};
+    if(sup)payload.supplementaryInstruction=sup;
+    var resp=await apiFetch('/sparkos/visual/retry',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var pkg=b.packageId;
+    closeRetryDialog();
+    showToast('重试任务已创建，等待 Agent 领取','success');
+    try{await refreshVisual(pkg);}catch(e2){showToast('已创建，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setRetryBusy(false);
+    handleRetryError(err);
+  }
+}
+/* ============ M6.3 草稿包受控审批与修订（正式对话框，不用 window.confirm/prompt） ============ */
+var draftDialog={packageId:null,decision:null,pack:null,lastFocus:null,busy:false};
+var reviseDialog={packageId:null,pack:null,lastFocus:null,busy:false};
+function draftForId(id){var f=null;(D.factory&&D.factory.drafts||[]).forEach(function(p){if(p.id===id)f=p;});return f;}
+function openDraftDecisionDialog(packageId,decision,trigger){
+  var p=draftForId(packageId);
+  if(!p)return;
+  if(p.status!=='waiting_approval'){
+    showToast('该草稿包当前不可审批，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  draftDialog.packageId=packageId;draftDialog.decision=decision;draftDialog.pack=p;
+  draftDialog.lastFocus=trigger||document.activeElement;draftDialog.busy=false;
+  renderDraftDecisionDialog();
+  var dlg=$('draft-decision-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-draft-decision-close]');if(close)close.focus();
+}
+function renderDraftDecisionDialog(){
+  var d=draftDialog;var p=d.pack;
+  var approve=d.decision==='approved';
+  $('draftDecisionTitle').textContent=approve?'批准草稿':'驳回草稿';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>packageId</b><span class="mono">'+esc(p.id)+'</span></div><div><b>版本</b>v'+esc(String(p.revision))+'</div>');
+  h.push('<div><b>标题</b>'+esc(p.title||'—')+'</div><div><b>状态</b>'+esc(p.status)+'</div>');
+  if(p.cardId)h.push('<div><b>选题卡</b><span class="mono">'+esc(p.cardId)+'</span></div>');
+  h.push('</div>');
+  if(p.validation&&p.validation.errors&&p.validation.errors.length){h.push('<div class="modal-warn">校验错误 '+p.validation.errors.length+' 项：'+p.validation.errors.slice(0,3).map(function(e){return esc(e);}).join('；')+'</div>');}
+  h.push('<div style="margin-top:12px"><label for="draft-decision-note" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">'+(approve?'审核意见（可选）':'驳回意见（必填）')+'</label><textarea id="draft-decision-note" class="modal-note" maxlength="2000" placeholder="'+(approve?'可填写备注，留空也可以':'请说明需要修改的内容')+'"></textarea></div>');
+  h.push('<div class="modal-warn">'+(approve?'批准草稿不会自动创建视觉任务或发布，视觉中心仍需人工审核图片。':'驳回后需填写意见；可在“按意见修订”中基于意见创建不可覆盖的修订版。')+'</div>');
+  h.push('<div class="modal-err" id="draftDecisionErr"></div>');
+  $('draftDecisionBody').innerHTML=h.join('');
+  $('draftDecisionFoot').innerHTML='<button type="button" class="btn btn-ghost" data-draft-decision-cancel>取消</button><button type="button" class="btn '+(approve?'btn-approve':'btn-reject')+'" data-draft-decision-confirm>'+(approve?'确认批准草稿':'确认驳回草稿')+'</button>';
+}
+function closeDraftDecisionDialog(){
+  if(!draftDialog.packageId)return;
+  var dlg=$('draft-decision-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!reviseDialog.packageId)document.body.classList.remove('modal-open');
+  var last=draftDialog.lastFocus;
+  draftDialog.packageId=null;draftDialog.decision=null;draftDialog.pack=null;draftDialog.lastFocus=null;draftDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showDraftDecisionError(msg){var e=$('draftDecisionErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setDraftDecisionBusy(busy,label){
+  draftDialog.busy=busy;
+  var dlg=$('draft-decision-dialog');
+  var btn=dlg.querySelector('[data-draft-decision-confirm]');
+  var cancel=dlg.querySelector('[data-draft-decision-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleDraftDecisionError(err){
+  var code=err&&err.code;
+  var msg=err&&err.message||'请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='invalid-state'){msg='草稿包状态已变化，正在刷新';needsRefresh=true;}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showDraftDecisionError(msg);
+  if(needsRefresh&&draftDialog.packageId){refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});}
+}
+async function submitDraftDecision(){
+  if(!draftDialog.packageId||draftDialog.busy)return;
+  var d=draftDialog;
+  var noteEl=$('draft-decision-note');var note=noteEl?noteEl.value.trim():'';
+  if(d.decision==='rejected'&&!note){showDraftDecisionError('驳回草稿必须填写审核意见');if(noteEl)noteEl.focus();return;}
+  if(note.length>2000){showDraftDecisionError('意见不能超过 2000 字');return;}
+  var errEl=$('draftDecisionErr');if(errEl)errEl.classList.remove('show');
+  setDraftDecisionBusy(true,'提交中…');
+  try{
+    var resp=await apiFetch('/sparkos/creation/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId,decision:d.decision,note:note})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var approved=d.decision==='approved';
+    closeDraftDecisionDialog();
+    showToast(approved?'草稿已批准':'草稿已驳回','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已提交，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setDraftDecisionBusy(false);
+    handleDraftDecisionError(err);
+  }
+}
+/* ============ M7 统一工作台：选题受控审批（原 V1 editorial 能力） ============ */
+var topicDialog={cardId:null,decision:null,card:null,lastFocus:null,busy:false};
+function topicCardForId(id){var c=null;(((D.factory||{}).editorial||{}).cards||[]).forEach(function(x){if(x.id===id)c=x;});return c;}
+function openTopicDecisionDialog(cardId,decision,trigger){
+  var c=topicCardForId(cardId);
+  if(!c)return;
+  if(c.decision==='approved'||c.decision==='rejected'){
+    showToast('该选题卡已有审批结论，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  topicDialog.cardId=cardId;topicDialog.decision=decision;topicDialog.card=c;
+  topicDialog.lastFocus=trigger||document.activeElement;topicDialog.busy=false;
+  renderTopicDecisionDialog();
+  var dlg=$('topic-decision-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-topic-decision-close]');if(close)close.focus();
+}
+function renderTopicDecisionDialog(){
+  var d=topicDialog;var c=d.card;
+  var approve=d.decision==='approved';
+  $('topicDecisionTitle').textContent=approve?'批准选题':'驳回选题';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>cardId</b><span class="mono">'+esc(c.id)+'</span></div><div><b>排名</b>#'+esc(String(c.rank))+'</div>');
+  h.push('<div><b>标题</b>'+esc(c.title||'—')+'</div><div><b>证据</b>'+gradeBadge(c.verificationGrade)+'</div>');
+  h.push('</div>');
+  h.push('<div style="margin-top:8px"><b>核心判断</b><div class="kv">'+esc(c.coreThesis||'—')+'</div></div>');
+  if(c.risks&&c.risks.length)h.push('<div class="modal-warn">风险：'+c.risks.slice(0,3).map(esc).join('；')+'</div>');
+  h.push('<div style="margin-top:12px"><label for="topic-decision-note" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px">'+(approve?'审批意见（可选）':'驳回意见（必填）')+'</label><textarea id="topic-decision-note" class="modal-note" maxlength="2000" placeholder="'+(approve?'可填写备注，留空也可以':'请说明驳回原因')+'"></textarea></div>');
+  h.push('<div class="modal-warn">'+(approve?'批准选题不会自动创建草稿或视觉任务；草稿仍由 agent 按契约生成后人工审批。':'驳回后该选题卡不再进入创作；如需重提需等待下一轮编辑策划。')+'</div>');
+  h.push('<div class="modal-err" id="topicDecisionErr"></div>');
+  $('topicDecisionBody').innerHTML=h.join('');
+  $('topicDecisionFoot').innerHTML='<button type="button" class="btn btn-ghost" data-topic-decision-cancel>取消</button><button type="button" class="btn '+(approve?'btn-approve':'btn-reject')+'" data-topic-decision-confirm>'+(approve?'确认批准选题':'确认驳回选题')+'</button>';
+}
+function closeTopicDecisionDialog(){
+  if(!topicDialog.cardId)return;
+  var dlg=$('topic-decision-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!reviseDialog.packageId&&!draftDialog.packageId)document.body.classList.remove('modal-open');
+  var last=topicDialog.lastFocus;
+  topicDialog.cardId=null;topicDialog.decision=null;topicDialog.card=null;topicDialog.lastFocus=null;topicDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showTopicDecisionError(msg){var e=$('topicDecisionErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setTopicDecisionBusy(busy,label){
+  topicDialog.busy=busy;
+  var dlg=$('topic-decision-dialog');
+  var btn=dlg.querySelector('[data-topic-decision-confirm]');
+  var cancel=dlg.querySelector('[data-topic-decision-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+async function submitTopicDecision(){
+  if(!topicDialog.cardId||topicDialog.busy)return;
+  var d=topicDialog;
+  var noteEl=$('topic-decision-note');var note=noteEl?noteEl.value.trim():'';
+  if(d.decision==='rejected'&&!note){showTopicDecisionError('驳回选题必须填写意见');if(noteEl)noteEl.focus();return;}
+  if(note.length>2000){showTopicDecisionError('意见不能超过 2000 字');return;}
+  var errEl=$('topicDecisionErr');if(errEl)errEl.classList.remove('show');
+  setTopicDecisionBusy(true,'提交中…');
+  try{
+    var resp=await apiFetch('/sparkos/editorial/decision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({cardId:d.cardId,decision:d.decision,note:note})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      throw e;
+    }
+    var approved=d.decision==='approved';
+    closeTopicDecisionDialog();
+    showToast(approved?'选题已批准':'选题已驳回','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已提交，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setTopicDecisionBusy(false);
+    showTopicDecisionError((err&&err.message)||'请求失败，请重试');
+  }
+}
+/* ============ M7 统一工作台：蒸馏采纳与待写回（原 V1 cards 能力，人工闸门不变） ============ */
+async function distillDecide(btn){
+  if(btn.disabled)return;btn.disabled=true;var old=btn.textContent;btn.textContent='提交中…';
+  try{
+    var resp=await apiFetch('/sparkos/mutate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'distill',id:btn.getAttribute('data-distill-id'),action:btn.getAttribute('data-distill-decide')})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok)throw new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+    showToast(btn.getAttribute('data-distill-decide')==='adopt'?'蒸馏候选已采纳，进入待写回清单':'蒸馏候选已驳回','success');
+    try{await refreshWorkbenchData();}catch(e2){}
+    renderRouter();
+  }catch(err){btn.disabled=false;btn.textContent=old;showToast('操作失败：'+String(err.message||err),'error');}
+}
+function writebackCopy(btn){
+  var idx=Number(btn.getAttribute('data-wb-idx'));
+  var entry=((D.writebackQueue||[])[idx])||null;
+  var content=entry?(entry.content||''):'';
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(content).then(function(){btn.textContent='已复制 ✓';});}
+  else{btn.textContent='浏览器不支持剪贴板，请手动复制';}
+}
+async function writebackRemove(btn){
+  if(btn.disabled)return;btn.disabled=true;var old=btn.textContent;btn.textContent='移除中…';
+  try{
+    var resp=await apiFetch('/sparkos/writeback/remove',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:btn.getAttribute('data-wb-file')})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok)throw new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+    showToast('已从待写回清单移除（星火库写入仍由人工执行）','success');
+    try{await refreshWorkbenchData();}catch(e2){}
+    renderRouter();
+  }catch(err){btn.disabled=false;btn.textContent=old;showToast('移除失败：'+String(err.message||err),'error');}
+}
+function openDraftReviseDialog(packageId,trigger){
+  var p=draftForId(packageId);
+  if(!p)return;
+  if(p.status!=='rejected'){
+    showToast('该草稿包当前不可修订，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  reviseDialog.packageId=packageId;reviseDialog.pack=p;
+  reviseDialog.lastFocus=trigger||document.activeElement;reviseDialog.busy=false;
+  renderDraftReviseDialog();
+  var dlg=$('draft-revise-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-draft-revise-close]');if(close)close.focus();
+}
+function renderDraftReviseDialog(){
+  var d=reviseDialog;var p=d.pack;
+  $('draftReviseTitle').textContent='按意见修订';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>packageId</b><span class="mono">'+esc(p.id)+'</span></div><div><b>当前版本</b>v'+esc(String(p.revision))+'</div>');
+  h.push('<div><b>标题</b>'+esc(p.title||'—')+'</div>');
+  h.push('<div><b>下一版本</b>v'+esc(String(Number(p.revision)+1))+'（全新草稿，不覆盖原版）</div>');
+  h.push('</div>');
+  if(p.reviewNote)h.push('<div class="vis-note-box"><span class="vn-label">驳回意见全文：</span>'+esc(p.reviewNote)+'</div>');
+  else if(p.parentReviewNote)h.push('<div class="vis-note-box"><span class="vn-label">父驳回意见：</span>'+esc(p.parentReviewNote)+'</div>');
+  h.push('<div class="modal-warn">本操作创建不可覆盖的修订版（v'+esc(String(Number(p.revision)+1))+'），原草稿产物与意见全部保留；新版本需重新审批，之后才能进入视觉任务。</div>');
+  h.push('<div class="modal-err" id="draftReviseErr"></div>');
+  $('draftReviseBody').innerHTML=h.join('');
+  $('draftReviseFoot').innerHTML='<button type="button" class="btn btn-ghost" data-draft-revise-cancel>取消</button><button type="button" class="btn btn-retry" data-draft-revise-confirm>确认创建修订版</button>';
+}
+function closeDraftReviseDialog(){
+  if(!reviseDialog.packageId)return;
+  var dlg=$('draft-revise-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!draftDialog.packageId)document.body.classList.remove('modal-open');
+  var last=reviseDialog.lastFocus;
+  reviseDialog.packageId=null;reviseDialog.pack=null;reviseDialog.lastFocus=null;reviseDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showDraftReviseError(msg){var e=$('draftReviseErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setDraftReviseBusy(busy,label){
+  reviseDialog.busy=busy;
+  var dlg=$('draft-revise-dialog');
+  var btn=dlg.querySelector('[data-draft-revise-confirm]');
+  var cancel=dlg.querySelector('[data-draft-revise-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleDraftReviseError(err){
+  var code=err&&err.code;
+  var msg=err&&err.message||'请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='invalid-state'){msg='草稿包状态已变化，正在刷新';needsRefresh=true;}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showDraftReviseError(msg);
+  if(needsRefresh&&reviseDialog.packageId){refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});}
+}
+async function submitDraftRevise(){
+  if(!reviseDialog.packageId||reviseDialog.busy)return;
+  var d=reviseDialog;
+  var errEl=$('draftReviseErr');if(errEl)errEl.classList.remove('show');
+  setDraftReviseBusy(true,'正在创建修订版');
+  try{
+    var resp=await apiFetch('/sparkos/creation/revise',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var created=!!(json.value&&json.value.created);
+    closeDraftReviseDialog();
+    showToast(created?'修订版已创建，等待重新审批':'修订版已存在','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已提交，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setDraftReviseBusy(false);
+    handleDraftReviseError(err);
+  }
+}
+/* ============ M6.4 交付包生成受控确认（正式对话框） ============ */
+var deliveryDialog={packageId:null,mode:null,batch:null,lastFocus:null,busy:false};
+function batchForPackage(packageId){var f=null;(D.factory&&D.factory.visual&&D.factory.visual.batches||[]).forEach(function(b){if(b.packageId===packageId)f=b;});return f;}
+function openDeliveryDialog(packageId,mode,trigger){
+  var b=batchForPackage(packageId);
+  if(!b)return;
+  var rd=b.readiness||{};
+  if(!rd.visualApproved){
+    showToast('视觉尚未全部批准，不能生成交付包，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  if(mode==='production'&&!rd.deliveryReady){
+    showToast('当前不满足生产交付条件（需非 stub 图片且契约完整），正在刷新','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  deliveryDialog.packageId=packageId;deliveryDialog.mode=mode;deliveryDialog.batch=b;
+  deliveryDialog.lastFocus=trigger||document.activeElement;deliveryDialog.busy=false;
+  renderDeliveryDialog();
+  var dlg=$('delivery-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-delivery-close]');if(close)close.focus();
+}
+function renderDeliveryDialog(){
+  var d=deliveryDialog;var b=d.batch;var rd=b.readiness||{};
+  var production=d.mode==='production';
+  $('deliveryDialogTitle').textContent=production?'生成生产交付包':'生成预览交付包';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>packageId</b><span class="mono">'+esc(b.packageId)+'</span></div><div><b>模式</b>'+(production?'生产（production）':'预览（preview）')+'</div>');
+  h.push('<div><b>目标平台</b>微信公众号 · 小红书（交付包含两平台产物）</div>');
+  h.push('<div><b>视觉批准</b>'+esc(b.approvedCount)+' / '+esc(b.requiredCount)+'</div>');
+  if(b.deliveryLink)h.push('<div><b>已有交付包</b>可下载最新版；重新生成将产生新版本，不覆盖旧版</div>');
+  h.push('</div>');
+  var blockers=(rd.blockers||[]).filter(function(x){return x;});
+  if(blockers.length){h.push('<div class="modal-warn">当前阻塞项：'+blockers.slice(0,4).map(function(x){return blockerLabel(x);}).join('；')+(blockers.length>4?' 等':'')+'</div>');}
+  h.push('<div class="modal-warn">'+(production?'生产交付包用于正式发布素材；仅在非 stub 图片且契约完整时可生成。':'预览交付包用于核对排版与素材，测试图片会被标注 TEST ONLY，不可用于发布。')+'本操作只生成交付包，不会自动发布到任何平台。</div>');
+  h.push('<div class="modal-err" id="deliveryDialogErr"></div>');
+  $('deliveryDialogBody').innerHTML=h.join('');
+  $('deliveryDialogFoot').innerHTML='<button type="button" class="btn btn-ghost" data-delivery-cancel>取消</button><button type="button" class="btn btn-retry" data-delivery-confirm>'+(production?'确认生成生产交付包':'确认生成预览交付包')+'</button>';
+}
+function closeDeliveryDialog(){
+  if(!deliveryDialog.packageId)return;
+  var dlg=$('delivery-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!draftDialog.packageId&&!reviseDialog.packageId)document.body.classList.remove('modal-open');
+  var last=deliveryDialog.lastFocus;
+  deliveryDialog.packageId=null;deliveryDialog.mode=null;deliveryDialog.batch=null;deliveryDialog.lastFocus=null;deliveryDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showDeliveryDialogError(msg){var e=$('deliveryDialogErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setDeliveryBusy(busy,label){
+  deliveryDialog.busy=busy;
+  var dlg=$('delivery-dialog');
+  var btn=dlg.querySelector('[data-delivery-confirm]');
+  var cancel=dlg.querySelector('[data-delivery-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handleDeliveryError(err){
+  var code=err&&err.code;
+  var msg=err&&err.message||'请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='visual-not-approved'){msg='视觉尚未全部批准，不能生成交付包';needsRefresh=true;}
+  else if(code==='production-gate'){msg='生产交付条件不满足：'+(err.message||'');needsRefresh=true;}
+  else if(code==='conflict'||code==='invalid-state'){msg='状态已变化，正在刷新';needsRefresh=true;}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showDeliveryDialogError(msg);
+  if(needsRefresh&&deliveryDialog.packageId){refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});}
+}
+async function submitDelivery(){
+  if(!deliveryDialog.packageId||deliveryDialog.busy)return;
+  var d=deliveryDialog;
+  var errEl=$('deliveryDialogErr');if(errEl)errEl.classList.remove('show');
+  setDeliveryBusy(true,'正在生成交付包');
+  try{
+    var resp=await apiFetch('/sparkos/visual/delivery',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId,mode:d.mode})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var created=!!(json.value&&json.value.created);
+    var deliveryId=json.value&&json.value.delivery&&json.value.delivery.id;
+    closeDeliveryDialog();
+    showToast(created?'交付包已生成':'交付包已存在（内容未变化）','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已生成，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+    if(deliveryId)setTimeout(function(){var a=document.querySelector('[data-delivery-download]');if(a)a.focus();},50);
+  }catch(err){
+    setDeliveryBusy(false);
+    handleDeliveryError(err);
+  }
+}
+
+/* ============ M6.6 受控发布任务创建（台账，不自动发布） ============ */
+var publishDialog={packageId:null,batch:null,lastFocus:null,busy:false};
+function openPublishDialog(packageId,trigger){
+  var b=batchForPackage(packageId);
+  if(!b)return;
+  var rd=b.readiness||{};
+  if(!rd.readyForPublication||rd.testOnly){
+    showToast('当前不满足发布就绪条件，正在刷新最新状态','error');
+    refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});
+    return;
+  }
+  publishDialog.packageId=packageId;publishDialog.batch=b;
+  publishDialog.lastFocus=trigger||document.activeElement;publishDialog.busy=false;
+  renderPublishDialog();
+  var dlg=$('publish-dialog');
+  dlg.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  var close=dlg.querySelector('[data-publish-close]');if(close)close.focus();
+}
+function renderPublishDialog(){
+  var d=publishDialog;var b=d.batch;var rd=b.readiness||{};
+  $('publishDialogTitle').textContent='创建发布任务';
+  var h=[];
+  h.push('<div class="kv">');
+  h.push('<div><b>packageId</b><span class="mono">'+esc(b.packageId)+'</span></div><div><b>就绪状态</b><span class="badge badge-green">可发布（人工操作）</span></div>');
+  var platformNames={wechat:'微信公众号',telegram:'Telegram',x:'X',xiaohongshu:'小红书'};
+  var readyRows=Object.keys(rd.readyByPlatform||{}).map(function(p){return (rd.readyByPlatform[p]?'<span class="ok-chip">'+platformNames[p]+'</span>':'<span class="blocker-chip">'+platformNames[p]+'</span>');}).join(' ');
+  h.push('<div><b>平台就绪</b>'+readyRows+'</div>');
+  if(b.publishTask)h.push('<div><b>已有发布任务</b>#'+esc(b.publishTask.id)+' · '+esc(b.publishTask.status)+'</div>');
+  h.push('</div>');
+  h.push('<div class="modal-warn">本操作只创建发布任务（可追溯台账），<b>不会自动发布到任何平台</b>；请人工在对应平台后台完成实际发布，发布后可在增长分析中记录真实数据。</div>');
+  h.push('<div class="modal-err" id="publishDialogErr"></div>');
+  $('publishDialogBody').innerHTML=h.join('');
+  $('publishDialogFoot').innerHTML='<button type="button" class="btn btn-ghost" data-publish-cancel>取消</button><button type="button" class="btn btn-retry" data-publish-confirm>确认创建发布任务</button>';
+}
+function closePublishDialog(){
+  if(!publishDialog.packageId)return;
+  var dlg=$('publish-dialog');
+  dlg.classList.add('hidden');
+  if(visualLightbox.index<0&&!drawer.open&&!reviewDialog.attemptId&&!retryDialog.taskId&&!draftDialog.packageId&&!reviseDialog.packageId&&!deliveryDialog.packageId)document.body.classList.remove('modal-open');
+  var last=publishDialog.lastFocus;
+  publishDialog.packageId=null;publishDialog.batch=null;publishDialog.lastFocus=null;publishDialog.busy=false;
+  if(last&&typeof last.focus==='function')last.focus();
+}
+function showPublishDialogError(msg){var e=$('publishDialogErr');if(e){e.textContent=msg;e.classList.add('show');}}
+function setPublishBusy(busy,label){
+  publishDialog.busy=busy;
+  var dlg=$('publish-dialog');
+  var btn=dlg.querySelector('[data-publish-confirm]');
+  var cancel=dlg.querySelector('[data-publish-cancel]');
+  if(btn){btn.disabled=busy;if(label)btn.textContent=label;}
+  if(cancel)cancel.disabled=busy;
+}
+function handlePublishError(err){
+  var code=err&&err.code;
+  var msg=err&&err.message||'请求失败，请重试';
+  var needsRefresh=false;
+  if(code==='publish-not-ready'){msg='发布未就绪：'+(err.message||'');needsRefresh=true;}
+  else if(code==='not-found'){msg='视觉批次不存在，可能已变化，正在刷新';needsRefresh=true;}
+  else if(code==='conflict'||code==='invalid-state'){msg='状态已变化，正在刷新';needsRefresh=true;}
+  else if(code==='bad-request'){msg=err.message||'输入有误，请检查后重试';}
+  else if(String(code).indexOf('http-5')===0){msg='服务暂时不可用，请稍后重试';}
+  showPublishDialogError(msg);
+  if(needsRefresh&&publishDialog.packageId){refreshWorkbenchData().then(function(){renderRouter();}).catch(function(){});}
+}
+async function submitPublish(){
+  if(!publishDialog.packageId||publishDialog.busy)return;
+  var d=publishDialog;
+  var errEl=$('publishDialogErr');if(errEl)errEl.classList.remove('show');
+  setPublishBusy(true,'正在创建发布任务');
+  try{
+    var resp=await apiFetch('/sparkos/publish',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packageId:d.packageId})});
+    var json=null;try{json=await resp.json();}catch(e){json=null;}
+    if(!resp.ok||!json||!json.ok){
+      var e=new Error((json&&json.error&&json.error.message)||('HTTP '+resp.status));
+      e.code=(json&&json.error&&json.error.code)||('http-'+resp.status);
+      e.status=resp.status;
+      throw e;
+    }
+    var created=!!(json.value&&json.value.created);
+    closePublishDialog();
+    showToast(created?'发布任务已创建（仅台账，不自动发布）':'发布任务已存在','success');
+    try{await refreshWorkbenchData();}catch(e2){showToast('已创建，但刷新状态失败：'+String(e2.message||e2),'error');}
+    renderRouter();
+  }catch(err){
+    setPublishBusy(false);
+    handlePublishError(err);
+  }
+}
+/* ============ M6.2 只读轮询（仅 GET；页面隐藏/离开视觉页停止；单包单轮询器；网络错误退避） ============ */
+var visualPoller={timers:{},delayMs:6000,maxDelayMs:30000};
+/* 测试钩子：允许 DOM 回归测试在隔离 fixture 中调节轮询节奏（生产数据不依赖它）。 */
+window.sparkosVisualPoller=visualPoller;
+function visualPipelineActive(){
+  var active={};
+  (D.factory&&D.factory.visual&&D.factory.visual.batches||[]).forEach(function(b){
+    var has=false;
+    (b.tasks||[]).forEach(function(t){if(t.pipelineState==='queued'||t.pipelineState==='retry'||t.pipelineState==='generating'||t.pipelineState==='generated')has=true;});
+    if(has)active[b.packageId]=true;
+  });
+  return Object.keys(active);
+}
+function stopVisualPolling(){
+  Object.keys(visualPoller.timers).forEach(function(k){clearTimeout(visualPoller.timers[k]);});
+  visualPoller.timers={};
+}
+function scheduleVisualPoll(packageId,delay){
+  if(document.hidden||state.view!=='visual')return;
+  if(visualPoller.timers[packageId])clearTimeout(visualPoller.timers[packageId]);
+  visualPoller.timers[packageId]=setTimeout(function(){visualPoller.timers[packageId]=null;pollVisualPackage(packageId);},delay||visualPoller.delayMs);
+}
+async function pollVisualPackage(packageId){
+  if(document.hidden||state.view!=='visual')return;
+  try{
+    await refreshVisual(packageId);
+    visualPoller.delayMs=6000;
+    renderRouter();
+  }catch(e){
+    // 网络错误退避
+    visualPoller.delayMs=Math.min(visualPoller.delayMs*2,visualPoller.maxDelayMs);
+  }
+  scheduleVisualPoll(packageId,visualPoller.delayMs);
+}
+function startVisualPolling(){
+  stopVisualPolling();
+  visualPoller.delayMs=6000;
+  var packages=visualPipelineActive();
+  packages.forEach(function(pkg){scheduleVisualPoll(pkg,visualPoller.delayMs);});
+}
+async function manualRefreshVisual(){
+  var bs=(D.factory&&D.factory.visual&&D.factory.visual.batches)||[];
+  if(!bs.length){showToast('当前没有视觉批次','info');return;}
+  var pkgs=[];
+  bs.forEach(function(b){if(pkgs.indexOf(b.packageId)<0)pkgs.push(b.packageId);});
+  try{
+    for(var i=0;i<pkgs.length;i++){await refreshVisual(pkgs[i]);}
+    renderRouter();
+    showToast('已刷新视觉状态','success');
+  }catch(e){showToast('刷新失败：'+String(e&&e.message||e),'error');}
+}
+function visActions(t,a){
+  var decAt=(a&&a.approval&&a.approval.decidedAt)?fmtISO(a.approval.decidedAt):null;
+  if(isReviewable(t,a)){
+    return '<div class="vis-actions"><button type="button" class="btn btn-ghost" data-visual-open="'+esc(a.id)+'" aria-label="查看原图">查看原图</button><button type="button" class="btn btn-approve" data-visual-approve="'+esc(a.id)+'">批准图片</button><button type="button" class="btn btn-reject" data-visual-reject="'+esc(a.id)+'">驳回图片</button></div>';
+  }
+  if(t.state==='approved'){
+    return '<div class="vis-status"><span class="badge badge-green">已批准</span>'+(decAt?'<span class="dim">'+esc(decAt)+'</span>':'')+(t.reviewNote?'<span class="dim">意见：'+esc(t.reviewNote)+'</span>':'')+'</div>';
+  }
+  if(t.state==='rejected'){
+    // 已驳回：主要操作是“按意见重试”；不再显示批准/驳回；历史 attempt 只能查看。
+    var note=(a&&a.approval&&a.approval.note)||t.reviewNote||'';
+    var info=visualRetryInfo(t);
+    var h=['<div class="vis-actions">'];
+    h.push('<button type="button" class="btn btn-ghost" data-visual-open="'+esc(a?a.id:'')+'" aria-label="查看原图">查看原图</button>');
+    if(note){h.push('<details class="tech" style="margin:0"><summary>查看完整意见</summary><div class="tech-body">'+esc(note)+'</div></details>');}
+    if(info.eligible&&a){h.push('<button type="button" class="btn btn-retry" data-visual-retry="'+esc(t.id)+'">按意见重试</button>');}
+    h.push('</div><div class="vis-status"><span class="badge badge-red">已驳回</span>'+(decAt?'<span class="dim">驳回时间 '+esc(decAt)+'</span>':''));
+    if(note){h.push('<div class="vis-note-box"><span class="vn-label">驳回意见：</span>'+esc(note.length>120?note.slice(0,120)+'…':note)+'</div>');}
+    if(info.eligible){h.push('<div class="dim">下一 attempt #'+esc(String(info.expectedNextAttemptNo))+' · 已用 '+esc(String(t.currentAttempt))+' / '+esc(String(t.maxAttempts))+' 次</div>');}
+    else if(info.code==='max-attempts-reached'){h.push('<div class="vis-max-note">已达到最大重试次数（'+esc(String(t.currentAttempt))+'/'+esc(String(t.maxAttempts))+'），需要人工处理。</div>');}
+    else if(a&&a.provider==='stub'){h.push('<div class="vis-stub-note">测试图片（stub）不可重试。</div>');}
+    else{h.push('<div class="vis-stub-note">'+esc(info.reason||'当前不可重试')+'。</div>');}
+    h.push('</div>');
+    return h.join('');
+  }
+  if(t.state==='retry'){
+    return '<div class="vis-status"><span class="badge badge-blue">等待 Agent 领取</span><span class="dim">已按驳回意见创建重试任务；DSH Agent 领取后将生成新图片并重新进入视觉审核。</span></div>';
+  }
+  if(t.state==='failed'){
+    return '<div class="vis-status"><span class="badge badge-red">重试失败</span>'+(t.lastError?'<span class="dim">'+esc(t.lastError)+'</span>':'')+'</div>';
+  }
+  if(t.state==='queued'||t.state==='generating'||t.state==='generated'){
+    var pipe=t.state==='queued'?'排队中 · 等待 Agent 领取':t.state==='generating'?'生成中 · 由 DSH Agent 执行（只读轮询）':'附件校验中';
+    return '<div class="vis-status"><span class="dim">'+esc(pipe)+'</span></div>';
+  }
+  return '';
+}
+
+/* ============ bindings ============ */
+(function(){
+  var lb=$('visual-lightbox');
+  if(lb){
+    lb.querySelector('[data-lightbox-close]').addEventListener('click',function(ev){ev.stopPropagation();closeVisualLightbox();});
+    lb.querySelector('[data-lightbox-backdrop]').addEventListener('click',function(ev){ev.stopPropagation();closeVisualLightbox();});
+    lb.querySelector('[data-lightbox-prev]').addEventListener('click',function(ev){ev.stopPropagation();stepVisualLightbox(-1);});
+    lb.querySelector('[data-lightbox-next]').addEventListener('click',function(ev){ev.stopPropagation();stepVisualLightbox(1);});
+    lb.addEventListener('click',function(ev){
+      var anchor=ev.target&&ev.target.closest?ev.target.closest('[data-lightbox-anchor]'):null;
+      if(anchor)ev.stopPropagation();
+    });
+  }
+  var dr=$('drawer');
+  if(dr){
+    dr.querySelector('[data-drawer-close]').addEventListener('click',closeDrawer);
+    dr.querySelector('[data-drawer-backdrop]').addEventListener('click',closeDrawer);
+  }
+  $('menuToggle').addEventListener('click',function(){$('sidebar').classList.toggle('open');});
+  document.addEventListener('click',function(ev){
+    var t=ev.target;
+    if(!t||!t.closest)return;
+    var nav=t.closest('[data-nav]');if(nav){navigate(nav.getAttribute('data-nav'));return;}
+    var flow=t.closest('[data-flow]');if(flow){navigate(flow.getAttribute('data-flow'));return;}
+    var goto=t.closest('[data-goto]');if(goto){navigate(goto.getAttribute('data-goto'));return;}
+    var pkg=t.closest('[data-pkg]');if(pkg){state.filters.creation.packageId=pkg.getAttribute('data-pkg');setHashParams({pkg:state.filters.creation.packageId});renderView('creation');return;}
+    var pf=t.closest('[data-pf]');if(pf){state.filters.creation.platform=pf.getAttribute('data-pf');setHashParams({pf:state.filters.creation.platform});renderView('creation');return;}
+    var pv=t.closest('[data-pv]');if(pv){state.filters.creation.previewMode=pv.getAttribute('data-pv');setHashParams({pv:state.filters.creation.previewMode});renderView('creation');return;}
+    var idr=t.closest('[data-intel-drawer]');if(idr){openIntelDrawer(idr.getAttribute('data-intel-drawer'));return;}
+    var cdr=t.closest('[data-cluster-drawer]');if(cdr){openClusterDrawer(cdr.getAttribute('data-cluster-drawer'));return;}
+    var tdr=t.closest('[data-topic-drawer]');if(tdr){openTopicDrawer(tdr.getAttribute('data-topic-drawer'));return;}
+    var vt=t.closest('[data-visual-thumb]');if(vt){openVisualLightbox(vt.getAttribute('data-visual-thumb'),vt);return;}
+    var vo=t.closest('[data-visual-open]');if(vo){openVisualLightbox(vo.getAttribute('data-visual-open'),vo);return;}
+    var va=t.closest('[data-visual-approve]');if(va){openVisualReviewDialog(va.getAttribute('data-visual-approve'),'approved',va);return;}
+    var vr=t.closest('[data-visual-reject]');if(vr){openVisualReviewDialog(vr.getAttribute('data-visual-reject'),'rejected',vr);return;}
+    var rc=t.closest('[data-review-close]');if(rc){closeReviewDialog();return;}
+    var rb=t.closest('[data-review-backdrop]');if(rb){closeReviewDialog();return;}
+    var rcc=t.closest('[data-review-cancel]');if(rcc){closeReviewDialog();return;}
+    var rcf=t.closest('[data-review-confirm]');if(rcf){submitVisualReview();return;}
+    // M6.2 受控重试对话框
+    var vretry=t.closest('[data-visual-retry]');if(vretry){openVisualRetryDialog(vretry.getAttribute('data-visual-retry'),vretry);return;}
+    var rtc=t.closest('[data-retry-close]');if(rtc){closeRetryDialog();return;}
+    var rtb=t.closest('[data-retry-backdrop]');if(rtb){closeRetryDialog();return;}
+    var rtcancel=t.closest('[data-retry-cancel]');if(rtcancel){closeRetryDialog();return;}
+    var rtconfirm=t.closest('[data-retry-confirm]');if(rtconfirm){submitVisualRetry();return;}
+    var vrfr=t.closest('[data-visual-refresh]');if(vrfr){manualRefreshVisual();return;}
+    var ah=t.closest('[data-attempt-history]');if(ah){openVisualAttemptDrawer(ah.getAttribute('data-attempt-history'));return;}
+    var cp=t.closest('[data-copy]');if(cp){copyTechId(cp);return;}
+    // M8 must_reads 采纳/忽略（POST /sparkos/mutate）
+    var mrd=t.closest('[data-mr-decide]');if(mrd){mustReadDecide(mrd);return;}
+    // M8 运行时草稿查看全文（GET /sparkos/draft）
+    var rtd=t.closest('[data-rt-draft]');if(rtd){toggleRuntimeDraft(rtd);return;}
+    // M7 选题受控审批
+    var tdc=t.closest('[data-topic-decision]');if(tdc){openTopicDecisionDialog(tdc.getAttribute('data-card'),tdc.getAttribute('data-topic-decision'),tdc);return;}
+    var tdcl=t.closest('[data-topic-decision-close]');if(tdcl){closeTopicDecisionDialog();return;}
+    var tdcb=t.closest('[data-topic-decision-backdrop]');if(tdcb){closeTopicDecisionDialog();return;}
+    var tdcancel=t.closest('[data-topic-decision-cancel]');if(tdcancel){closeTopicDecisionDialog();return;}
+    var tdconfirm=t.closest('[data-topic-decision-confirm]');if(tdconfirm){submitTopicDecision();return;}
+    // M7 蒸馏采纳/驳回与待写回（人工闸门）
+    var dsd=t.closest('[data-distill-decide]');if(dsd){distillDecide(dsd);return;}
+    var wbc=t.closest('[data-wb-copy]');if(wbc){writebackCopy(wbc);return;}
+    var wbr=t.closest('[data-wb-remove]');if(wbr){writebackRemove(wbr);return;}
+    // M6.3 草稿受控审批/修订
+    var dd=t.closest('[data-draft-decision]');if(dd){openDraftDecisionDialog(dd.getAttribute('data-package'),dd.getAttribute('data-draft-decision'),dd);return;}
+    var ddc=t.closest('[data-draft-decision-close]');if(ddc){closeDraftDecisionDialog();return;}
+    var ddb=t.closest('[data-draft-decision-backdrop]');if(ddb){closeDraftDecisionDialog();return;}
+    var ddcancel=t.closest('[data-draft-decision-cancel]');if(ddcancel){closeDraftDecisionDialog();return;}
+    var ddconfirm=t.closest('[data-draft-decision-confirm]');if(ddconfirm){submitDraftDecision();return;}
+    var dr=t.closest('[data-draft-revise]');if(dr){openDraftReviseDialog(dr.getAttribute('data-draft-revise'),dr);return;}
+    var drc=t.closest('[data-draft-revise-close]');if(drc){closeDraftReviseDialog();return;}
+    var drb=t.closest('[data-draft-revise-backdrop]');if(drb){closeDraftReviseDialog();return;}
+    var drcancel=t.closest('[data-draft-revise-cancel]');if(drcancel){closeDraftReviseDialog();return;}
+    var drconfirm=t.closest('[data-draft-revise-confirm]');if(drconfirm){submitDraftRevise();return;}
+    // M6.4 交付包生成受控确认
+    var dela=t.closest('[data-delivery-action]');if(dela){openDeliveryDialog(dela.getAttribute('data-package'),dela.getAttribute('data-delivery-action'),dela);return;}
+    var delc=t.closest('[data-delivery-close]');if(delc){closeDeliveryDialog();return;}
+    var delb=t.closest('[data-delivery-backdrop]');if(delb){closeDeliveryDialog();return;}
+    var delcancel=t.closest('[data-delivery-cancel]');if(delcancel){closeDeliveryDialog();return;}
+    var delconfirm=t.closest('[data-delivery-confirm]');if(delconfirm){submitDelivery();return;}
+    // M6.6 受控发布任务创建
+    var pub=t.closest('[data-publish-action]');if(pub){openPublishDialog(pub.getAttribute('data-publish-action'),pub);return;}
+    var pubc=t.closest('[data-publish-close]');if(pubc){closePublishDialog();return;}
+    var pubb=t.closest('[data-publish-backdrop]');if(pubb){closePublishDialog();return;}
+    var pubcancel=t.closest('[data-publish-cancel]');if(pubcancel){closePublishDialog();return;}
+    var pubconfirm=t.closest('[data-publish-confirm]');if(pubconfirm){submitPublish();return;}
+    // 审核中心精确导航：前往具体对象
+    var gv=t.closest('[data-goto-visual]');if(gv){navigate('visual');setTimeout(function(){var card=document.querySelector('[data-vis-task="'+gv.getAttribute('data-goto-visual')+'"]');if(card){card.scrollIntoView({block:'center'});card.style.outline='2px solid var(--orange)';setTimeout(function(){card.style.outline='';},1600);}},80);return;}
+    var gc=t.closest('[data-goto-creation]');if(gc){state.filters.creation.packageId=gc.getAttribute('data-goto-creation');navigate('creation');setTimeout(function(){setHashParams({pkg:state.filters.creation.packageId});},80);return;}
+    var gt=t.closest('[data-goto-topic]');if(gt){navigate('topics');setTimeout(function(){var card=document.querySelector('[data-topic-drawer="'+gt.getAttribute('data-goto-topic')+'"]');if(card){card.scrollIntoView({block:'center'});card.style.outline='2px solid var(--orange)';setTimeout(function(){card.style.outline='';},1600);}},80);return;}
+  });
+  document.addEventListener('change',function(ev){
+    var t=ev.target;
+    if(!t)return;
+    if(t.getAttribute&&t.getAttribute('data-rf')==='type'){state.filters.review.type=t.value;setHashParams({type:t.value});applyReviewFilters();return;}
+    if(t.getAttribute&&t.getAttribute('data-rf')==='urgency'){state.filters.review.urgency=t.value;setHashParams({urgency:t.value});applyReviewFilters();return;}
+    if(t.getAttribute&&t.getAttribute('data-rf')==='time'){state.filters.review.time=t.value;setHashParams({time:t.value});applyReviewFilters();return;}
+  });
+  document.addEventListener('input',function(ev){
+    var t=ev.target;
+    if(!t||!t.getAttribute)return;
+    if(t.getAttribute('data-rf')==='q'){state.filters.review.q=t.value;setHashParams({q:t.value});applyReviewFilters();}
+    if(t.hasAttribute&&t.hasAttribute('data-tl-q')){filterTimelineCards(t.value);}
+  });
+  document.addEventListener('keydown',function(ev){
+    if(ev.key==='Escape'){
+      if(visualLightbox.index>=0){ev.preventDefault();closeVisualLightbox();return;}
+      if(drawer.open){ev.preventDefault();closeDrawer();return;}
+      if($('retry-dialog')&&!$('retry-dialog').classList.contains('hidden')){ev.preventDefault();closeRetryDialog();return;}
+      if($('draft-decision-dialog')&&!$('draft-decision-dialog').classList.contains('hidden')){ev.preventDefault();closeDraftDecisionDialog();return;}
+      if($('draft-revise-dialog')&&!$('draft-revise-dialog').classList.contains('hidden')){ev.preventDefault();closeDraftReviseDialog();return;}
+      if($('delivery-dialog')&&!$('delivery-dialog').classList.contains('hidden')){ev.preventDefault();closeDeliveryDialog();return;}
+      if($('publish-dialog')&&!$('publish-dialog').classList.contains('hidden')){ev.preventDefault();closePublishDialog();return;}
+    }
+    if(visualLightbox.index>=0){
+      if(ev.key==='ArrowLeft'){ev.preventDefault();stepVisualLightbox(-1);return;}
+      if(ev.key==='ArrowRight'){ev.preventDefault();stepVisualLightbox(1);}
+    }
+  });
+  // M6.2：页面不可见时暂停轮询，回到可见且仍在视觉页时恢复
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){stopVisualPolling();}
+    else if(state.view==='visual'){startVisualPolling();}
+  });
+  boot();
+})();
+
+</script>
+</body>
+</html>

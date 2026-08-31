@@ -499,7 +499,7 @@ function runV2InteractionFixture(): Promise<InteractionResult> {
       root = mkdtempSync(path.join(tmpdir(), 'sparkos-v2-int-'))
       const base = path.join(root, 'base.html')
       const fixture = path.join(root, 'fixture.html')
-      const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', '--v2', base], {
+      const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', '--factory', '--v2', base], {
         cwd: process.cwd(), encoding: 'utf8', env: withoutSparkosPaths(process.env), timeout: 60_000,
       })
       assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)
@@ -529,7 +529,7 @@ function runV2ResponsiveFixture(): Promise<ResponsiveResult[]> {
       root = mkdtempSync(path.join(tmpdir(), 'sparkos-v2-rsp-'))
       const base = path.join(root, 'base.html')
       const fixture = path.join(root, 'fixture.html')
-      const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', '--v2', base], {
+      const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', '--factory', '--v2', base], {
         cwd: process.cwd(), encoding: 'utf8', env: withoutSparkosPaths(process.env), timeout: 60_000,
       })
       assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)
@@ -773,7 +773,7 @@ function runV2ReviewFixture(): Promise<ReviewResult> {
       root = mkdtempSync(path.join(tmpdir(), 'sparkos-v2-rev-'))
       const base = path.join(root, 'base.html')
       const fixture = path.join(root, 'fixture.html')
-      const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', '--v2', base], {
+      const rendered = spawnSync(process.execPath, ['--experimental-strip-types', 'scripts/render-page.mjs', '--factory', '--v2', base], {
         cwd: process.cwd(), encoding: 'utf8', env: withoutSparkosPaths(process.env), timeout: 60_000,
       })
       assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout)

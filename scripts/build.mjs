@@ -38,8 +38,9 @@ ${indent(inner, 4)}
 })
 `
   writeFileSync('lib/client.js', wrapped)
-  // M8 unified workbench: single page template (page-v2 removed; app-v2 is an alias route)
+  // 2026-08-30 降级：简报台模板（默认）+ 工厂模板（mode=full 时）都拷入 lib/
   copyFileSync('src/server/page.template.html', 'lib/page.template.html')
+  copyFileSync('src/server/factory.template.html', 'lib/factory.template.html')
   rmSync('lib/page-v2.template.html', { force: true })
   rmSync('lib/client.tmp.js', { force: true })
   console.log('built lib/index.js, lib/client.js and the unified page template')

@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+process.env.SPARKOS_WORKBENCH_MODE = 'full' // 2026-08-30 降级：工厂端点仅在 full 模式开放，本套件回归工厂行为
 
 const root = mkdtempSync(join(tmpdir(), 'sparkos-routes-'))
 const vault = join(root, 'vault')

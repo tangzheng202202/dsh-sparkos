@@ -10,6 +10,7 @@ import type { Server } from 'node:http'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+process.env.SPARKOS_WORKBENCH_MODE = 'full' // 2026-08-30 降级：工厂端点仅在 full 模式开放，本套件回归工厂行为
 
 // ---- 隔离 fixture 环境（先设 env，再动态 import 源码模块） ----
 const root = mkdtempSync(path.join(tmpdir(), 'sparkos-sec-'))
@@ -139,7 +140,7 @@ test('二、危险 URL 白名单：javascript:/data:/file:/vbscript:/混合大�
   assert.deepEqual(security.filterSafeExternalUrls(['javascript:x', 'https://ok.example/', 42, 'data:x']), ['https://ok.example/'])
 })
 
-test('二、前端 isSafeUrl 与服务端 isSafeExternalUrl 规则一致（两模板）', async () => {
+test('二、前端 isSafeUrl 与服务端 isSafeExternalUrl 规则一致（工厂模板）', async () => {
   const { readFileSync } = await import('node:fs')
   const { fileURLToPath } = await import('node:url')
   const vectors: Array<[string, boolean]> = [
@@ -148,7 +149,8 @@ test('二、前端 isSafeUrl 与服务端 isSafeExternalUrl 规则一致（两�
     ['//evil.example/x', false], ['https://ok.example/a', true], ['http://ok.example/', true],
     ['not a url', false],
   ]
-  for (const tpl of ['../src/server/page.template.html']) {
+  // 2026-08-30 降级：外链安全逻辑只存在于工厂模板（简报台不渲染外链卡片）
+  for (const tpl of ['../src/server/factory.template.html']) {
     const html = readFileSync(fileURLToPath(new URL(tpl, import.meta.url)), 'utf8')
     const start = html.indexOf('function isSafeUrl')
     const end = html.indexOf('function safeExtLink')
