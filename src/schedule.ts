@@ -12,10 +12,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { VAULT_ROOT, initVault } from './vault.ts'
-import { defaultIntelConfig, runIngest } from './intel/ingest.ts'
-import { fromIngest, writeRun, pruneRuns } from './intel/runs.ts'
-import { computeHealth } from './intel/health.ts'
-import { initOpsIntel } from './intel/report.ts'
+import { defaultIntelConfig } from './intel/ingest.ts'
+import { runIntelTick } from './intel/tick.ts'
 import { fuseDaily } from './intel/fusion.ts'
 import { runEditorialPlanning } from './factory/service.ts'
 
@@ -25,19 +23,13 @@ export function editorialScheduleDue(now = new Date()): 'midweek' | 'weekly' | n
 }
 
 function intelTick(): void {
-  const cfg = defaultIntelConfig()
-  initOpsIntel()
-  const ingest = runIngest(cfg)
-  const run = fromIngest(ingest)
-  const health = computeHealth(cfg)
-  run.ok = run.ok && health.overall !== 'red'
-  if (health.overall === 'red') run.error = 'health-red'
-  writeRun(cfg.runsDir, run)
-  pruneRuns(cfg.runsDir)
+  // 复用 runIntelTick（与 sparkos_run intel 同一条路径），避免两份实现各自漂移。
+  const r = runIntelTick()
+  const ok = r.ingest.ok && r.overall !== 'red'
   mkdirSync(join(VAULT_ROOT, 'system'), { recursive: true })
   appendFileSync(
     join(VAULT_ROOT, 'system', 'schedule.log'),
-    `[${ingest.at}] intel tick ok=${run.ok} added=${ingest.sources.reduce((n, s) => n + s.added, 0)} health=${health.overall}\n`,
+    `[${r.ingest.at}] intel tick ok=${ok} added=${r.ingest.sources.reduce((n, s) => n + s.added, 0)} health=${r.overall}\n`,
   )
 }
 
