@@ -41,7 +41,9 @@ export function defaultIntelConfig(): IntelConfig {
       },
       {
         id: 'hermes-cn',
-        dir: envPath('SPARKOS_HERMES_ARCHIVE', path.join(homedir(), '.hermes', 'newsroom-cn', 'state', 'archive')),
+        // 2026-09-01 newsroom-cn 从 ~/.hermes/newsroom-cn 迁出，现位于 ~/newsroom-cn。
+        // 仍可用 SPARKOS_HERMES_ARCHIVE 覆盖；旧路径的兼容 symlink 仅作双保险。
+        dir: envPath('SPARKOS_HERMES_ARCHIVE', path.join(homedir(), 'newsroom-cn', 'state', 'archive')),
         maxStalenessHours: 24,
         pattern: 'published-only',
       },

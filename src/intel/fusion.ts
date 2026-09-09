@@ -53,14 +53,16 @@ function localDateOf(iso: string): string {
 
 function evidenceUrlOf(raw: Record<string, unknown>): string {
   const sh = raw.source_hint as Record<string, unknown> | undefined
-  const u = sh?.url ?? raw.url ?? raw.link
-  if (typeof u === 'string' && u !== '') return u
-  // 兜底：hermes 类快照 URL 在 channel_text/text 正文「▎来源：… https://…」里
   const item = raw.item as Record<string, unknown> | undefined
   const draft = raw.draft as Record<string, unknown> | undefined
-  for (const t of [raw.channel_text, raw.text, item?.text, draft?.text, item?.url]) {
+  // 结构化字段优先：item.url 是快照里最干净的绝对地址，必须排在正文兜底之前。
+  const direct = sh?.url ?? raw.url ?? raw.link ?? item?.url
+  if (typeof direct === 'string' && direct !== '') return direct
+  // 兜底：hermes 类快照 URL 在 channel_text/text 正文「▎来源：… https://…」里。
+  // 引号/尖括号必须进排除集，否则 <a href="…">阅读原文</a> 会把 HTML 尾巴带进 URL。
+  for (const t of [raw.channel_text, raw.text, item?.text, draft?.text]) {
     if (typeof t === 'string') {
-      const m = /https?:\/\/[^\s)]+/.exec(t)
+      const m = /https?:\/\/[^\s"'<>()]+/.exec(t)
       if (m) return m[0]
     }
   }
