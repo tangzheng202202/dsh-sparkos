@@ -124,14 +124,24 @@ export function clusterDuplicates(items: FusionItem[], threshold = 0.5): string[
   return [...groups.values()].filter((g) => g.length > 1)
 }
 
+/** 快照分类：hermes 类在 raw.item.category，alpha 类在 raw.source_hint.category。 */
+function categoryOf(raw: Record<string, unknown>): string {
+  const item = raw.item as Record<string, unknown> | undefined
+  const sh = raw.source_hint as Record<string, unknown> | undefined
+  const c = item?.category ?? sh?.category
+  return typeof c === 'string' ? c.trim() : ''
+}
+
 /** 当日（本地时区）被 ingest 的快照清单（只读；observedAt 转本地日期归类）。 */
-export function collectDailyItems(cfg: IntelConfig, date: Date): FusionItem[] {
+export function collectDailyItems(cfg: IntelConfig, date: Date, stats?: { filtered: Record<string, number> }): FusionItem[] {
   const day = localDate(date)
   const items: FusionItem[] = []
   if (!existsSync(cfg.outDir)) return items
   for (const source of readdirSync(cfg.outDir)) {
     const sub = path.join(cfg.outDir, source)
     try { if (!statSync(sub).isDirectory()) continue } catch { continue }
+    // 源级分类白名单：配了就必须命中，未配则全收（快照仍全量保留在 vault）。
+    const allow = cfg.sources.find((s) => s.id === source)?.categories
     for (const f of readdirSync(sub)) {
       if (!f.endsWith('.snapshot.json')) continue
       let snap: Record<string, unknown>
@@ -139,6 +149,10 @@ export function collectDailyItems(cfg: IntelConfig, date: Date): FusionItem[] {
       const observedAt = typeof snap.observedAt === 'string' ? snap.observedAt : ''
       if (observedAt === '' || localDateOf(observedAt) !== day) continue
       const raw = (snap.raw ?? {}) as Record<string, unknown>
+      if (allow && allow.length > 0 && !allow.includes(categoryOf(raw))) {
+        if (stats) stats.filtered[source] = (stats.filtered[source] ?? 0) + 1
+        continue
+      }
       items.push({
         eventKey: String(snap.eventKey ?? f.slice(0, -'.snapshot.json'.length)),
         source: String(snap.source ?? source),
@@ -156,13 +170,18 @@ export function fuseDaily(cfg: IntelConfig, date = new Date()): FusionOutput & {
   const fusionDir = path.join(path.dirname(cfg.outDir), 'fusion')
   mkdirSync(fusionDir, { recursive: true })
   const stamp = localDate(date)
-  const items = collectDailyItems(cfg, date)
+  const filtered: Record<string, number> = {}
+  const items = collectDailyItems(cfg, date, { filtered })
   const dupGroups = clusterDuplicates(items)
+  const filteredTotal = Object.values(filtered).reduce((a, b) => a + b, 0)
   const notes = [
     '机械装配清单：每条带 eventKey 回链；判断与措辞由 agent 完成（intel 蓝图：不自动外发）。',
     '参照：星火知识库只读（SPARKOS_KNOWLEDGE_ROOT），本融合不写入星火库。',
     '数据源：当日 ingest 快照（observedAt 本地日期归类；晚落盘可重跑融合补齐）。',
     items.length === 0 ? '当日无新稿。' : '当日新稿 ' + items.length + ' 条，覆盖源 ' + new Set(items.map((i) => i.source)).size + ' 个。',
+    ...(filteredTotal > 0
+      ? ['分类白名单过滤 ' + filteredTotal + ' 条（' + Object.entries(filtered).map(([s, n]) => s + ' ' + n).join('、') + '）；快照仍全量保留，可调白名单重跑。']
+      : []),
     dupGroups.length > 0 ? '疑似重复主题 ' + dupGroups.length + ' 组（见文末，仅供判断）。' : '无疑似重复主题。',
   ]
   const out: FusionOutput & { files: string[] } = {

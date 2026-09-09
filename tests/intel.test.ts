@@ -215,6 +215,45 @@ test('fusion 快照输入：observedAt 本地日期归类 + 昨日排除 + title
     assert.equal(hermes.status, 'ok')
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+test('分类白名单：配了必须命中才进融合，未配全收，过滤数可统计', () => {
+  const { root, cfg } = fixtureCfg()
+  try {
+    const day = new Date('2026-08-20T08:00:00Z')
+    const outHermes = join(cfg.outDir, 'hermes-cn')
+    mkdirSync(outHermes, { recursive: true })
+    const mk = (key: string, category: string): void => {
+      writeFileSync(join(outHermes, key + '.snapshot.json'), JSON.stringify({
+        eventKey: key, source: 'hermes-cn', status: 'ok', observedAt: '2026-08-20T07:00:00Z',
+        raw: { item: { title: key, category }, draft: { title: key } },
+      }))
+    }
+    mk('d20260820070001_keep', '科技创新')
+    mk('d20260820070002_drop', '社会民生')
+    // 未配白名单：两条全收
+    assert.equal(collectDailyItems(cfg, day).length, 2, '未配白名单不过滤')
+    // 配白名单：只留命中的，并统计被过滤条数
+    const scoped: IntelConfig = {
+      ...cfg,
+      sources: cfg.sources.map((s) => (s.id === 'hermes-cn' ? { ...s, categories: ['科技创新', '财经经济'] } : s)),
+    }
+    const stats = { filtered: {} as Record<string, number> }
+    const kept = collectDailyItems(scoped, day, stats)
+    assert.deepEqual(kept.map((i) => i.eventKey), ['d20260820070001_keep'])
+    assert.equal(stats.filtered['hermes-cn'], 1, '被过滤 1 条')
+    // alpha 类快照用 source_hint.category 也能命中
+    const outAlpha = join(cfg.outDir, 'alpha-signal')
+    mkdirSync(outAlpha, { recursive: true })
+    writeFileSync(join(outAlpha, 'a9.snapshot.json'), JSON.stringify({
+      eventKey: 'a9', source: 'alpha-signal', status: 'ok', observedAt: '2026-08-20T07:00:00Z',
+      raw: { source_hint: { category: '财经经济' }, title: 'alpha 财经稿' },
+    }))
+    const scopedAlpha: IntelConfig = {
+      ...cfg,
+      sources: cfg.sources.map((s) => (s.id === 'alpha-signal' ? { ...s, categories: ['财经经济'] } : s)),
+    }
+    assert.ok(collectDailyItems(scopedAlpha, day).some((i) => i.eventKey === 'a9'), 'source_hint.category 命中白名单')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
 test('titleSimilarity：相似标题高分 / 不相关低分', () => {
   const a = '伊朗外交部谴责美国新一轮经济制裁'
   const b = '伊朗谴责美国新一轮制裁称将以一切手段维护国家利益'

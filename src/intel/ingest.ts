@@ -20,6 +20,12 @@ export interface IntelSourceDef {
   maxStalenessHours: number
   /** 文件名 glob 简化形式：alpha 全量 *.json；hermes-cn 仅 *.published.json。 */
   pattern: 'all' | 'published-only'
+  /**
+   * 分类白名单（缺省或空数组 = 不过滤）：命中快照 raw.item.category 或
+   * raw.source_hint.category 才进入当日融合。用于把综合新闻管道里与内容主线
+   * 无关的版块挡在情报层之外；快照仍全量保留，调白名单可重跑融合。
+   */
+  categories?: string[]
 }
 
 export interface IntelConfig {
@@ -46,6 +52,8 @@ export function defaultIntelConfig(): IntelConfig {
         dir: envPath('SPARKOS_HERMES_ARCHIVE', path.join(homedir(), 'newsroom-cn', 'state', 'archive')),
         maxStalenessHours: 24,
         pattern: 'published-only',
+        // 综合新闻管道噪声高：只保留与内容主线相关的版块（2026-09-09 决策）。
+        categories: ['科技创新', '财经经济', '国际动态'],
       },
       { id: 'baicaotang', dir: envPath('SPARKOS_BAICAOTANG_ARCHIVE', '' ) || null, maxStalenessHours: 24, pattern: 'all' },
     ],
