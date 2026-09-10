@@ -26,22 +26,48 @@ export interface HealthReport {
   overall: HealthStatus
 }
 
+/**
+ * 单个文件的「最新已发布时间」+ 是否算发布。
+ *
+ * 两种源形态：
+ *  - 常规（alpha/hermes-cn）：一文件一事件，看后缀或 body.status，时间取 published_at/created_at
+ *  - 多条目馈送（hn）：一文件是数组，时间取条目里最大的 collected_at，全部计为已发布
+ */
+function latestOfFile(src: IntelSourceDef, file: string): { published: boolean; ts: number | null } {
+  let raw: unknown
+  try {
+    raw = JSON.parse(readFileSync(path.join(src.dir as string, file), 'utf8'))
+  } catch {
+    return { published: false, ts: null }
+  }
+  if (src.explodeItems) {
+    if (!Array.isArray(raw)) return { published: false, ts: null }
+    let ts: number | null = null
+    for (const entry of raw) {
+      if (typeof entry !== 'object' || entry === null) continue
+      const at = Date.parse(String((entry as Record<string, unknown>).collected_at ?? ''))
+      if (Number.isFinite(at) && (ts === null || at > ts)) ts = at
+    }
+    return { published: ts !== null, ts }
+  }
+  const body = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+  // 只把「已发布」稿件计入健康新鲜度（blocked/rejected/unknown 不算发布）
+  const published = /\.published\.json$/.test(file) || body.status === 'published'
+  const publishedAt = typeof body.published_at === 'string' ? Date.parse(body.published_at) : NaN
+  const createdAt = typeof body.created_at === 'string' ? Date.parse(body.created_at) : NaN
+  const ts = Number.isFinite(publishedAt) ? publishedAt : Number.isFinite(createdAt) ? createdAt : null
+  return { published, ts }
+}
+
 function latestPublished(src: IntelSourceDef, now: number): string | null {
+  void now
   if (src.dir === null || !existsSync(src.dir)) return null
   let best: { iso: string; ts: number } | null = null
   for (const f of readdirSync(src.dir)) {
     if (!f.endsWith('.json') || f.startsWith('.')) continue
-    // 只把「已发布」稿件计入健康新鲜度（blocked/rejected/unknown 不算发布）
-    let published = false
-    let ts: number | null = null
-    try {
-      const raw = JSON.parse(readFileSync(path.join(src.dir, f), 'utf8')) as Record<string, unknown>
-      published = /\.published\.json$/.test(f) || raw.status === 'published'
-      const publishedAt = typeof raw.published_at === 'string' ? Date.parse(raw.published_at) : NaN
-      const createdAt = typeof raw.created_at === 'string' ? Date.parse(raw.created_at) : NaN
-      if (Number.isFinite(publishedAt)) ts = publishedAt
-      else if (Number.isFinite(createdAt)) ts = createdAt
-    } catch { /* 无法解析的 json 不算 published */ }
+    if (src.pattern === 'published-only' && !/\.published\.json$/.test(f)) continue
+    if (src.filePrefix !== undefined && !f.startsWith(src.filePrefix)) continue
+    const { published, ts } = latestOfFile(src, f)
     if (!published || ts === null) continue
     if (best === null || ts > best.ts) best = { iso: new Date(ts).toISOString(), ts }
   }

@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, statSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, readdirSync, existsSync, statSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import path from 'node:path'
-import { runIngest, eventKeyOf, statusOf, defaultIntelConfig, type IntelConfig } from '../src/intel/ingest.ts'
+import { runIngest, eventKeyOf, statusOf, defaultIntelConfig, itemEventKey, observedAtOf, type IntelConfig } from '../src/intel/ingest.ts'
 import { computeHealth } from '../src/intel/health.ts'
 import { runIntelTick } from '../src/intel/tick.ts'
 import { buildIntelReport, initOpsIntel } from '../src/intel/report.ts'
@@ -265,10 +265,10 @@ test('titleSimilarity：相似标题高分 / 不相关低分', () => {
 
 test('clusterDuplicates：聚类疑似重复组；不相关不聚；阈值可调', () => {
   const items = [
-    { eventKey: 'a', source: 'hermes', status: 'ok', title: '伊朗外交部谴责美国新一轮经济制裁', observedAt: '', evidenceUrl: '' },
-    { eventKey: 'b', source: 'hermes', status: 'ok', title: '伊朗谴责美国新一轮制裁称将以一切手段维护国家利益', observedAt: '', evidenceUrl: '' },
-    { eventKey: 'c', source: 'alpha', status: 'ok', title: 'NVIDIA 发布 SkillEvaluator 评估 AI Agent', observedAt: '', evidenceUrl: '' },
-    { eventKey: 'd', source: 'hermes', status: 'ok', title: '市场监管部门整治驾校抱团涨价等乱象', observedAt: '', evidenceUrl: '' },
+    { eventKey: 'a', source: 'hermes', status: 'ok', title: '伊朗外交部谴责美国新一轮经济制裁', observedAt: '', evidenceUrl: '', heat: null, breaking: false, topics: [] },
+    { eventKey: 'b', source: 'hermes', status: 'ok', title: '伊朗谴责美国新一轮制裁称将以一切手段维护国家利益', observedAt: '', evidenceUrl: '', heat: null, breaking: false, topics: [] },
+    { eventKey: 'c', source: 'alpha', status: 'ok', title: 'NVIDIA 发布 SkillEvaluator 评估 AI Agent', observedAt: '', evidenceUrl: '', heat: null, breaking: false, topics: [] },
+    { eventKey: 'd', source: 'hermes', status: 'ok', title: '市场监管部门整治驾校抱团涨价等乱象', observedAt: '', evidenceUrl: '', heat: null, breaking: false, topics: [] },
   ]
   const groups = clusterDuplicates(items)
   assert.equal(groups.length, 1, '只有 1 组疑似重复')
@@ -302,19 +302,20 @@ test('情报簇：规则骨架预填（分组/来源数/证据URL/热度）+ 校
   try {
     const { buildClusterSkeletons, validateCluster, saveClusters, loadClusters } = await import('../src/intel/cluster.ts')
     const items = [
-      { eventKey: 'a', source: 'hermes', status: 'ok', title: '伊朗谴责制裁', observedAt: '', evidenceUrl: 'https://a.example' },
-      { eventKey: 'b', source: 'alpha', status: 'ok', title: '伊朗谴责制裁2', observedAt: '', evidenceUrl: 'https://b.example' },
-      { eventKey: 'c', source: 'alpha', status: 'ok', title: 'NVIDIA 发布', observedAt: '', evidenceUrl: 'https://c.example' },
+      // a 带真实高热（hermes strong+breaking → 70），b 中等，c 无热度信号
+      { eventKey: 'a', source: 'hermes', status: 'ok', title: '伊朗谴责制裁', observedAt: '', evidenceUrl: 'https://a.example', heat: 70, breaking: true, topics: ['伊朗'] },
+      { eventKey: 'b', source: 'alpha', status: 'ok', title: '伊朗谴责制裁2', observedAt: '', evidenceUrl: 'https://b.example', heat: 45, breaking: false, topics: [] },
+      { eventKey: 'c', source: 'alpha', status: 'ok', title: 'NVIDIA 发布', observedAt: '', evidenceUrl: 'https://c.example', heat: null, breaking: false, topics: [] },
     ]
     const sk = buildClusterSkeletons(items, [['a', 'b']], new Date(2026, 7, 21))
     assert.equal(sk.length, 2, '1 组重复 + 1 单事件')
     const dup = sk.find((c) => c.eventKeys.length === 2)!
-    assert.equal(dup.heat, 'high', '2 事件 + 跨源 → high')
+    assert.equal(dup.heat, 'high', '成员最高真实热度 70 → high（跨源再升一级仍是 high）')
     assert.equal(dup.sourceCount, 2)
     assert.ok(dup.evidenceUrls.includes('https://a.example'), '证据 URL 聚合')
     assert.equal(dup.topic, '', '主题留待模型')
     const single = sk.find((c) => c.eventKeys.length === 1)!
-    assert.equal(single.heat, 'low', '单事件单源 → low')
+    assert.equal(single.heat, 'low', '无热度信号且单源单条 → low')
     // 校验：合法通过 / 非法拒绝
     const good = { ...dup, topic: '伊朗制裁' }
     assert.equal(validateCluster(good).length, 0)
@@ -328,5 +329,349 @@ test('情报簇：规则骨架预填（分组/来源数/证据URL/热度）+ 校
     const loaded = loadClusters(cfg, new Date(2026, 7, 21))
     assert.equal(loaded.length, 2)
     assert.equal(loaded.find((c) => c.clusterId === good.clusterId)?.topic, '伊朗制裁（更新）', '同 id 覆盖')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+// ---------------------------------------------------------------- 多条目馈送源（hn / FeedFuse 快照）
+// 2026-09-10 新增：科技快照 tech-ai-*.json 是一个数组（HN + GitHub），
+// 条目自带真实热度。按条目展开 + 内容哈希去重，根治「同批重放多日」。
+
+function feedCfg() {
+  const root = mkdtempSync(join(tmpdir(), 'sparkos-feed-'))
+  const feedDir = join(root, 'sources-raw')
+  mkdirSync(feedDir, { recursive: true })
+  const cfg: IntelConfig = {
+    sources: [
+      {
+        id: 'hn', dir: feedDir, maxStalenessHours: 30, pattern: 'all',
+        filePrefix: 'tech-ai-', explodeItems: true,
+      },
+    ],
+    outDir: join(root, 'out', 'ingest'),
+    runsDir: join(root, 'out', 'runs'),
+    keepDays: 14,
+  }
+  return { root, cfg, feedDir }
+}
+
+const HN_DAY1 = [
+  { title: 'Shopify acquires Tailwind', url: 'https://tailwindcss.com/blog/x', score: 856, source: 'hackernews', collected_at: '2026-09-10T08:01:03.142468', heat: 856 },
+  { title: 'iPhone Duo', url: 'https://www.apple.com/iphone-duo/', score: 801, source: 'hackernews', collected_at: '2026-09-10T08:01:02.127788', heat: 801 },
+  { title: 'some/repo', url: 'https://github.com/some/repo', score: 120, source: 'github', collected_at: '2026-09-10T08:01:30.000000', heat: 120 },
+]
+
+test('itemEventKey：按 URL 内容哈希（跨文件稳定），无 URL 退回 title', () => {
+  const a = itemEventKey('hn', { url: 'https://x.example/a' })
+  const b = itemEventKey('hn', { url: 'https://x.example/a' })
+  const c = itemEventKey('hn', { url: 'https://x.example/b' })
+  assert.equal(a, b, '同 URL 必须同 key（跨天去重的前提）')
+  assert.notEqual(a, c)
+  assert.match(a, /^hn-[0-9a-f]{16}$/, 'key 必须是文件名安全的内容哈希')
+  // 无 URL 时退回 title：同 title 稳定，且与任何 URL 派生的 key 不同
+  const byTitle = itemEventKey('hn', { title: '只有标题没有链接' })
+  assert.equal(byTitle, itemEventKey('hn', { title: '只有标题没有链接' }))
+  assert.notEqual(byTitle, itemEventKey('hn', { url: 'https://x.example/a' }))
+})
+
+test('observedAtOf：优先 created_at，其次 collected_at，最后回落 now', () => {
+  const now = new Date('2026-09-10T12:00:00Z')
+  assert.equal(observedAtOf({ created_at: 'A', collected_at: 'B' }, now), 'A')
+  assert.equal(observedAtOf({ collected_at: 'B' }, now), 'B')
+  assert.equal(observedAtOf({}, now), now.toISOString())
+})
+
+test('多条目馈送：数组按条目展开 + 前缀过滤 + 幂等 + 跨天重放去重', () => {
+  const { root, cfg, feedDir } = feedCfg()
+  try {
+    writeFileSync(join(feedDir, 'tech-ai-2026-09-10.json'), JSON.stringify(HN_DAY1))
+    // 同目录里不该被本源的 filePrefix 收进来的文件
+    writeFileSync(join(feedDir, 'other-2026-09-10.json'), JSON.stringify([{ title: '噪声', url: 'https://noise.example/' }]))
+
+    const first = runIngest(cfg, new Date('2026-09-10T09:00:00Z'))
+    const s1 = first.sources[0]
+    assert.equal(s1.ok, true)
+    assert.equal(s1.added, 3, '只展开 tech-ai- 前缀文件的 3 条')
+    assert.equal(s1.scanned, 3, '前缀不匹配的文件不计入')
+
+    const snapDir = join(cfg.outDir, 'hn')
+    const files = readdirSync(snapDir).filter((f) => f.endsWith('.snapshot.json'))
+    assert.equal(files.length, 3)
+    assert.equal(existsSync(join(snapDir, 'other-2026-09-10.snapshot.json')), false, '未匹配前缀不得落快照')
+
+    // 条目级快照：raw 就是条目本身，rawFile 指向来源文件，observedAt 取 collected_at
+    const one = JSON.parse(readFileSync(join(snapDir, files[0]), 'utf8')) as {
+      raw: Record<string, unknown>; rawFile: string; observedAt: string; status: string; source: string
+    }
+    assert.equal(one.source, 'hn')
+    assert.equal(one.status, 'ok', '快照条目视为已发布')
+    assert.equal(one.rawFile, 'tech-ai-2026-09-10.json')
+    assert.ok(one.raw.url || one.raw.title, 'raw 保留条目原字段（含真实 score）')
+    assert.match(one.observedAt, /^2026-09-10T08:01:/, 'observedAt 取 collected_at 而非 ingest 时间')
+
+    // 幂等：同日重跑零新增
+    const again = runIngest(cfg, new Date('2026-09-10T10:00:00Z'))
+    assert.equal(again.sources[0].added, 0)
+    assert.equal(again.sources[0].skipped, 3)
+
+    // 跨天：老条目重放必须去重，只有新条目入库
+    const day2 = [HN_DAY1[0], { title: 'brand new', url: 'https://new.example/z', score: 300, source: 'hackernews', collected_at: '2026-09-11T08:01:00.000000', heat: 300 }]
+    writeFileSync(join(feedDir, 'tech-ai-2026-09-11.json'), JSON.stringify(day2))
+    const day2run = runIngest(cfg, new Date('2026-09-11T09:00:00Z'))
+    assert.equal(day2run.sources[0].added, 1, '重放的老条目不得二次入库')
+    // 第三天会重扫两个文件：day1 的 3 条 + day2 里重放的那 1 条，共 4 条被跳过
+    assert.equal(day2run.sources[0].skipped, 4)
+    assert.equal(readdirSync(snapDir).filter((f) => f.endsWith('.snapshot.json')).length, 4)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('多条目馈送：健康取条目 collected_at（不得因数组无 status 而误判红灯）', () => {
+  const { root, cfg, feedDir } = feedCfg()
+  try {
+    writeFileSync(join(feedDir, 'tech-ai-2026-09-10.json'), JSON.stringify(HN_DAY1))
+    const health = computeHealth(cfg, new Date('2026-09-10T11:00:00Z'))
+    const hn = health.sources.find((s) => s.id === 'hn')
+    assert.ok(hn)
+    assert.equal(hn.status, 'green', '3 小时前的快照应判绿')
+    // collected_at 无时区后缀 → 按本地时间解析；断言用同一解析结果比对，避免时区耦合
+    const latestTs = Date.parse(String(hn.latestPublishedAt))
+    assert.equal(latestTs, Date.parse('2026-09-10T08:01:30.000000'), '应取最大 collected_at（github 那条）')
+    assert.equal(hn.stalenessHours, Math.round((Date.parse('2026-09-10T11:00:00Z') - latestTs) / 3600000))
+    assert.equal(health.overall, 'green')
+
+    const stale = computeHealth(cfg, new Date('2026-09-13T00:00:00Z'))
+    assert.equal(stale.sources.find((s) => s.id === 'hn')?.status, 'red', '超过 maxStalenessHours 应判红')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('多条目馈送：archiveCounts 按条目计数而不是文件数', () => {
+  const { root, cfg, feedDir } = feedCfg()
+  try {
+    writeFileSync(join(feedDir, 'tech-ai-2026-09-10.json'), JSON.stringify(HN_DAY1))
+    writeFileSync(join(feedDir, 'tech-ai-2026-09-11.json'), JSON.stringify([HN_DAY1[0], HN_DAY1[1]]))
+    const report = buildIntelReport(cfg)
+    const hn = report.archiveCounts.find((c) => c.source === 'hn')
+    assert.ok(hn)
+    assert.equal(hn.total, 5, '2 个文件共 5 条目')
+    assert.equal(hn.published, 5)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('P0 白名单收紧：hermes-cn 不再放行「国际动态」', () => {
+  const cfg = defaultIntelConfig()
+  const hermes = cfg.sources.find((s) => s.id === 'hermes-cn')
+  assert.ok(hermes?.categories)
+  assert.deepEqual(hermes.categories, ['科技创新', '财经经济'], '14 天实测国际动态 63 条仅 1 条与 AI 相关')
+  const hn = cfg.sources.find((s) => s.id === 'hn')
+  assert.ok(hn, 'hn 源必须登记进情报层')
+  assert.equal(hn.explodeItems, true)
+  assert.equal(hn.filePrefix, 'tech-ai-')
+  assert.equal(hn.categories, undefined, 'hn 条目无 category 字段，不得配白名单（会全滤掉）')
+})
+
+test('英文标题防误聚：单字符集合会把无关英文标题串成巨组（混合特征 + 领头聚类回归）', () => {
+  // 旧实现（单字符 Dice）下这些对子分别为 0.62 / 0.83 / 0.73，全部越过 0.5 阈值，
+  // 接入 HN 后单链聚类把 19 条毫不相关的英文新闻串成一个巨组，
+  // 建簇时凭空造出一个「high 热度」簇排到第一。
+  const unrelated: Array<[string, string]> = [
+    ['Larger Pacific Striped Octopus', 'What do Visa and Mastercard do? An intro to card networks'],
+    ['Shopify acquires Tailwind', 'What algorithm did Windows XP use to choose'],
+    ['Stockfish 19', 'Larger Pacific Striped Octopus'],
+    ['GPT-6 Astra, looped transformers, and hidden reasoning', 'Qwen 3.8 follows GPT-5.5 Pro reasoning p'],
+  ]
+  for (const [a, b] of unrelated) {
+    assert.ok(titleSimilarity(a, b) < 0.5, `无关英文标题不得越阈值：${titleSimilarity(a, b).toFixed(2)} ${a} | ${b}`)
+  }
+  // 同主题（跨源同一新闻）必须仍然聚得上——否则跨源验证永远不触发
+  assert.ok(titleSimilarity('苹果发布 Apple Watch Series 12，搭载全新健康传感系统', 'Apple Watch Series 12') >= 0.5)
+
+  const titles = [
+    'Apple Watch Series 12', 'iPhone Duo', 'AirPods 5',
+    'GPT-6 Astra, looped transformers, and hidden reasoning', 'Larger Pacific Striped Octopus',
+    'Stockfish 19', 'Shopify acquires Tailwind', 'What do Visa and Mastercard do? An intro to card networks',
+    'What algorithm did Windows XP use to choose', 'Growing proof that autonomous cars save lives',
+    'Show HN: The same nine streaming subscriptions', "No Man's Sky Cosmos", 'DeepSeek v4.1 Flash',
+  ]
+  const items = titles.map((t, i) => ({ eventKey: 'k' + i, source: 'hn', status: 'ok' as const, title: t, observedAt: '', evidenceUrl: '', heat: null, breaking: false, topics: [] }))
+  assert.deepEqual(clusterDuplicates(items), [], '真实 HN 英文池不得聚出任何组（旧实现产出 10+ 条巨组）')
+})
+
+// ---------------------------------------------------------------- P1 真实热度接入
+// 此前 cluster.heat 只由「合并了几条」合成，而合并不自动发生 → heat 恒为 low。
+// 现在以源注意力信号为准：hn 的 HN points（对数映射）、hermes 的 breaking/strong。
+
+test('sourceHeatOf：HN points 对数映射 / GitHub 固定中等 / hermes 用审核标记 / alpha 为 null', async () => {
+  const { sourceHeatOf, breakingOf, topicsOf } = await import('../src/intel/fusion.ts')
+  // HN points：1→10, 112→67, 544→89, 1162→100（>1431 封顶 100）
+  assert.equal(sourceHeatOf({ source: 'hackernews', score: 1 }), 10)
+  assert.equal(sourceHeatOf({ source: 'hackernews', score: 112 }), 67)
+  assert.equal(sourceHeatOf({ source: 'hackernews', score: 544 }), 89)
+  assert.equal(sourceHeatOf({ source: 'hackernews', score: 1162 }), 100)
+  assert.equal(sourceHeatOf({ source: 'hackernews', score: 1079623 }), 100, '异常大值必须封顶')
+  assert.equal(sourceHeatOf({ source: 'hackernews', score: 0 }), 0)
+  // GitHub 的 score 是累计 star（35k~1M），不能当热度 → 固定中等，不得顶格
+  assert.equal(sourceHeatOf({ source: 'github', score: 35068 }), 55)
+  assert.equal(sourceHeatOf({ source: 'github', score: 1079623 }), 55)
+
+  // hermes：用 breaking/strong，**不用 item.heat**
+  assert.equal(sourceHeatOf({ item: {}, strong: true, breaking: true }), 70)
+  assert.equal(sourceHeatOf({ item: {}, strong: true }), 60)
+  assert.equal(sourceHeatOf({ item: {}, breaking: true }), 45)
+  assert.equal(sourceHeatOf({ item: {} }), 25)
+  // 关键回归：item.heat 与人工审核标记不相关（实测 heat=100 的 48 条里仅 2 条 strong），必须忽略它
+  assert.equal(sourceHeatOf({ item: { heat: 100 } }), 25, '不得把饱和的 item.heat 当热度')
+  // alpha-signal：无任何热度字段 → null（不是 0）
+  assert.equal(sourceHeatOf({ source_hint: { category: '科技产业' } }), null)
+
+  assert.equal(breakingOf({ breaking: true }), true)
+  assert.equal(breakingOf({ source_hint: { breaking: true } }), true)
+  assert.equal(breakingOf({ item: {} }), false)
+  assert.deepEqual(topicsOf({ watch_hits: { topics: ['人工智能', 'AI'] } }), ['人工智能', 'AI'])
+  assert.deepEqual(topicsOf({ watch_hits: { topics: ['x', '', 3] } }), ['x'], '过滤空值与非字符串')
+  assert.deepEqual(topicsOf({}), [])
+})
+
+test('heatLevelOf：阈值分档 + null 不当成 0 热度', async () => {
+  const { heatLevelOf } = await import('../src/intel/cluster.ts')
+  assert.equal(heatLevelOf(null), 'low')
+  assert.equal(heatLevelOf(0), 'low')
+  assert.equal(heatLevelOf(44), 'low')
+  assert.equal(heatLevelOf(45), 'medium')
+  assert.equal(heatLevelOf(69), 'medium')
+  assert.equal(heatLevelOf(70), 'high')
+  assert.equal(heatLevelOf(100), 'high')
+})
+
+test('真实热度驱动建簇：高热度单条即 high，无热度多条靠佐证升级', async () => {
+  const { buildClusterSkeletons } = await import('../src/intel/cluster.ts')
+  const mk = (k: string, source: string, heat: number | null, breaking = false) =>
+    ({ eventKey: k, source, status: 'ok', title: 't' + k, observedAt: '', evidenceUrl: 'https://' + k + '.example', heat, breaking, topics: [] })
+  // 单条但真实高热（HN 1162 分）→ high（旧规则只会给 low）
+  const hot = buildClusterSkeletons([mk('a', 'hn', 100)], [], new Date(2026, 8, 10))
+  assert.equal(hot[0].heat, 'high', '单条高热必须 high')
+  // 单条中等热度 → medium
+  const mid = buildClusterSkeletons([mk('a', 'hn', 50)], [], new Date(2026, 8, 10))
+  assert.equal(mid[0].heat, 'medium')
+  // 单条低热度、单源 → low
+  const cold = buildClusterSkeletons([mk('a', 'hn', 20)], [], new Date(2026, 8, 10))
+  assert.equal(cold[0].heat, 'low')
+  // 三条低热但同主题 + 跨源 → 佐证升两级到 high
+  const corroborated = buildClusterSkeletons(
+    [mk('a', 'hn', 20), mk('b', 'hermes', 25), mk('c', 'hn', 30)], [['a', 'b', 'c']], new Date(2026, 8, 10))
+  assert.equal(corroborated.find((c) => c.eventKeys.length === 3)!.heat, 'high', '多源多佐证可升到 high')
+})
+
+// ---------------------------------------------------------------- P0+ 主题门 / P3 补卡清单
+
+test('源闸门：分类与主题是「或」关系（主题门救回被分类门误杀的主线稿件）', async () => {
+  const { defaultIntelConfig } = await import('../src/intel/ingest.ts')
+  const { collectDailyItems } = await import('../src/intel/fusion.ts')
+  const root = mkdtempSync(join(tmpdir(), 'sparkos-gate-'))
+  try {
+    const outDir = join(root, 'ingest', 'hermes-cn')
+    mkdirSync(outDir, { recursive: true })
+    const now = new Date()
+    const snap = (key: string, raw: Record<string, unknown>) => writeFileSync(
+      join(outDir, key + '.snapshot.json'),
+      JSON.stringify({ eventKey: key, source: 'hermes-cn', status: 'ok', observedAt: now.toISOString(), rawFile: key + '.json', raw }),
+    )
+    snap('a', { item: { category: '科技创新', title: '政策门命中' }, watch_hits: { topics: [] } })
+    snap('b', { item: { category: '国际动态', title: '主题门命中' }, watch_hits: { topics: ['人工智能'] } })
+    snap('c', { item: { category: '国际动态', title: '两者都不命中' }, watch_hits: { topics: ['关税'] } })
+
+    const cfg = {
+      sources: [{ id: 'hermes-cn', dir: null, maxStalenessHours: 24, pattern: 'all' as const,
+        categories: ['科技创新', '财经经济'], topicsAllow: ['人工智能', 'AI'] }],
+      outDir: join(root, 'ingest'), runsDir: join(root, 'runs'), keepDays: 14,
+    }
+    const stats = { filtered: {} as Record<string, number> }
+    const items = collectDailyItems(cfg, now, stats)
+    assert.deepEqual(items.map((i) => i.eventKey).sort(), ['a', 'b'], '分类命中 + 主题命中都应通过')
+    assert.equal(stats.filtered['hermes-cn'], 1, '两者都不命中的被挡')
+
+    // 只配主题、不配分类：未命中主题的一律挡
+    const topicOnly = { ...cfg, sources: [{ ...cfg.sources[0], categories: undefined, topicsAllow: ['人工智能'] }] }
+    const only = collectDailyItems(topicOnly, now)
+    assert.deepEqual(only.map((i) => i.eventKey), ['b'])
+
+    // 两者都不配：全收（现状不变）
+    const noGate = { ...cfg, sources: [{ ...cfg.sources[0], categories: undefined, topicsAllow: undefined }] }
+    assert.equal(collectDailyItems(noGate, now).length, 3)
+
+    // 默认配置必须仍带 topicsAllow（P0+ 已落地）
+    const hermes = defaultIntelConfig().sources.find((s) => s.id === 'hermes-cn')
+    assert.ok(hermes?.topicsAllow?.includes('人工智能'), '默认 hermes-cn 必须配主题白名单')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('nextCardNumbers：读 spark-notes 编号前缀，缺失目录从 001 起', async () => {
+  const { nextCardNumbers } = await import('../src/intel/cards.ts')
+  const root = mkdtempSync(join(tmpdir(), 'sparkos-cards-'))
+  try {
+    assert.deepEqual(nextCardNumbers(root), { obs: 1, model: 1 }, '目录缺失不得抛错')
+    mkdirSync(join(root, 'spark-notes', 'observations'), { recursive: true })
+    mkdirSync(join(root, 'spark-notes', 'models'), { recursive: true })
+    writeFileSync(join(root, 'spark-notes', 'observations', '055-foo-2026-09-10.md'), '')
+    writeFileSync(join(root, 'spark-notes', 'observations', '007-bar-2026-08-01.md'), '')
+    writeFileSync(join(root, 'spark-notes', 'observations', 'INDEX.md'), '')
+    writeFileSync(join(root, 'spark-notes', 'models', '025-baz-2026-08-30.md'), '')
+    assert.deepEqual(nextCardNumbers(root), { obs: 56, model: 26 })
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('buildCardRequests：只挑「够热且 0 卡」，编号连续，标题用融合条目兜底', async () => {
+  const { buildCardRequests } = await import('../src/intel/cards.ts')
+  const root = mkdtempSync(join(tmpdir(), 'sparkos-cards2-'))
+  try {
+    mkdirSync(join(root, 'spark-notes', 'observations'), { recursive: true })
+    writeFileSync(join(root, 'spark-notes', 'observations', '055-x-2026-09-10.md'), '')
+    const mkCluster = (id: string, o: Record<string, unknown> = {}) => ({
+      clusterId: id, date: '20260910', topic: '', coreFacts: [], heat: 'low' as const, novelty: 'medium' as const,
+      sourceCount: 1, evidenceUrls: ['https://e.example/' + id], knowledgeCards: [], credibility: 'medium' as const,
+      risks: [], platforms: [], angleSuggestions: [], eventKeys: [id], ...o,
+    })
+    const clusters = [
+      mkCluster('c1', { sourceHeat: 95, heat: 'high' }),          // 够热、0 卡 → 要
+      mkCluster('c2', { sourceHeat: 74 }),                        // 够热 → 要
+      mkCluster('c3', { sourceHeat: 30, heat: 'low' }),           // 不够热 → 不要
+      mkCluster('c4', { sourceHeat: 99, knowledgeCards: ['obs://001'] }), // 已有卡 → 不要
+      mkCluster('c5', { heat: 'high', topic: '模型分析过的主题' }), // 无 sourceHeat 但 high → 要，且用 topic
+    ]
+    const reqs = buildCardRequests(clusters, { knowledgeRoot: root, titles: new Map([['c1', '融合条目标题']]) })
+    assert.deepEqual(reqs.map((r) => r.clusterId), ['c1', 'c2', 'c5'])
+    assert.deepEqual(reqs.map((r) => r.suggestedUri), ['obs://056', 'obs://057', 'obs://058'], '编号从知识库最大值连续递增')
+    assert.equal(reqs[0].title, '融合条目标题', '骨架 topic 为空时用融合标题兜底')
+    assert.equal(reqs[2].title, '模型分析过的主题', '有 topic 时优先用 topic')
+    assert.equal(reqs[0].sourceHeat, 95)
+    assert.ok(reqs[0].reason.includes('knowledgeDepth=0'), '理由要点明缺卡对排序的影响')
+    // limit 生效
+    assert.equal(buildCardRequests(clusters, { knowledgeRoot: root, limit: 1 }).length, 1)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test('writeCardRequests：写出 json + md，且不触碰星火库', async () => {
+  const { writeCardRequests } = await import('../src/intel/cards.ts')
+  const root = mkdtempSync(join(tmpdir(), 'sparkos-cards3-'))
+  try {
+    const cfg = { sources: [], outDir: join(root, 'ops-intel', 'ingest'), runsDir: join(root, 'ops-intel', 'runs'), keepDays: 14 }
+    const w = writeCardRequests(cfg, [{
+      clusterId: 'c-20260910-001', suggestedUri: 'obs://056', suggestedFile: '056-slug-2026-09-10.md',
+      title: '标题', reason: '理由', heat: 'high', sourceHeat: 95, sourceCount: 1,
+      evidenceUrls: ['https://e.example/a'], eventKeys: ['k1'],
+    }], new Date(2026, 8, 10))
+    assert.equal(w.pending, 1)
+    assert.equal(w.files.length, 2)
+    assert.ok(existsSync(w.files[0]) && existsSync(w.files[1]))
+    const json = JSON.parse(readFileSync(w.files[0], 'utf8'))
+    assert.equal(json.requests[0].suggestedUri, 'obs://056')
+    assert.ok(json.note.includes('不写知识库'), '产物需声明不写星火库')
+    assert.ok(readFileSync(w.files[1], 'utf8').includes('obs://056'))
+    // 空清单也要有可读产物
+    const empty = writeCardRequests(cfg, [], new Date(2026, 8, 11))
+    assert.ok(readFileSync(empty.files[1], 'utf8').includes('没有'))
   } finally { rmSync(root, { recursive: true, force: true }) }
 })

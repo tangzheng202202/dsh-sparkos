@@ -58,6 +58,11 @@ export interface IntelCluster {
   /** Optional agent overrides (0-100); deterministic fallbacks are used when absent. */
   sourceAuthorityScore?: number
   audienceFitScore?: number
+  /**
+   * 成员里最高的**源注意力信号**（0-100，来自 fusion 的归一化热度）；无信号时缺省。
+   * 与 heat 档位并存：heat 是给人看的三档，sourceHeat 给排序层保留原始区分度。
+   */
+  sourceHeat?: number
   /** 回链 fusion eventKey。 */
   eventKeys: string[]
   /** 分析模型/来源标记（agent 提交时可带）。 */
@@ -74,7 +79,21 @@ function levelOf(up: boolean, base: Level): Level {
   return base === 'low' ? 'medium' : base === 'medium' ? 'high' : 'high'
 }
 
-/** 从 fusion 当日条目 + 疑似重复组生成待分析骨架（规则预填，模型待补）。 */
+/** 0-100 归一化热度 → 三档；null（源不提供热度）按 low 处理，不用 0 冒充「没热度」。 */
+export function heatLevelOf(score: number | null): Level {
+  if (score === null) return 'low'
+  if (score >= 70) return 'high'
+  if (score >= 45) return 'medium'
+  return 'low'
+}
+
+/**
+ * 从 fusion 当日条目 + 疑似重复组生成待分析骨架（规则预填，模型待补）。
+ *
+ * 热度规则（2026-09-10 P1 起）：以**成员里最高的源注意力信号**为准，
+ * 再叠加两条佐证加成。此前只看「合并了几条」，而合并不自动发生 →
+ * heat 恒为 low、「跨源升一级」从未触发（实测 35 簇 heat 全 low）。
+ */
 export function buildClusterSkeletons(items: FusionItem[], dupGroups: string[][], date = new Date()): IntelCluster[] {
   const stamp = localDateStamp(date)
   const byKey = new Map(items.map((i) => [i.eventKey, i]))
@@ -85,14 +104,19 @@ export function buildClusterSkeletons(items: FusionItem[], dupGroups: string[][]
     const members = keys.map((k) => byKey.get(k)).filter((x): x is FusionItem => x !== undefined)
     const sources = new Set(members.map((m) => m.source))
     const urls = [...new Set(members.map((m) => m.evidenceUrl).filter((u) => u !== ''))]
-    let heat: Level = members.length >= 3 ? 'high' : members.length === 2 ? 'medium' : 'low'
-    if (sources.size >= 2) heat = levelOf(true, heat) // 跨源验证升一级
+    // 真实热度优先：取最能证明外部关注度的那条
+    const heats = members.map((m) => m.heat).filter((h): h is number => typeof h === 'number')
+    const maxHeat = heats.length > 0 ? Math.max(...heats) : null
+    let heat: Level = heatLevelOf(maxHeat)
+    if (members.length >= 3) heat = levelOf(true, heat) // 多条同主题 = 佐证，升一级
+    if (sources.size >= 2) heat = levelOf(true, heat) // 跨源验证，再升一级
     return {
       clusterId: 'c-' + stamp + '-' + String(seq++).padStart(3, '0'),
       date: stamp,
       topic: '',
       coreFacts: [],
       heat,
+      sourceHeat: maxHeat === null ? undefined : maxHeat,
       novelty: 'medium',
       sourceCount: sources.size,
       evidenceUrls: urls,
@@ -142,7 +166,7 @@ export function validateCluster(c: Partial<IntelCluster>): string[] {
       }
     }
   }
-  for (const k of ['sourceAuthorityScore', 'audienceFitScore'] as const) {
+  for (const k of ['sourceAuthorityScore', 'audienceFitScore', 'sourceHeat'] as const) {
     if (c[k] !== undefined && (typeof c[k] !== 'number' || c[k]! < 0 || c[k]! > 100)) errs.push(k + ' 必须是 0-100')
   }
   if (c.judgment !== undefined) {

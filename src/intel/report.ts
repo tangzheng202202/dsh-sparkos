@@ -39,6 +39,19 @@ function countArchive(cfg: IntelConfig): IntelArchiveCount[] {
     for (const f of readdirSync(src.dir)) {
       if (!f.endsWith('.json') || f.startsWith('.')) continue
       if (src.pattern === 'published-only' && !/\.published\.json$/.test(f)) continue
+      if (src.filePrefix !== undefined && !f.startsWith(src.filePrefix)) continue
+      // 多条目馈送：一文件是一组条目，按条目计数并全部视为已发布内容
+      if (src.explodeItems) {
+        try {
+          const arr = JSON.parse(readFileSync(path.join(src.dir, f), 'utf8')) as unknown
+          if (Array.isArray(arr)) {
+            const n = arr.filter((x) => typeof x === 'object' && x !== null).length
+            base.total += n
+            base.published += n
+          }
+        } catch { /* unknown */ }
+        continue
+      }
       base.total++
       let raw: Record<string, unknown> = {}
       try { raw = JSON.parse(readFileSync(path.join(src.dir, f), 'utf8')) as Record<string, unknown> } catch { /* unknown */ }

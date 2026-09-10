@@ -10,6 +10,8 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { ClusterEvidence, EvidenceGrade, IntelCluster } from './cluster.ts'
 
 export interface RankBreakdown {
+  /** 源注意力信号（0-100）：优先用 cluster.sourceHeat，缺省回退 heat 档位。 */
+  attention: number
   volume: number
   velocity: number
   sourceDiversity: number
@@ -178,8 +180,13 @@ function scoreCluster(db: DatabaseSync, cluster: IntelCluster, date: string): Om
   )
   const grade = verificationGradeOf(cluster.evidence ?? [], cluster.evidenceUrls)
   const riskPenalty = clamp(cluster.risks.length * 5 + (grade === 'C' ? 10 : grade === 'D' ? 30 : 0), 0, 40)
+  // 源注意力（真实热度）：有 sourceHeat 用原始 0-100，否则回退 heat 档位。
+  // 2026-09-10 接入：此前 heatScore 只由 mention 数等合成，而合并不自动发生，
+  // 导致所有簇的 heatScore 挤在 30-40，Top5 无法反映真实关注度。
+  const attention = clamp(cluster.sourceHeat ?? levelScore(cluster.heat))
   const heatScore = clamp(
-    volume * 0.25 + velocity * 0.20 + sourceDiversity * 0.15 + authority * 0.15 + persistence * 0.15 + audienceFit * 0.10,
+    attention * 0.25 + velocity * 0.15 + volume * 0.10 + sourceDiversity * 0.15
+    + authority * 0.15 + persistence * 0.10 + audienceFit * 0.10,
   )
   const overallScore = clamp(
     heatScore * 0.30 + novelty * 0.20 + knowledgeDepth * 0.20 + audienceFit * 0.15 + originalJudgment * 0.15 - riskPenalty,
@@ -197,7 +204,7 @@ function scoreCluster(db: DatabaseSync, cluster: IntelCluster, date: string): Om
     sourceCount: cluster.sourceCount,
     consecutiveTopDays: streakBeforeToday + 1,
     breakdown: {
-      volume, velocity, sourceDiversity, authority, persistence, audienceFit,
+      attention, volume, velocity, sourceDiversity, authority, persistence, audienceFit,
       novelty, knowledgeDepth, originalJudgment, riskPenalty,
     },
     evidenceUrls: cluster.evidenceUrls,

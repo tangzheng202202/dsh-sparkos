@@ -6,9 +6,10 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import { VAULT_ROOT, envPath } from '../vault.ts'
+import { KNOWLEDGE_ROOT, VAULT_ROOT, envPath } from '../vault.ts'
 
 export type SnapshotStatus = 'ok' | 'blocked' | 'rejected' | 'expired' | 'unknown'
 
@@ -26,6 +27,27 @@ export interface IntelSourceDef {
    * 无关的版块挡在情报层之外；快照仍全量保留，调白名单可重跑融合。
    */
   categories?: string[]
+  /**
+   * 主题白名单（与 categories 是**「或」关系**）：命中快照 `raw.watch_hits.topics` 即放行。
+   *
+   * 用途：救回「落在非白名单版块、但确实与内容主线相关」的稿件。纯分类门会误杀——
+   * 实测 14 天里时政要闻 4 条 + 国际动态 1 条命中 AI/科技主题却被挡，
+   * 例如「中国官方将启动教师人工智能素养全覆盖培训」（topics=['人工智能']）。
+   */
+  topicsAllow?: string[]
+  /**
+   * 文件名前缀过滤（缺省 = 不限）。用于在混合目录里只取本源的快照，
+   * 例如 FeedFuse 快照目录 `knowledge/sources/raw/` 里只取 `tech-ai-`。
+   */
+  filePrefix?: string
+  /**
+   * 多条目馈送：该源的一个文件是**一个 JSON 数组**，每个元素是一条独立事件
+   * （如 FeedFuse/HN 快照 tech-ai-*.json）。开启后按条目展开为独立 eventKey。
+   *
+   * eventKey 由条目 URL 内容哈希生成 → **同一新闻跨天/跨波次重放自动去重**。
+   * 这正是综合新闻管道「同批重放多日」问题的根治点（按文件名去重无法解决）。
+   */
+  explodeItems?: boolean
 }
 
 export interface IntelConfig {
@@ -35,7 +57,7 @@ export interface IntelConfig {
   keepDays: number
 }
 
-/** 默认源（决策1：单源 hermes-cn；百草堂 pending-source）。 */
+/** 默认源（hermes-cn 已收紧白名单；hn 为按条目展开的 FeedFuse 快照）。 */
 export function defaultIntelConfig(): IntelConfig {
   return {
     sources: [
@@ -46,14 +68,29 @@ export function defaultIntelConfig(): IntelConfig {
         pattern: 'all',
       },
       {
+        id: 'hn',
+        // FeedFuse/HN 每日快照（08:01 与 20:00 两波），一文件约 40 条（HN 20 + GitHub 20）。
+        // 条目自带真实热度（score/heat，如 856），是情报层唯一的真实热度来源。
+        dir: envPath('SPARKOS_HN_ARCHIVE', path.join(KNOWLEDGE_ROOT, 'sources', 'raw')),
+        maxStalenessHours: 30,
+        pattern: 'all',
+        filePrefix: 'tech-ai-',
+        explodeItems: true,
+      },
+      {
         id: 'hermes-cn',
         // 2026-09-01 newsroom-cn 从 ~/.hermes/newsroom-cn 迁出，现位于 ~/newsroom-cn。
         // 仍可用 SPARKOS_HERMES_ARCHIVE 覆盖；旧路径的兼容 symlink 仅作双保险。
         dir: envPath('SPARKOS_HERMES_ARCHIVE', path.join(homedir(), 'newsroom-cn', 'state', 'archive')),
         maxStalenessHours: 24,
         pattern: 'published-only',
-        // 综合新闻管道噪声高：只保留与内容主线相关的版块（2026-09-09 决策）。
-        categories: ['科技创新', '财经经济', '国际动态'],
+        // 综合新闻管道噪声高：只保留与内容主线相关的版块。
+        // 2026-09-10 收紧：去掉「国际动态」——14 天实测该版块 63 条里仅 1 条与 AI/科技相关
+        // （其余为台风/航母调动/俄美通话等），却占白名单通过量的 39%。去掉后信噪比 20.6%→33.0%。
+        categories: ['科技创新', '财经经济'],
+        // P0+ 主题门（与分类是「或」关系）：救回落在时政要闻/国际动态里的主线相关稿件。
+        // 实测 14 天可救回 5 条，其中「教师人工智能素养全覆盖培训」是条真 AI 政策新闻。
+        topicsAllow: ['人工智能', 'AI', '科技', '机器人', '算力', '量子', '芯片', '大模型'],
       },
       { id: 'baicaotang', dir: envPath('SPARKOS_BAICAOTANG_ARCHIVE', '' ) || null, maxStalenessHours: 24, pattern: 'all' },
     ],
@@ -66,6 +103,26 @@ export function defaultIntelConfig(): IntelConfig {
 /** eventKey = 文件名第一个点号前的 id 段。 */
 export function eventKeyOf(filename: string): string {
   return filename.split('.')[0] ?? filename
+}
+
+/**
+ * 多条目馈送的条目级 eventKey：对 URL（缺失时退回 title）做内容哈希。
+ * 稳定且跨文件去重——同一新闻在 09-10 与 09-11 的快照里得到同一个 key。
+ */
+export function itemEventKey(sourceId: string, item: Record<string, unknown>): string {
+  const seed = typeof item.url === 'string' && item.url !== ''
+    ? item.url
+    : (typeof item.title === 'string' && item.title !== '' ? item.title : JSON.stringify(item))
+  return sourceId + '-' + createHash('sha256').update(seed).digest('hex').slice(0, 16)
+}
+
+/** 观察时间：优先源记录的创建/采集时间，退回本轮 ingest 时间（本地日归类依赖它）。 */
+export function observedAtOf(raw: Record<string, unknown>, now: Date): string {
+  for (const k of ['created_at', 'collected_at', 'published_at'] as const) {
+    const v = raw[k]
+    if (typeof v === 'string' && v !== '') return v
+  }
+  return now.toISOString()
 }
 
 /** 状态映射：后缀优先，回退 body.status。 */
@@ -144,35 +201,60 @@ export function runIngest(cfg: IntelConfig, now = new Date()): IngestResult {
     const files = readdirSync(src.dir)
       .filter((f) => f.endsWith('.json') && !f.startsWith('.'))
       .filter((f) => src.pattern === 'all' || /\.published\.json$/.test(f))
+      .filter((f) => src.filePrefix === undefined || f.startsWith(src.filePrefix))
       .sort()
     const known = listSnapshottedKeys(cfg.outDir, src.id)
+    const sub = path.join(cfg.outDir, src.id)
+    mkdirSync(sub, { recursive: true })
+    let scanned = 0
     let added = 0
     let skipped = 0
-    for (const f of files) {
-      const eventKey = eventKeyOf(f)
-      if (known.has(eventKey)) { skipped++; continue }
-      let raw: Record<string, unknown> = {}
-      try {
-        raw = JSON.parse(readFileSync(path.join(src.dir, f), 'utf8')) as Record<string, unknown>
-      } catch {
-        // 原文件不可解析：仍落快照（raw 为空），状态 unknown，不静默丢事件
-      }
+    const emit = (eventKey: string, raw: Record<string, unknown>, rawFile: string, status: SnapshotStatus): void => {
       const snapshot = {
         eventKey,
         source: src.id,
-        status: statusOf(f, raw),
-        observedAt: typeof raw.created_at === 'string' ? raw.created_at : now.toISOString(),
+        status,
+        observedAt: observedAtOf(raw, now),
         ingestedAt: now.toISOString(),
-        rawFile: f,
+        rawFile,
         raw,
       }
-      const sub = path.join(cfg.outDir, src.id)
-      mkdirSync(sub, { recursive: true })
       writeFileSync(path.join(sub, `${eventKey}.snapshot.json`), `${JSON.stringify(snapshot, null, 2)}\n`)
       known.add(eventKey) // 同轮循环内防同 key 多状态文件互相覆盖（写后即记）
       added++
     }
-    sources.push({ source: src.id, ok: true, scanned: files.length, added, skipped })
+
+    for (const f of files) {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(readFileSync(path.join(src.dir, f), 'utf8'))
+      } catch {
+        // 原文件不可解析：仍落快照（raw 为空），状态 unknown，不静默丢事件
+        parsed = undefined
+      }
+
+      // 多条目馈送：数组文件按条目展开，条目级内容哈希去重
+      if (src.explodeItems) {
+        if (!Array.isArray(parsed)) continue
+        scanned += parsed.length
+        for (const entry of parsed) {
+          if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
+          const item = entry as Record<string, unknown>
+          const eventKey = itemEventKey(src.id, item)
+          if (known.has(eventKey)) { skipped++; continue }
+          emit(eventKey, item, f, 'ok')
+        }
+        continue
+      }
+
+      // 常规：一文件一事件
+      scanned++
+      const eventKey = eventKeyOf(f)
+      if (known.has(eventKey)) { skipped++; continue }
+      const raw = (parsed ?? {}) as Record<string, unknown>
+      emit(eventKey, raw, f, statusOf(f, raw))
+    }
+    sources.push({ source: src.id, ok: true, scanned, added, skipped })
   }
   pruneSnapshots(cfg.outDir, cfg.keepDays)
   return { stage: 'ingest', at: now.toISOString(), sources, ok: sources.every((s) => s.ok) }
