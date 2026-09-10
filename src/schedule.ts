@@ -2,7 +2,8 @@
  * 定时任务（M0/M1 接线）：默认关闭。
  * - SPARKOS_SCHEDULE=1：每日节奏提醒（P2 原样保留）
  * - SPARKOS_INTEL_SCHEDULE=1：每小时 intel tick（快照 ingest + 健康计算 + run 留痕）
- *   并默认在每天 09:30（本地）自动做一次 fusion（可设 SPARKOS_FUSION_SCHEDULE=0 关闭）。
+ *   并默认在每天 09:30（本地）自动做一次 fusion（可设 SPARKOS_FUSION_SCHEDULE=0 关闭），
+ *   同时生成 T0 分析队列供 10:00 的 launchd agent（com.sparkos.intel-analysis）消费。
  * - SPARKOS_EDITORIAL_SCHEDULE=1：周三/周六 20:00 生成编辑策划，等待人工审批。
  * 不自动外发；dispatch 仅手动触发。
  * @module dsh-sparkos/src/schedule
@@ -16,6 +17,33 @@ import { defaultIntelConfig } from './intel/ingest.ts'
 import { runIntelTick } from './intel/tick.ts'
 import { fuseDaily } from './intel/fusion.ts'
 import { runEditorialPlanning } from './factory/service.ts'
+import { buildClusterSkeletons, writeAnalyzeRequest } from './intel/cluster.ts'
+
+/** 定时任务日志（VAULT/system/schedule.log）。 */
+function logSchedule(line: string): void {
+  try {
+    mkdirSync(join(VAULT_ROOT, 'system'), { recursive: true })
+    appendFileSync(join(VAULT_ROOT, 'system', 'schedule.log'), '[' + new Date().toISOString() + '] ' + line + '\n')
+  } catch { /* 日志失败不阻塞调度 */ }
+}
+
+/**
+ * 每日融合 + 生成 T0 分析队列（P4）。
+ *
+ * 关键：**插件不调 LLM**，所以这里只做机械装配与筛选；真正的簇分析由
+ * 10:00 的 launchd agent（com.sparkos.intel-analysis）消费本队列完成。
+ * 09:30 就把 t0 队列准备好，agent 醒来即有有界工作量，不必自己再跑一次 analyze。
+ */
+export function dailyFusionAndQueue(): { items: number; pending: number; t0: number; date: string } {
+  const cfg = defaultIntelConfig()
+  const f = fuseDaily(cfg)
+  logSchedule('daily fusion ok items=' + f.items.length + ' files=' + f.files.join(','))
+  const skeletons = buildClusterSkeletons(f.items, f.dupGroups)
+  const ar = writeAnalyzeRequest(cfg, skeletons)
+  logSchedule('analyze queue ok pending=' + ar.pending + ' t0=' + ar.t0 + ' file=' + ar.file)
+  writeDailyCycle(f.date, true)
+  return { items: f.items.length, pending: ar.pending, t0: ar.t0, date: f.date }
+}
 
 export function editorialScheduleDue(now = new Date()): 'midweek' | 'weekly' | null {
   if (now.getHours() !== 20) return null
@@ -80,34 +108,16 @@ export function registerSchedule(ctx: Context): void {
       const delay = next.getTime() - now.getTime()
       const fusionTimer = setTimeout(() => {
         try {
-          const f = fuseDaily(defaultIntelConfig())
-          mkdirSync(join(VAULT_ROOT, 'system'), { recursive: true })
-          appendFileSync(
-            join(VAULT_ROOT, 'system', 'schedule.log'),
-            `[${new Date().toISOString()}] daily fusion ok items=${f.items.length} files=${f.files.join(',')}\n`,
-          )
-          writeDailyCycle(f.date, true)
+          dailyFusionAndQueue()
         } catch (error) {
-          mkdirSync(join(VAULT_ROOT, 'system'), { recursive: true })
-          appendFileSync(
-            join(VAULT_ROOT, 'system', 'schedule.log'),
-            `[${new Date().toISOString()}] daily fusion FAIL ${error instanceof Error ? error.message : String(error)}\n`,
-          )
+          logSchedule('daily fusion FAIL ' + (error instanceof Error ? error.message : String(error)))
         }
         // 每日循环
         const loop = setInterval(() => {
           try {
-            const f = fuseDaily(defaultIntelConfig())
-            appendFileSync(
-              join(VAULT_ROOT, 'system', 'schedule.log'),
-              `[${new Date().toISOString()}] daily fusion ok items=${f.items.length} files=${f.files.join(',')}\n`,
-            )
-            writeDailyCycle(f.date, true)
+            dailyFusionAndQueue()
           } catch (error) {
-            appendFileSync(
-              join(VAULT_ROOT, 'system', 'schedule.log'),
-              `[${new Date().toISOString()}] daily fusion FAIL ${error instanceof Error ? error.message : String(error)}\n`,
-            )
+            logSchedule('daily fusion FAIL ' + (error instanceof Error ? error.message : String(error)))
           }
         }, 24 * 60 * 60 * 1000)
         loop.unref?.()

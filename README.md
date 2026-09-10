@@ -17,6 +17,17 @@ DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇�
 - 情报层信源（2026-09-10 调整）：`alpha-signal` / `hn`（FeedFuse 快照，按条目展开，**唯一带真实热度的源**）/ `hermes-cn` / `baicaotang`（pending）
   - hermes-cn 闸门 = `categories:['科技创新','财经经济']` **或** `topicsAllow:['人工智能','AI','科技',…]`。去「国际动态」把信噪比 20.6%→33.0%（14 天 160→97 条）；主题门是补漏，实测 14 天仅多救回 5 条
   - `cardRequests`：把「够热（`sourceHeat`≥70）但 0 张知识卡」的主题转成可执行补卡清单（`ops-intel/card-requests-*.json|md`，建议编号如 `obs://056`）。**只出建议，不写星火库**
+- **T0 分析队列 + 定时簇分析（P4）**：插件不调 LLM（红线），所以插件只负责**收窄工作量**，分析交给 agent。
+
+  | 时间 | 谁 | 做什么 |
+  |---|---|---|
+  | 09:30 | 插件（`SPARKOS_INTEL_SCHEDULE=1`） | 融合 → 生成骨架 → 写 `analyze-YYYYMMDD.json`（`pending` 全量 + `t0` 有界） |
+  | 10:00 | launchd `com.sparkos.intel-analysis` | 先查 `t0`：为 0 直接跳过（**不唤 agent、不烧 token**）；>0 才唤起 headless agent 分析 t0 |
+
+  - T0 判据（`t0Candidates`）：跨源（`sourceCount≥2`）或 `sourceHeat ≥ 80`，**跨源优先**，上限 8 条；实测把每日 36 簇收窄成 8 条
+  - `pending` 的排除规则是「**已分析**」而非「已落盘」：骨架先落盘、`topic` 仍空的中间态必须继续排队，否则一次误写骨架就会让该簇永久跳过分析
+  - 安装 / 卸载 / 干跑：`bash launch/install-intel-analysis.sh`、`--uninstall`、`SPARKOS_DRY_RUN=1 bash launch/sparkos-intel-analysis.sh`
+  - 日志：`$VAULT/system/intel-analysis.log`、`$VAULT/system/schedule.log`
 - 多条目馈送的 eventKey 由条目 URL 内容哈希生成 → 同一新闻跨天/跨波次重放自动去重（实测 3094 条原始条目去重后 1257 条）
 - **真实热度模型（P1）**：`FusionItem.heat` = 源注意力信号归一化到 0-100，随 `cluster.sourceHeat` 进入排序。
 

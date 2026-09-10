@@ -279,7 +279,7 @@ export async function runSparkosCommand(args: RunArgs): Promise<{ text: string }
       const f2 = fuseDaily2(cfg)
       const skeletons = buildClusterSkeletons(f2.items, f2.dupGroups)
       const r = writeAnalyzeRequest(cfg, skeletons)
-      lines.push('analyze: 生成 ' + skeletons.length + ' 个情报簇骨架（' + r.pending + ' 待模型分析 → analyze-' + f2.date + '.json）')
+      lines.push('analyze: 生成 ' + skeletons.length + ' 个情报簇骨架（' + r.pending + ' 待分析，其中 T0 候选 ' + r.t0 + ' → analyze-' + f2.date + '.json）')
       if (r.pending > 0) lines.push('  待补字段：topic/topicKey/coreFacts/evidence/judgment/novelty/knowledgeCards/credibility/risks/platforms/angleSuggestions')
     }
     if (payload.clusters === true) {

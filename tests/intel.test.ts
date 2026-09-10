@@ -675,3 +675,53 @@ test('writeCardRequests：写出 json + md，且不触碰星火库', async () =>
     assert.ok(readFileSync(empty.files[1], 'utf8').includes('没有'))
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+// ---------------------------------------------------------------- P4 T0 候选筛选
+// 目的：把每日 30+ 簇收窄成个位数交给 agent，否则「不跑分析 → 全是空骨架 → 进不了创作候选」。
+
+test('t0Candidates：跨源优先、真实热度次之、上限可控', async () => {
+  const { t0Candidates } = await import('../src/intel/cluster.ts')
+  const mk = (id: string, o: Record<string, unknown> = {}) => ({
+    clusterId: id, date: '20260910', topic: '', coreFacts: [], heat: 'low' as const, novelty: 'medium' as const,
+    sourceCount: 1, evidenceUrls: ['https://e.example/' + id], knowledgeCards: [], credibility: 'medium' as const,
+    risks: [], platforms: [], angleSuggestions: [], eventKeys: [id], ...o,
+  })
+  const clusters = [
+    mk('hot1', { sourceHeat: 95 }),
+    mk('hot2', { sourceHeat: 88 }),
+    mk('hot3', { sourceHeat: 82 }),
+    mk('cold', { sourceHeat: 20, heat: 'low' }),          // 不够热、不跨源 → 出局
+    mk('hotLow', { heat: 'high' }),                        // 无 sourceHeat 但 high → 入选
+    mk('cross', { sourceHeat: 30, sourceCount: 2 }),       // 跨源（低热）→ 入选且排最前
+  ]
+  const t0 = t0Candidates(clusters)
+  assert.equal(t0[0].clusterId, 'cross', '跨源必须优先（已具备交叉验证）')
+  assert.deepEqual(t0.slice(1).map((c) => c.clusterId), ['hot1', 'hot2', 'hot3', 'hotLow'])
+  assert.ok(!t0.some((c) => c.clusterId === 'cold'), '低热且单源不得进入 T0')
+  // 上限：把每日分析量收窄成个位数
+  assert.equal(t0Candidates(clusters, { limit: 2 }).length, 2)
+  // 门槛可调
+  assert.ok(t0Candidates(clusters, { minHeat: 90 }).every((c) => c.sourceCount >= 2 || (c.sourceHeat ?? 0) >= 90 || c.heat === 'high'))
+})
+
+test('writeAnalyzeRequest：产物含有界 t0 数组与判据说明（agent 只读 t0 即可）', async () => {
+  const { writeAnalyzeRequest } = await import('../src/intel/cluster.ts')
+  const root = mkdtempSync(join(tmpdir(), 'sparkos-t0-'))
+  try {
+    const cfg = { sources: [], outDir: join(root, 'ops-intel', 'ingest'), runsDir: join(root, 'ops-intel', 'runs'), keepDays: 14 }
+    const mk = (id: string, sourceHeat: number | null, sourceCount = 1) => ({
+      clusterId: id, date: '20260910', topic: '', coreFacts: [], heat: 'medium' as const, novelty: 'medium' as const,
+      sourceCount, evidenceUrls: [], knowledgeCards: [], credibility: 'medium' as const,
+      risks: [], platforms: [], angleSuggestions: [], eventKeys: [id],
+      ...(sourceHeat === null ? {} : { sourceHeat }),
+    })
+    const skeletons = [mk('c-20260910-001', 95), mk('c-20260910-002', 30), mk('c-20260910-003', null, 2)]
+    const r = writeAnalyzeRequest(cfg, skeletons, new Date(2026, 8, 10))
+    assert.equal(r.pending, 3, 'pending 仍是完整清单（向后兼容）')
+    assert.equal(r.t0, 2, 't0 = 高热 1 + 跨源 1')
+    const file = JSON.parse(readFileSync(r.file, 'utf8'))
+    assert.equal(file.t0.length, 2)
+    assert.ok(file.t0Note.includes('T0'), '需说明判据，agent 才知道为何只跑这些')
+    assert.ok(file.instructions.batching.includes('只分析 t0'), 'instructions 必须约束 agent 只跑 t0')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})

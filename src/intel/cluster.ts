@@ -223,13 +223,44 @@ export function saveClusters(cfg: IntelConfig, incoming: IntelCluster[], date: D
   return { file: f, total: out.length }
 }
 
+/** T0 判据常量（与 createExecutor 的 note 共用，避免两处漂移）。 */
+export const T0_MIN_HEAT = 80
+export const T0_LIMIT = 8
+
+/**
+ * T0 候选：值得让模型分析的簇（其余留作机械快讯池，不消耗分析预算）。
+ *
+ * 为什么需要：每日融合常出 30+ 簇，全量交给 agent 分析既贵又慢，结果就是
+ * 「不跑分析 → 簇全是空骨架 → knowledgeDepth=0 → 进不了创作候选」。
+ * 这里把每日分析量收窄到个位数。
+ *
+ * 判据（任一命中）：真实热度 ≥ minHeat；或跨源（sourceCount ≥ 2，已具备交叉验证）。
+ * 排序：跨源优先，其次真实热度降序；上限 limit。
+ */
+export function t0Candidates(
+  clusters: IntelCluster[],
+  opts: { minHeat?: number; limit?: number } = {},
+): IntelCluster[] {
+  const minHeat = opts.minHeat ?? T0_MIN_HEAT
+  const limit = opts.limit ?? T0_LIMIT
+  const crossSource = (c: IntelCluster): number => (c.sourceCount >= 2 ? 1 : 0)
+  return clusters
+    .filter((c) => (typeof c.sourceHeat === 'number' ? c.sourceHeat >= minHeat : c.heat === 'high') || c.sourceCount >= 2)
+    .sort((a, b) => crossSource(b) - crossSource(a) || (b.sourceHeat ?? 0) - (a.sourceHeat ?? 0))
+    .slice(0, limit)
+}
+
 /** 生成待分析骨架文件 analyze-YYYYMMDD.json（供模型分析参考；不覆盖已提交簇）。 */
-export function writeAnalyzeRequest(cfg: IntelConfig, skeletons: IntelCluster[], date = new Date()): { file: string; pending: number } {
+export function writeAnalyzeRequest(cfg: IntelConfig, skeletons: IntelCluster[], date = new Date()): { file: string; pending: number; t0: number } {
   const dir = clustersDir(cfg)
   mkdirSync(dir, { recursive: true })
   const stamp = localDateStamp(date)
   const existing = new Map(loadClusters(cfg, date).map((c) => [c.clusterId, c]))
-  const pending = skeletons.filter((s) => !existing.has(s.clusterId))
+  // 「已落盘」≠「已分析」：骨架先落盘、topic 仍空是常见中间态（analyze 自己就会写骨架）。
+  // 若按 clusterId 存在就排除，这类簇会被永久跳过分析 —— 实测踩到过（pending 变 0 而 36 簇全是空骨架）。
+  const analyzed = (c: IntelCluster | undefined): boolean => c !== undefined && c.topic.trim() !== ''
+  const pending = skeletons.filter((s) => !analyzed(existing.get(s.clusterId)))
+  const t0 = t0Candidates(pending)
   const f = path.join(dir, 'analyze-' + stamp + '.json')
   writeFileSync(f, JSON.stringify({
     date: stamp,
@@ -239,8 +270,12 @@ export function writeAnalyzeRequest(cfg: IntelConfig, skeletons: IntelCluster[],
       evidence: '逐条填写 claim/url/sourceType/independenceGroup/verified/contradicts；转载同稿共用 independenceGroup',
       judgment: '严格分开 confirmedFacts、inferences、editorialView、counterArguments、uncertainties',
       creationGate: '只有证据等级 A（官方/第一方）或 B（至少两个独立可靠来源）可进入创作',
+      batching: '默认**只分析 t0**（插件已按「跨源优先 + 真实热度」筛出的有界候选）；'
+        + 'pending 是完整清单，仅在用户明确要求全量分析时才处理',
     },
+    t0Note: 'T0 = 跨源（sourceCount≥2）或 sourceHeat ≥ ' + T0_MIN_HEAT + '，最多 ' + T0_LIMIT + ' 条，跨源优先。',
     pending,
+    t0,
   }, null, 2) + '\n')
-  return { file: f, pending: pending.length }
+  return { file: f, pending: pending.length, t0: t0.length }
 }

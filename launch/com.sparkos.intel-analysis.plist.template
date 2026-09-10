@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SparkOS 情报簇分析 · launchd 定时（模板）
+
+  安装：bash launch/install-intel-analysis.sh
+  卸载：launchctl bootout gui/$(id -u)/com.sparkos.intel-analysis
+
+  时间线（本地时间）：09:30 插件融合并生成 T0 队列 → 10:00 本任务唤起 agent 做簇分析。
+  故意留 30 分钟间隔，让「融合 + 队列生成」先跑完。
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.sparkos.intel-analysis</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__PLUGIN_ROOT__/launch/sparkos-intel-analysis.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>SPARKOS_PLUGIN_ROOT</key><string>__PLUGIN_ROOT__</string>
+    <key>SPARKOS_VAULT_ROOT</key><string>__VAULT_ROOT__</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>10</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key><string>__VAULT_ROOT__/system/intel-analysis.log</string>
+  <key>StandardErrorPath</key><string>__VAULT_ROOT__/system/intel-analysis.log</string>
+</dict>
+</plist>
