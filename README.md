@@ -59,7 +59,44 @@ DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇�
 - **manual publish 闸门**：`publication_intents` 仅是台账；平台 API 调用为零，发布由人工在对应后台执行
 - 五守卫（48h 窗口 / event_id 去重 / 引用卡存在 / 主线存在 / 建议只读）继续硬执行
 
-## 工作台 UI
+## 每日交付：推送，而不是页面（2026-09-10 决策）
+
+**SparkOS 靠一条推送交付结论，不靠页面。** 用户已经在 Telegram / DSH 会话里工作，
+再维护一个「仪表盘」只会增加一个不去看的界面。
+
+实际推送的样子（286 字，一屏读完，全是结论）：
+
+```
+📋 SparkOS 晨会 · 2026-09-10 周四
+
+今天要发
+· 20:00 → 公众号 🏭《一鱼多吃》（S1E3）；小红书拆条
+⚠️ 系统里没找到对应草稿 —— 这篇要你自己写
+
+雷达捡到 3 条备料
+· OpenAI 宣称用 AI 解决 Navier–Stokes 千禧年难题并发布证明
+· 陶哲轩警告：AI 正在把数学开放问题当「非可再生资源」开采
+· Meta 在美上线个人 AI agent Muse：主打「secure by design」
+
+要动手
+· 数据回流 0 条 —— 周报没原料（跑周报）
+· 补卡 10 张 —— 够热但 0 张知识卡
+```
+
+- 生成器：`src/notify/digest.ts`（纯函数，`buildMorningDigest`），只给结论不给原始材料；
+  标题经 `headline()` 去掉「——同日…（快照 09-09 08:01 首采…）」这类机器尾巴
+- 投递：`scripts/push-digest.mjs`（零第三方依赖）。凭据取自 telegram-bridge 的 `.env` +
+  `sessions.json`，可用 `TELEGRAM_BOT_TOKEN` / `SPARKOS_PUSH_CHAT_ID` / `TELEGRAM_BRIDGE_DIR` 覆盖
+- 时间线：07:30 `com.sparkos.daily` 跑内容循环 → 08:00 `com.sparkos.morning-digest` 推送
+- **不需要 agent**：摘要是确定性代码算出来的，零 token（与 P4 的簇分析不同）
+- 安装 / 卸载 / 干跑：`bash launch/install-morning-digest.sh`、`--uninstall`、
+  `bash launch/sparkos-morning-digest.sh --dry-run`
+- 日志：`$VAULT/system/morning-digest.log`
+
+判断「今天排期有没有对应草稿」用的是保守口径（排期文案与草稿标题的 token 交集），
+匹配不上只能说「**系统里没找到**」——草稿完全可能写在 media-os 里。
+
+## 工作台 UI（详情页，非每日入口）
 
 **SparkOS 只有一个正式工作台。** `/sparkos` 与 `/sparkos/app` 是唯一正式入口，渲染统一模板 `src/server/page.template.html`（M8 起原 V1 与 V2 两套实现已合并为这一份；旧 `page-v2.template.html` 已删除，仅存 Git 历史）。
 

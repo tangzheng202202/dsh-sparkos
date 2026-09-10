@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SparkOS 晨会推送 · launchd 定时（模板）
+
+  安装：bash launch/install-morning-digest.sh
+  卸载：launchctl bootout gui/$(id -u)/com.sparkos.morning-digest
+
+  时线（本地时间）：07:30 com.sparkos.daily 跑内容循环 → 08:00 本任务把结论推到 Telegram。
+  不需要 agent：摘要由确定性代码生成，零 token。
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.sparkos.morning-digest</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__PLUGIN_ROOT__/launch/sparkos-morning-digest.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>SPARKOS_PLUGIN_ROOT</key><string>__PLUGIN_ROOT__</string>
+    <key>SPARKOS_VAULT_ROOT</key><string>__VAULT_ROOT__</string>
+    <key>TELEGRAM_BRIDGE_DIR</key><string>__BRIDGE_DIR__</string>
+    <key>PATH</key><string>/Users/mac/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>8</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key><string>__VAULT_ROOT__/system/morning-digest.log</string>
+  <key>StandardErrorPath</key><string>__VAULT_ROOT__/system/morning-digest.log</string>
+</dict>
+</plist>

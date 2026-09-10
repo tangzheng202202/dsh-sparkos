@@ -587,7 +587,7 @@
     $('today-date').textContent = dateStr || '—'
     if (dateStr) {
       var dt = new Date(dateStr + 'T00:00:00')
-      if (!isNaN(dt.getTime())) $('today-week').textContent = '周' + WEEK[dt.getDay()] + ' · 每天 3 分钟：今天发什么 · 写什么 · 动什么'
+      if (!isNaN(dt.getTime())) $('today-week').textContent = '周' + WEEK[dt.getDay()] + ' · 每日结论已推送到 Telegram，这里是详情页'
     }
     var row = []
     var met = mo.metrics || {}
