@@ -33,6 +33,15 @@ export const RUNTIME_DISTILL_QUEUE = envPath('SPARKOS_RUNTIME_DISTILL_QUEUE', pa
 /** 运行时事件账本（skill 的 validate_daily.py --commit 写这里）。 */
 export const RUNTIME_EVENTS = envPath('SPARKOS_RUNTIME_EVENTS', path.join(CONTENTOS_ROOT, 'archive', 'events.jsonl'))
 
+/**
+ * 编辑侧内容 OS（New City 13）：选题池 / 30 天排期 / 数据主表。
+ *
+ * 这是用户真正工作的地方，与 CONTENTOS_ROOT（每日循环引擎）是两套资产。
+ * 简报台需要它才能回答「今天该发什么」——**全程只读**，任何写入仍由人工执行。
+ * 具体文件路径由 `src/server/mediaos.ts` 从本根目录派生。
+ */
+export const MEDIA_OS_ROOT = envPath('SPARKOS_MEDIA_OS_ROOT', path.join(homedir(), 'DeepSeek harness', 'media-os'))
+
 /** 首次迁移的种子资产：运行时资产（若存在）优先，缺失回退包内 seeds/（干净环境可独立初始化）。 */
 const MIGRATION: ReadonlyArray<{ runtime: string; seed: string; dest: string; note: string }> = [
   { runtime: path.join(CONTENTOS_ROOT, 'config', 'narrative_lines.json'), seed: 'narrative_lines.json', dest: 'config/narrative_lines.json', note: '叙事主线' },

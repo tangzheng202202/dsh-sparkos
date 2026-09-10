@@ -13,7 +13,22 @@ DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇�
 - `sources` 信息源注册表 + intel 健康快照（只读）
 - `publish` 发布表现聚合（只读）
 - `advise` 系统建议（只读，守卫⑤）
-- `intel` 情报指挥所：ingest/health、`fusion` 日频融合、`analyze`/`submitCluster` 情报簇、`rank` 每日 Top5、`jobs` 任务状态、`dispatch` 下发建议
+- `intel` 情报指挥所：ingest/health、`fusion` 日频融合、`analyze`/`submitCluster` 情报簇、`cardRequests` 补卡清单、`rank` 每日 Top5、`jobs` 任务状态、`dispatch` 下发建议
+- 情报层信源（2026-09-10 调整）：`alpha-signal` / `hn`（FeedFuse 快照，按条目展开，**唯一带真实热度的源**）/ `hermes-cn` / `baicaotang`（pending）
+  - hermes-cn 闸门 = `categories:['科技创新','财经经济']` **或** `topicsAllow:['人工智能','AI','科技',…]`。去「国际动态」把信噪比 20.6%→33.0%（14 天 160→97 条）；主题门是补漏，实测 14 天仅多救回 5 条
+  - `cardRequests`：把「够热（`sourceHeat`≥70）但 0 张知识卡」的主题转成可执行补卡清单（`ops-intel/card-requests-*.json|md`，建议编号如 `obs://056`）。**只出建议，不写星火库**
+- 多条目馈送的 eventKey 由条目 URL 内容哈希生成 → 同一新闻跨天/跨波次重放自动去重（实测 3094 条原始条目去重后 1257 条）
+- **真实热度模型（P1）**：`FusionItem.heat` = 源注意力信号归一化到 0-100，随 `cluster.sourceHeat` 进入排序。
+
+  | 源 | 热度来源 | 映射 |
+  |---|---|---|
+  | hn / hackernews | HN points（实测 1~1431，中位 105） | 对数 → 0-100（1→10, 112→67, 544→89, 1162→100） |
+  | hn / github | 累计 star（35k~1M）**不是今日热度** | 固定 55（仅「登上 trending」的中等信号） |
+  | hermes-cn | **不用 `item.heat`**（实测与 breaking/strong 不相关） | strong+breaking 70 / strong 60 / breaking 45 / 其他 25 |
+  | alpha-signal | 无热度字段 | `null`（不提供，而非 0） |
+
+  `cluster.heat` = 成员最高真实热度分档（≥70 high / ≥45 medium），多条同主题与跨源各升一级。
+  `ranking` 的 `heatScore` 以 `attention`（= `sourceHeat ?? heat 档位`）占 0.25 权重——**此前该项完全缺失**。
 - `dryRun=true`：全部 8 个子命令零写入（不初始化 VAULT、不打开 SQLite、不改任何文件 mtime），只返回"将执行动作 + 参数校验结果"；写调用不再声明并发安全
 
 ### 内容工厂里程碑（当前能力）
@@ -39,11 +54,30 @@ DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇�
 
 - `/sparkos/app-v2`：**仅为过渡期兼容别名**，渲染与正式入口完全相同的统一模板，不是第二套实现
 - 安全序列化（`< > & U+2028 U+2029` 全转义）、每请求 CSP nonce、页面内嵌 CSRF token；全部 mutation POST 走统一 `apiFetch`（application/json + CSRF 头）
-- 统一九视图：总览（日报摘要/建议）、情报（Top5/簇/叙事线/时间线搜索/融合/下发/归档）、选题（must_reads 采纳/忽略 + 编辑策划审批）、创作（工厂草稿审批/修订 + 运行时草稿）、审核（收件箱/蒸馏/待写回）、视觉（审核/受控重试）、发布（delivery 台账，**不执行平台发布**）、增长、系统（来源注册表/健康）
 
-### 统一工作台受控写端点
+### 简报台（brief 模式，默认）
 
-统一工作台在只读渲染之外，提供以下受控 POST（全部经服务端安全边界：Content-Type 校验、Origin 同源校验、CSRF token；M7/M8 起原 V1 独有能力已全部并入）：
+2026-09-10 重定位：**从「系统的仪表盘」改成「我的晨会面板」**。旧版把 8,000+ 字的引擎日志和 24 篇历史草稿铺满首屏，而每日循环真正产出的草稿（带 hook、角度、引用卡）一条都没渲染。现在首屏只回答三个问题，长文本全部折叠：
+
+| 面板 | 回答什么 | 数据来源 |
+|---|---|---|
+| 01 今天该发什么 | 排期表里今天要发什么 | `media-os/01-content/30天排期.md`（**只读**） |
+| 02 今天可以写什么 | 今日循环产出的 hook 级草稿 + 引用卡 | `daily_data_*.json` 的 `drafts` / `citations` |
+| 03 底层必读事件 | 今日判定事件（采纳/忽略写决策账本） | `daily_data_*.json` 的 `must_reads` |
+| 04 需要你动手 | 数据回流 / 蒸馏积压 / 待写回 / 补卡 | media-os metrics + VAULT 队列 |
+| 05 今天哪条线在升温 | 叙事主线 heating/stable/cooling | `daily_data_*.json` 的 `line_updates` |
+| 06 水位 | 情报簇 / 带卡数 / 融合 / 数据回流 | `/sparkos/intel` 汇总 |
+
+- 折叠抽屉：**原始简报全文**、**系统建议（守卫⑤）**、**引擎明细**（历史草稿 / 蒸馏 / 待写回）——正常不需要展开
+- 视觉：media-os「New City 13」工程蓝图色板（`#0B2545` / `#E0FBFC` / `#3BF4FB` / `#FFB703`）
+- **出口**：「取用这篇」只复制一行可粘贴进 `选题池.md` 的 Markdown（**media-os 对插件永久只读，零写盘**）；发布动作永远由人在平台后台执行
+- 简报台与 `mode=full` 的九视图工厂模板并存：后者仍只在显式开启时可达
+
+### 统一工作台受控写端点（仅 mode=full）
+
+工厂模板（`factory.template.html`）承载统一九视图：总览（日报摘要/建议）、情报（Top5/簇/叙事线/时间线搜索/融合/下发/归档）、选题（must_reads 采纳/忽略 + 编辑策划审批）、创作（工厂草稿审批/修订 + 运行时草稿）、审核（收件箱/蒸馏/待写回）、视觉（审核/受控重试）、发布（delivery 台账，**不执行平台发布**）、增长、系统（来源注册表/健康）。
+
+它在只读渲染之外，提供以下受控 POST（全部经服务端安全边界：Content-Type 校验、Origin 同源校验、CSRF token；M7/M8 起原 V1 独有能力已全部并入）：
 
 - `POST /sparkos/editorial/decision` 选题卡人工审批（批准/驳回，驳回必填意见）
 - `POST /sparkos/creation/decision` 草稿包人工审批
@@ -89,9 +123,11 @@ sparkos_run {action:"brief"}    # 今日简报
 | `SPARKOS_VAULT_ROOT` | `~/DeepSeek harness/sparkos` | 插件数据区（决策/intel/守卫账本/产物/交付） |
 | `SPARKOS_DB_PATH` | `$SPARKOS_VAULT_ROOT/data/sparkos.db` | 内容工厂 SQLite 状态库（schema v7） |
 | `SPARKOS_CONTENTOS_ROOT` | `~/cow/projects/contentos-x` | 每日工作流运行时根（只读） |
+| `SPARKOS_MEDIA_OS_ROOT` | `~/DeepSeek harness/media-os` | 编辑侧内容 OS（只读：30 天排期 / metrics.csv / 选题池）。缺失时简报台降级但不报错 |
 | `SPARKOS_DAILY_BRIEF_DIR` | `$CONTENTOS_ROOT/daily_brief` | daily_data / daily_briefing / drafts |
 | `SPARKOS_KNOWLEDGE_ROOT` | `~/cow/knowledge` | 星火知识库（只读，G3 引用卡校验） |
 | `SPARKOS_ALPHA_ARCHIVE` / `SPARKOS_HERMES_ARCHIVE` / `SPARKOS_BAICAOTANG_ARCHIVE` | `~/.openclaw/...` / `~/.hermes/...` / null | intel 三源 archive 目录 |
+| `SPARKOS_HN_ARCHIVE` | `$SPARKOS_KNOWLEDGE_ROOT/sources/raw` | FeedFuse/HN 每日快照目录（只取 `tech-ai-*.json`，按条目展开；条目自带真实热度 `score`） |
 | `SPARKOS_SCHEDULE` / `SPARKOS_INTEL_SCHEDULE` / `SPARKOS_EDITORIAL_SCHEDULE` | `0` | 定时任务开关（默认全关，均不自动外发） |
 
 其余 env（`SPARKOS_PERF_DIR` / `SPARKOS_RUNTIME_DISTILL_QUEUE` / `SPARKOS_RUNTIME_EVENTS` / `SPARKOS_TIMELINE_DATA`）见 `src/vault.ts`。

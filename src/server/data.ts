@@ -30,6 +30,10 @@ import {
 import type { DailyData, DistillEntry, DraftFile, InfoSources, PerfSummary } from '../daily.ts'
 import { buildFactorySnapshot } from '../factory/service.ts'
 import type { FactorySnapshot } from '../factory/service.ts'
+import { buildMediaOsSnapshot } from './mediaos.ts'
+import type { MediaOsSnapshot } from './mediaos.ts'
+import { buildCardRequests } from '../intel/cards.ts'
+import type { CardRequest } from '../intel/cards.ts'
 
 function readJsonIf<T>(file: string, fallback: T): T {
   try {
@@ -77,8 +81,15 @@ export interface WorkbenchData {
   dispatch: DispatchPreferences | null
   /** 最新情报簇（模型分析产物）。 */
   clusters: { date: string | null; items: IntelCluster[] }
+  /**
+   * 补卡清单：热度够但没有知识卡的主题（P3）。
+   * 只出建议不写星火库——星火库对插件永久只读。
+   */
+  cardRequests: CardRequest[]
   /** SQLite factory state + explainable daily ranking. */
   factory: FactorySnapshot
+  /** 编辑侧 media-os 只读快照（排期 / 数据主表 / 选题池）——简报台据此回答「今天该发什么」。 */
+  mediaOs: MediaOsSnapshot
 }
 
 /** 蒸馏条目（合并队列）。 */
@@ -173,6 +184,12 @@ export function buildWorkbenchData(): WorkbenchData {
     .filter((d, i, arr) => arr.findIndex((x) => x.file === d.file) === i)
     .sort((a, b) => b.mtime - a.mtime)
 
+  // 情报簇 + 融合：两者都供补卡清单使用（骨架无 topic → 用融合标题兜底）
+  const fusion = latestFusion()
+  const lc = latestClusters(defaultIntelConfig())
+  const clustersSnapshot = lc ? { date: lc.date, items: lc.clusters } : { date: null as string | null, items: [] }
+  const cardRequestTitles = new Map((fusion?.items ?? []).map((i) => [i.eventKey, i.title]))
+
   return {
     generatedAt: new Date().toISOString(),
     vaultRoot: VAULT_ROOT,
@@ -195,11 +212,14 @@ export function buildWorkbenchData(): WorkbenchData {
     runtimeDrafts: runtimeDrafts.map(({ file, path, platform, preview, bytes }) => ({ file, path, platform, preview, bytes })),
     perf: listPerf(),
     infoSources: infoSources(),
-    fusion: latestFusion(),
+    fusion,
     dispatch: latestDispatch(),
-    clusters: (() => { const lc = latestClusters(defaultIntelConfig()); return lc ? { date: lc.date, items: lc.clusters } : { date: null, items: [] } })(),
+    clusters: clustersSnapshot,
+    cardRequests: buildCardRequests(clustersSnapshot.items, { titles: cardRequestTitles }),
     factory: buildFactorySnapshot(),
     dailyCycle: buildDailyCycle(),
+    // 编辑侧只读：排期/数据主表/选题池。today 取自每日产物日期，缺失时退回宿主当天。
+    mediaOs: buildMediaOsSnapshot(dailyData?.date ?? new Date().toISOString().slice(0, 10)),
   }
 }
 

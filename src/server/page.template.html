@@ -5,104 +5,256 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SparkOS 简报台</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2733; --muted:#67788c; --line:#e3e8ee; --blue:#2563eb; --green:#16a34a; --gray:#9aa7b5; --red:#dc2626; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 20px 60px; }
-  header.top { display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; justify-content:space-between; margin-bottom:18px; }
-  header.top h1 { font-size:22px; margin:0; }
-  header.top .sub { color:var(--muted); font-size:13px; }
-  .banner { background:#eef4ff; border:1px solid #c7dbff; border-radius:10px; padding:10px 14px; font-size:13px; color:#1e40af; margin-bottom:18px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:18px; }
-  .card h2 { font-size:16px; margin:0 0 12px; display:flex; gap:10px; align-items:baseline; }
-  .card h2 .count { color:var(--muted); font-size:13px; font-weight:normal; }
-  .status-row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:4px; }
-  .pill { background:#f1f5f9; border-radius:999px; padding:4px 12px; font-size:13px; color:var(--muted); }
-  .pill.ok { background:#e9f9ef; color:var(--green); }
-  .pill.warn { background:#fff4e5; color:#b45309; }
-  .pill.bad { background:#fdecec; color:var(--red); }
-  .mr-item { border-top:1px solid var(--line); padding:12px 0; }
+  /* 视觉：media-os「New City 13」工程蓝图色板（深海蓝底 / 图纸白 / 信号青 / 琥珀警示） */
+  :root { --bg:#0B2545; --panel:#0F2E56; --panel2:#123461; --line:rgba(224,251,252,.14);
+    --ink:#E0FBFC; --muted:rgba(224,251,252,.58); --accent:#3BF4FB; --warn:#FFB703;
+    --ok:#4ADE80; --bad:#FF6B6B;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background-image:
+      linear-gradient(rgba(224,251,252,.045) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(224,251,252,.045) 1px,transparent 1px);
+    background-size:26px 26px; }
+  .wrap { max-width:1180px; margin:0 auto; padding:26px 22px 70px; }
+
+  header.top { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;
+    justify-content:space-between; padding-bottom:16px; border-bottom:1px solid var(--line); }
+  .brand { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  .brand h1 { font-size:23px; margin:0; letter-spacing:.5px; }
+  .brand .tag { font-family:var(--mono); font-size:11px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--accent); border:1px solid rgba(59,244,251,.4);
+    border-radius:3px; padding:2px 7px; }
+  .datestamp { text-align:right; }
+  .datestamp .d { font-size:26px; font-weight:600; font-family:var(--mono); letter-spacing:1px; }
+  .datestamp .w { color:var(--muted); font-size:13px; }
+
+  .strip { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 22px; }
+  .chip { font-family:var(--mono); font-size:12px; border:1px solid var(--line);
+    border-radius:999px; padding:4px 12px; color:var(--muted); background:rgba(255,255,255,.02); }
+  .chip.ok { color:var(--ok); border-color:rgba(74,222,128,.35); }
+  .chip.warn { color:var(--warn); border-color:rgba(255,183,3,.4); background:rgba(255,183,3,.07); }
+  .chip.bad { color:var(--bad); border-color:rgba(255,107,107,.42); background:rgba(255,107,107,.08); }
+  .chip.acc { color:var(--accent); border-color:rgba(59,244,251,.4); }
+
+  .grid { display:grid; grid-template-columns:minmax(0,1.72fr) minmax(0,1fr); gap:20px; align-items:start; }
+  @media (max-width:940px) { .grid { grid-template-columns:1fr; } }
+  .col { display:flex; flex-direction:column; gap:20px; min-width:0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:18px 20px; min-width:0; }
+  .card > h2 { font-size:15px; margin:0 0 4px; display:flex; align-items:center; gap:9px; }
+  .card > h2 .num { font-family:var(--mono); font-size:12px; color:var(--accent); }
+  .card > h2 .count { color:var(--muted); font-size:12px; font-weight:normal; margin-left:auto;
+    font-family:var(--mono); }
+  .card > .hint { color:var(--muted); font-size:12.5px; margin:0 0 14px; }
+
+  ul.sched { list-style:none; margin:0; padding:0; }
+  ul.sched li { display:flex; gap:12px; align-items:flex-start; padding:10px 0;
+    border-top:1px dashed var(--line); }
+  ul.sched li:first-child { border-top:none; }
+  ul.sched .t { flex:0 0 auto; font-family:var(--mono); font-size:12px; color:var(--accent);
+    border:1px solid rgba(59,244,251,.35); border-radius:4px; padding:2px 8px; white-space:nowrap; }
+  ul.sched .a { flex:1 1 auto; }
+  .sched-note { margin:10px 0 0; font-size:12.5px; color:var(--warn); }
+
+  .draft { border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:8px; padding:14px 16px; margin-bottom:12px; background:var(--panel2); }
+  .draft:last-child { margin-bottom:0; }
+  .draft-h { display:flex; gap:10px; align-items:baseline; }
+  .draft-h h3 { font-size:15.5px; margin:0; line-height:1.5; }
+  .badge { flex:0 0 auto; font-size:11px; font-family:var(--mono); border-radius:4px;
+    padding:2px 8px; background:rgba(59,244,251,.14); color:var(--accent); }
+  .badge.xhs { background:rgba(255,183,3,.15); color:var(--warn); }
+  .badge.x { background:rgba(224,251,252,.1); color:var(--muted); }
+  .angle { color:var(--muted); font-size:13.5px; margin:8px 0 10px;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .cards-line { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12px;
+    color:var(--muted); margin-bottom:12px; }
+  .cards-line .lbl { font-family:var(--mono); font-size:11px; letter-spacing:.1em; }
+  .cards-line code { font-family:var(--mono); font-size:11.5px; color:var(--ink);
+    background:rgba(224,251,252,.08); border-radius:4px; padding:2px 7px; }
+  .acts { display:flex; gap:8px; flex-wrap:wrap; }
+
+  .btn { font:inherit; font-size:13px; border-radius:7px; padding:6px 14px; cursor:pointer;
+    border:1px solid var(--line); background:transparent; color:var(--ink); transition:.15s; }
+  .btn:hover { border-color:var(--accent); color:var(--accent); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06283D; font-weight:600; }
+  .btn.primary:hover { filter:brightness(1.1); color:#06283D; }
+  .btn.ghost { color:var(--accent); border-color:rgba(59,244,251,.45); }
+  .btn.quiet { color:var(--muted); }
+  .btn.tiny { font-size:12px; padding:4px 11px; flex:0 0 auto; }
+  .btn[disabled] { opacity:.45; cursor:default; }
+
+  ul.todo { list-style:none; margin:0; padding:0; }
+  ul.todo li { display:flex; gap:12px; align-items:center; justify-content:space-between;
+    padding:11px 0; border-top:1px dashed var(--line); }
+  ul.todo li:first-child { border-top:none; }
+  ul.todo strong { display:block; font-size:13.5px; font-weight:600; }
+  ul.todo .sub { color:var(--muted); font-size:12.5px; }
+
+  ul.lines { list-style:none; margin:0; padding:0; }
+  ul.lines li { display:flex; gap:10px; align-items:baseline; padding:8px 0;
+    border-top:1px dashed var(--line); font-size:13.5px; }
+  ul.lines li:first-child { border-top:none; }
+  .dot { width:7px; height:7px; border-radius:50%; flex:0 0 auto; margin-top:6px; background:var(--muted); }
+  .dot.heating { background:var(--warn); box-shadow:0 0 0 3px rgba(255,183,3,.16); }
+  .dot.stable { background:var(--accent); }
+  .dot.cooling { background:rgba(224,251,252,.3); }
+  ul.lines .nm { flex:1 1 auto; min-width:0; }
+  ul.lines .meta { color:var(--muted); font-size:12px; font-family:var(--mono); white-space:nowrap; }
+
+  .meters { display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:12px; }
+  .meter { background:rgba(224,251,252,.04); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .meter .v { font-size:22px; font-weight:600; font-family:var(--mono); line-height:1.2; }
+  .meter .v.warn { color:var(--warn); }
+  .meter .k { color:var(--muted); font-size:12px; }
+
+  .mr-item { border-top:1px dashed var(--line); padding:10px 0; }
   .mr-item:first-of-type { border-top:none; }
-  .mr-title { font-weight:600; }
-  .mr-meta { color:var(--muted); font-size:13px; margin-top:2px; }
-  .draft-item { display:flex; flex-wrap:wrap; gap:8px; align-items:center; border-top:1px solid var(--line); padding:10px 0; }
-  .draft-item:first-of-type { border-top:none; }
-  .draft-name { font-weight:600; font-size:14px; word-break:break-all; }
-  .draft-preview { color:var(--muted); font-size:13px; flex:1 1 260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .draft-full { display:none; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:12px; margin:8px 0; white-space:pre-wrap; font-size:13px; max-height:420px; overflow:auto; }
-  .draft-full.open { display:block; }
-  button.btn { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:8px; padding:5px 12px; font-size:13px; cursor:pointer; }
-  button.btn:hover { border-color:var(--blue); color:var(--blue); }
-  button.btn.primary { background:var(--blue); border-color:var(--blue); color:#fff; }
-  button.btn.subtle { color:var(--muted); }
-  .briefing-text { white-space:pre-wrap; font-size:14px; max-height:520px; overflow:auto; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:14px; }
-  .distill-item { border-top:1px solid var(--line); padding:12px 0; }
-  .distill-item:first-of-type { border-top:none; }
-  .distill-summary { font-size:14px; }
-  .distill-meta { color:var(--muted); font-size:13px; margin:2px 0 8px; }
-  .wb-item { border-top:1px solid var(--line); padding:12px 0; }
+  .mr-title { font-size:13.5px; }
+  .mr-title code { font-family:var(--mono); font-size:12px; color:var(--accent);
+    background:rgba(59,244,251,.1); border-radius:4px; padding:1px 6px; margin-right:4px; }
+  .mr-meta { color:var(--muted); font-size:12.5px; margin-top:2px; font-family:var(--mono); word-break:break-all; }
+
+  details { border:1px solid var(--line); border-radius:8px; margin-top:20px; background:rgba(224,251,252,.02); }
+  details > summary { cursor:pointer; padding:12px 18px; font-size:13.5px; color:var(--muted);
+    list-style:none; display:flex; justify-content:space-between; gap:12px; }
+  details > summary::-webkit-details-marker { display:none; }
+  details > summary:hover { color:var(--accent); }
+  details[open] > summary { border-bottom:1px solid var(--line); color:var(--ink); }
+  details .body { padding:16px 18px; }
+  pre.log { white-space:pre-wrap; font-size:12.5px; line-height:1.85; color:var(--muted);
+    max-height:420px; overflow:auto; margin:0; font-family:var(--mono); }
+  ul.sugg { margin:0; padding-left:18px; color:var(--muted); font-size:13px; }
+  ul.sugg li { margin-bottom:8px; }
+  ul.sugg code, .empty code { font-family:var(--mono); color:var(--ink); }
+
+  .rt-item { display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    border-top:1px dashed var(--line); padding:9px 0; }
+  .rt-item:first-of-type { border-top:none; }
+  .rt-name { font-weight:600; font-size:13px; word-break:break-all; }
+  .rt-preview { color:var(--muted); font-size:12.5px; flex:1 1 220px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  .rt-full { display:none; background:rgba(0,0,0,.22); border:1px solid var(--line); border-radius:8px;
+    padding:12px; margin:8px 0; white-space:pre-wrap; font-size:12.5px; max-height:360px;
+    overflow:auto; width:100%; font-family:var(--mono); }
+  .rt-full.open { display:block; }
+
+  .wb-item { border-top:1px dashed var(--line); padding:11px 0; }
   .wb-item:first-of-type { border-top:none; }
-  .wb-target { font-size:13px; color:var(--muted); }
-  .wb-content { display:none; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:12px; margin:8px 0; white-space:pre-wrap; font-size:13px; max-height:360px; overflow:auto; }
+  .wb-name { font-weight:600; font-size:13.5px; word-break:break-all; }
+  .wb-target { font-size:12.5px; color:var(--muted); }
+  .wb-content { display:none; background:rgba(0,0,0,.22); border:1px solid var(--line); border-radius:8px;
+    padding:12px; margin:8px 0; white-space:pre-wrap; font-size:12.5px; max-height:320px;
+    overflow:auto; font-family:var(--mono); }
   .wb-content.open { display:block; }
-  .empty { color:var(--muted); font-size:14px; }
-  .toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:#1c2733; color:#fff; border-radius:8px; padding:8px 16px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }
-  .toast.show { opacity:.95; }
-  .toast.err { background:var(--red); }
-  .decided { color:var(--muted); font-size:13px; }
-  footer.note { color:var(--muted); font-size:12.5px; margin-top:26px; line-height:1.8; }
-  .spin { display:inline-block; animation:sp 1s linear infinite; }
-  @keyframes sp { to { transform:rotate(360deg); } }
+
+  .empty { color:var(--muted); font-size:13.5px; }
+  .toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:#06283D;
+    color:var(--ink); border:1px solid var(--accent); border-radius:8px; padding:9px 18px;
+    font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:9; }
+  .toast.show { opacity:1; }
+  .toast.err { border-color:var(--bad); color:#FFD9D9; }
+  .decided { color:var(--muted); font-size:12.5px; font-family:var(--mono); }
+
+  footer.note { margin-top:26px; padding-top:16px; border-top:1px solid var(--line);
+    color:var(--muted); font-size:12px; line-height:1.9; }
+  footer.note b { color:var(--ink); font-weight:600; }
+  footer.note code { font-family:var(--mono); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
-    <div>
+    <div class="brand">
       <h1>SparkOS 简报台</h1>
-      <div class="sub">AI 编辑部 · 每日情报简报 + 草稿产出（只读工作台）</div>
+      <span class="tag">今日晨会</span>
     </div>
-    <div class="sub" id="gen-at"></div>
+    <div class="datestamp">
+      <div class="d" id="today-date">—</div>
+      <div class="w" id="today-week">每天 3 分钟：今天发什么 · 写什么 · 动什么</div>
+    </div>
   </header>
 
-  <div class="banner" id="mode-banner">
-    工厂受控管线（选题审批 / 草稿包 / 视觉审核 / 交付 / 发布台账）已停用：编辑与发布请使用既有 media-os 工作流（选题雷达 / 一鱼多吃）。
-    本页仅保留每日简报、运行时草稿与蒸馏队列的查看与轻量操作。
+  <div class="strip" id="status-row"></div>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card">
+        <h2><span class="num">01</span>今天该发什么</h2>
+        <p class="hint" id="sched-hint">来自 media-os 30 天排期表，按今天日期自动对齐。</p>
+        <ul class="sched" id="schedule"></ul>
+        <p class="sched-note" id="sched-note" style="display:none"></p>
+      </section>
+
+      <section class="card">
+        <h2><span class="num">02</span>今天可以写什么<span class="count" id="draft-count"></span></h2>
+        <p class="hint">每日循环已产出的 hook 级草稿，带引用卡，可直接进创作。</p>
+        <div id="drafts"></div>
+      </section>
+
+      <section class="card">
+        <h2><span class="num">03</span>底层必读事件<span class="count" id="mr-count"></span></h2>
+        <p class="hint">今日循环判定的事件。采纳/忽略写入决策账本（供去重），不触碰星火库。</p>
+        <div id="must-reads"></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card">
+        <h2><span class="num">04</span>需要你动手</h2>
+        <p class="hint">系统做不了、只能人做的几件事。</p>
+        <ul class="todo" id="todo"></ul>
+      </section>
+
+      <section class="card">
+        <h2><span class="num">05</span>今天哪条线在升温</h2>
+        <p class="hint">叙事主线状态，决定本周题材配比。</p>
+        <ul class="lines" id="lines"></ul>
+      </section>
+
+      <section class="card">
+        <h2><span class="num">06</span>水位</h2>
+        <p class="hint">低于阈值才需要看，正常时不用管。</p>
+        <div class="meters" id="meters"></div>
+      </section>
+    </div>
   </div>
 
-  <div class="card">
-    <h2>今日状态</h2>
-    <div class="status-row" id="status-row"></div>
-  </div>
+  <details>
+    <summary><span>原始简报全文</span><span id="briefing-len"></span></summary>
+    <div class="body"><pre class="log" id="briefing-text">今日简报尚未生成。</pre></div>
+  </details>
 
-  <div class="card">
-    <h2>每日简报 <span class="count" id="briefing-date"></span></h2>
-    <div class="briefing-text" id="briefing-text">今日简报尚未生成（每日 07:30 自动生成）。</div>
-  </div>
+  <details>
+    <summary><span>系统建议（只读 · 守卫⑤）</span><span id="sugg-count"></span></summary>
+    <div class="body"><ul class="sugg" id="suggestions"></ul></div>
+  </details>
 
-  <div class="card">
-    <h2>当日必读 <span class="count" id="mr-count"></span></h2>
-    <div id="must-reads"></div>
-  </div>
+  <details>
+    <summary><span>补卡清单（够热但 0 张知识卡）</span><span id="cards-count"></span></summary>
+    <div class="body">
+      <p class="hint" style="margin-top:0">补 1 张卡即可让该主题具备论证层（knowledgeDepth 由此而来）。
+        星火知识库对插件<b>永久只读</b>——以下是建议，确认后再自行建卡。</p>
+      <div id="card-requests"></div>
+    </div>
+  </details>
 
-  <div class="card">
-    <h2>运行时草稿 <span class="count" id="draft-count"></span>（只读 · 可复制全文）</h2>
-    <div id="drafts"></div>
-  </div>
-
-  <div class="card">
-    <h2>蒸馏队列 <span class="count" id="distill-count"></span>（采纳 / 忽略）</h2>
-    <div id="distill"></div>
-  </div>
-
-  <div class="card">
-    <h2>待写回星火库 <span class="count" id="wb-count"></span>（复制后人工写回，再移除）</h2>
-    <div id="writeback"></div>
-  </div>
+  <details>
+    <summary><span>引擎明细（历史草稿 / 蒸馏 / 待写回）</span><span id="engine-count"></span></summary>
+    <div class="body">
+      <div id="runtime-drafts"></div>
+      <div id="distill" style="margin-top:14px"></div>
+      <div id="writeback" style="margin-top:14px"></div>
+    </div>
+  </details>
 
   <footer class="note">
-    简报台说明：必读采纳/忽略与蒸馏采纳/忽略会写入 VAULT 决策账本（供每日循环去重），不触碰星火库。
-    工厂端点（editorial/creation/visual/publish）已返回 410；如需临时恢复，在 VAULT config/workbench_mode.json 写入 {"mode":"full"} 并重启宿主。
+    <b>这一页只做三件事</b>：告诉你今天该发什么（读 media-os 排期）、今天能写什么（读每日循环草稿）、今天该动什么（队列与水位）。
+    原始简报、系统建议与引擎明细已折叠，正常不需要展开。<br>
+    只读边界：media-os（排期 / 数据主表 / 选题池）对插件<b>永久只读</b>——「取用这篇」只复制一行 Markdown，
+    由你粘贴进 <code>选题池.md</code>。星火库同理，写回仅经蒸馏审核 + 人工复制。发布动作永远由人在平台后台执行。
   </footer>
 </div>
 <div class="toast" id="toast"></div>
@@ -118,147 +270,441 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     })
   }
-  function fmtBytes(n) {
-    if (n == null) return ''
-    if (n < 1024) return n + ' B'
-    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
-    return (n / 1024 / 1024).toFixed(1) + ' MB'
-  }
   function toast(msg, isErr) {
     var t = $('toast')
     t.textContent = msg
     t.className = 'toast show' + (isErr ? ' err' : '')
-    setTimeout(function () { t.className = 'toast' }, 2200)
+    setTimeout(function () { t.className = 'toast' }, 2400)
   }
   function apiFetch(url, opts) {
     opts = opts || {}
-    opts.headers = Object.assign({ 'content-type': 'application/json', 'x-sparkos-csrf': (window._sparkosCsrf || '') }, opts.headers || {})
+    opts.headers = Object.assign(
+      { 'content-type': 'application/json', 'x-sparkos-csrf': (window._sparkosCsrf || '') },
+      opts.headers || {}
+    )
     return fetch(url, opts)
   }
-  // 已有决策（kind=topic 对应必读 event_id；kind=distill 对应蒸馏 file）
+  function jsonOrThrow(r) {
+    if (!r.ok) {
+      return r.json().then(function (j) {
+        throw new Error((j && j.error && j.error.message) || ('HTTP ' + r.status))
+      })
+    }
+    return r.json()
+  }
+  function copyText(text, okMsg) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { toast(okMsg) })
+    }
+    toast('浏览器不支持自动复制，请手动选择文本', true)
+  }
+  function reload() {
+    return fetch('/sparkos/data').then(function (r) { return r.json() }).then(function (j) {
+      data = j.value
+      renderAll()
+    })
+  }
+
+  var WEEK = ['日', '一', '二', '三', '四', '五', '六']
+
+  function daily() { return data.daily || {} }
+  function dailyData() { return (data.daily && data.daily.data) || {} }
+  function mediaOs() { return data.mediaOs || {} }
   function decidedMap(kind) {
     var map = {}
     ;(data.decisions || []).forEach(function (d) { if (d.kind === kind) map[d.id] = d.action })
     return map
   }
+  function lineName(id) {
+    var hit = null
+    ;(data.lines || []).forEach(function (l) { if (l.id === id) hit = l.name })
+    return hit || id || ''
+  }
+  var PLATFORMS = { wechat: ['公众号', ''], xhs: ['小红书', 'xhs'], x: ['X', 'x'], telegram: ['Telegram', 'x'] }
 
-  function renderStatus() {
-    $('gen-at').textContent = data.generatedAt ? ('生成于 ' + new Date(data.generatedAt).toLocaleString('zh-CN')) : ''
-    var row = []
-    var daily = data.daily || {}
-    var cycle = data.dailyCycle || {}
-    if (daily.date) row.push('<span class="pill ok">daily ' + esc(daily.date) + '</span>')
-    else row.push('<span class="pill bad">今日 daily 未生成</span>')
-    if (cycle.status === 'done') row.push('<span class="pill ok">今日产物已就绪</span>')
-    else if (cycle.status === 'due') row.push('<span class="pill warn">待跑内容循环</span>')
-    var intel = data.intel || {}
-    var overall = intel.overall || (intel.health && intel.health.overall)
-    if (overall) row.push('<span class="pill ' + (overall === 'green' ? 'ok' : overall === 'yellow' ? 'warn' : 'bad') + '">情报健康 ' + esc(overall) + '</span>')
-    var mr = (daily.data && daily.data.must_reads) || []
-    row.push('<span class="pill">必读 ' + mr.length + '</span>')
-    row.push('<span class="pill">运行时草稿 ' + (data.runtimeDrafts || []).length + '</span>')
-    row.push('<span class="pill">蒸馏待审 ' + (data.distillQueue || []).length + '</span>')
-    row.push('<span class="pill">待写回 ' + (data.writebackQueue || []).length + '</span>')
-    $('status-row').innerHTML = row.join('')
+  /* ---------------------------------------------------------- 01 今天该发什么 */
+  function renderSchedule() {
+    var s = mediaOs().schedule || {}
+    var items = s.items || []
+    var box = $('schedule')
+    // 兼容：宿主仍加载旧 bundle（data.mediaOs 缺失）时，明确提示重启，而不是显示成"没有排期"
+    if (!data.mediaOs) {
+      $('sched-hint').textContent = '来自 media-os 30 天排期表，按今天日期自动对齐。'
+      box.innerHTML = '<li class="empty">宿主仍在运行旧版本：重启 DSH 宿主后即可读到 media-os 排期表与数据主表。</li>'
+      $('sched-note').style.display = 'none'
+      return
+    }
+    $('sched-hint').textContent = s.range
+      ? '来自 media-os 30 天排期表（' + s.range + '），按今天日期自动对齐。'
+      : '来自 media-os 30 天排期表，按今天日期自动对齐。'
+    if (!s.present) {
+      box.innerHTML = '<li class="empty">未找到 media-os 排期表（' + esc(mediaOs().root || '路径未配置') + '）。</li>'
+      $('sched-note').style.display = 'none'
+      return
+    }
+    if (!items.length) {
+      box.innerHTML = '<li class="empty">排期表里今天没有安排。</li>'
+    } else {
+      box.innerHTML = items.map(function (it) {
+        return '<li><span class="t">' + esc(it.label) + '</span><span class="a">' + esc(it.action) + '</span></li>'
+      }).join('')
+    }
+    var note = $('sched-note')
+    if (s.inRange === false && s.range) {
+      note.style.display = ''
+      note.textContent = '注意：今天不在排期表区间内（' + s.range + '），需要排下一期。'
+    } else {
+      note.style.display = 'none'
+    }
   }
 
-  function renderBriefing() {
-    var daily = data.daily || {}
-    $('briefing-date').textContent = daily.briefingDate ? ('· ' + daily.briefingDate) : ''
-    if (daily.briefing) $('briefing-text').textContent = daily.briefing
+  /* ---------------------------------------------------------- 02 今天可以写什么 */
+  function hookParts(hook) {
+    hook = String(hook || '')
+    var m = /^\s*[「『]([\s\S]*)[」』]\s*(?:—{1,2}|--|–)\s*([\s\S]*)$/.exec(hook)
+    if (m) return { title: m[1].trim(), body: m[2].trim() }
+    return { title: hook.slice(0, 48).trim(), body: hook.slice(48).trim() }
+  }
+  /**
+   * 引用卡归属：citations 与 drafts 由每日循环按同序写出，因此
+   * 数量一致时按位置对齐（最可靠）；否则退化为平台精确匹配 → 平台前缀匹配。
+   * 注意不能只用前缀匹配：xhs / xhs-navier-stokes / xhs-muse 会串卡。
+   */
+  function cardsFor(i, platform, citations, draftCount) {
+    var list = citations || []
+    if (!list.length) return []
+    if (list.length === draftCount) return (list[i] && list[i].cards) || []
+    for (var k = 0; k < list.length; k++) {
+      if (list[k] && list[k].draft === platform) return list[k].cards || []
+    }
+    for (var j = 0; j < list.length; j++) {
+      if (list[j] && String(list[j].draft || '').split('-')[0] === String(platform).split('-')[0]) {
+        return list[j].cards || []
+      }
+    }
+    return []
+  }
+  function takeLine(draft) {
+    var today = mediaOs().today || daily().date || ''
+    var meta = PLATFORMS[draft.platform] || [draft.platform || '公众号', '']
+    var clean = function (s) { return String(s || '').replace(/\|/g, '/').replace(/\s+/g, ' ').trim() }
+    return '| ' + today.slice(5) + ' | ' + clean(draft.title) + ' | 车间 | 深度文 | ' + clean(meta[0]) +
+      ' | 待评分 | 候选 | 来源:SparkOS 简报台 ' + today + ' · ' + clean((draft.cards || []).join(' ')) + ' |'
+  }
+  function renderDrafts() {
+    var drafts = dailyData().drafts || []
+    var citations = dailyData().citations || []
+    $('draft-count').textContent = drafts.length ? drafts.length + ' 篇' : ''
+    if (!drafts.length) {
+      $('drafts').innerHTML = '<p class="empty">今日循环未产出草稿'
+        + (daily().date ? '' : '（今日 daily 未生成）') + '。</p>'
+      return
+    }
+    var items = drafts.map(function (d, i) {
+      var parts = hookParts(d.hook)
+      var meta = PLATFORMS[d.platform] || [d.platform || '草稿', 'x']
+      var cards = cardsFor(i, d.platform, citations, drafts.length)
+      var chips = cards.length
+        ? cards.map(function (c) { return '<code>' + esc(c) + '</code>' }).join('')
+        : '<span class="empty">未标注引用卡</span>'
+      return { i: i, platform: d.platform || '', platName: meta[0], cls: meta[1], title: parts.title,
+        body: parts.body, chips: chips, cards: cards }
+    })
+    window._takeLines = {}
+    window._hookTexts = {}
+    items.forEach(function (it, n) {
+      window._takeLines[n] = takeLine(it)
+      window._hookTexts[n] = it.title + '\n\n' + it.body
+    })
+    $('drafts').innerHTML = items.map(function (d, n) {
+      return '<article class="draft">'
+        + '<div class="draft-h"><span class="badge ' + esc(d.cls) + '">' + esc(d.platName) + '</span>'
+        + '<h3>' + esc(d.title) + '</h3></div>'
+        + '<p class="angle">' + esc(d.body) + '</p>'
+        + '<div class="cards-line"><span class="lbl">引用卡</span>' + d.chips + '</div>'
+        + '<div class="acts">'
+        + '<button type="button" class="btn primary" data-take="' + n + '">取用这篇 → 复制入池行</button>'
+        + '<button type="button" class="btn ghost" data-hook-copy="' + n + '">复制草稿全文</button>'
+        + '</div></article>'
+    }).join('')
   }
 
+  /* ---------------------------------------------------------- 03 底层必读事件 */
   function renderMustReads() {
-    var daily = data.daily || {}
-    var mr = (daily.data && daily.data.must_reads) || []
+    var mr = dailyData().must_reads || []
     var decided = decidedMap('topic')
-    var lines = data.lines || []
-    var lineName = {}
-    lines.forEach(function (l) { lineName[l.id] = l.name })
-    $('mr-count').textContent = mr.length + ' 条'
-    if (mr.length === 0) { $('must-reads').innerHTML = '<div class="empty">今日无必读。</div>'; return }
-    $('must-reads').innerHTML = mr.map(function (m, i) {
+    $('mr-count').textContent = mr.length ? mr.length + ' 条' : ''
+    if (!mr.length) {
+      $('must-reads').innerHTML = '<p class="empty">今日无必读事件。</p>'
+      return
+    }
+    $('must-reads').innerHTML = mr.map(function (m) {
       var act = decided[m.event_id]
       var meta = []
       if (m.fresh_hours != null) meta.push('距今约 ' + m.fresh_hours + ' 小时')
-      var ln = lineName[m.primary_line] || m.primary_line
-      if (ln) meta.push(esc(ln))
-      var body = '<div class="mr-item"><div class="mr-title">' + esc(m.title) + '</div>'
-        + '<div class="mr-meta">' + meta.join(' · ') + '</div>'
+      var ln = lineName(m.primary_line)
+      if (ln) meta.push(ln)
+      var title = String(m.title || '')
+      var short = title.length > 160 ? title.slice(0, 160) + '…' : title
+      var body = '<div class="mr-item"><div class="mr-title" title="' + esc(title) + '">' + esc(short) + '</div>'
+        + '<div class="mr-meta">' + esc(meta.join(' · ')) + '</div>'
       if (act) {
         body += '<div class="decided">' + (act === 'adopt' ? '已采纳 ✓' : '已忽略 ✗') + '</div>'
       } else {
-        body += '<div style="margin-top:8px">'
-          + '<button type="button" class="btn primary" data-mr="adopt" data-mr-id="' + esc(m.event_id) + '">✓ 采纳</button> '
-          + '<button type="button" class="btn subtle" data-mr="ignore" data-mr-id="' + esc(m.event_id) + '">✗ 忽略</button></div>'
+        body += '<div class="acts" style="margin-top:8px">'
+          + '<button type="button" class="btn primary" data-mr="adopt" data-mr-id="' + esc(m.event_id) + '">✓ 采纳</button>'
+          + '<button type="button" class="btn quiet" data-mr="ignore" data-mr-id="' + esc(m.event_id) + '">✗ 忽略</button></div>'
       }
       return body + '</div>'
     }).join('')
   }
 
-  function renderDrafts() {
-    var drafts = data.runtimeDrafts || []
-    $('draft-count').textContent = drafts.length + ' 篇'
-    if (drafts.length === 0) { $('drafts').innerHTML = '<div class="empty">暂无草稿。</div>'; return }
-    $('drafts').innerHTML = drafts.map(function (d) {
-      return '<div class="draft-item">'
-        + '<span class="draft-name">' + esc(d.file) + (d.platform ? ' <span class="pill">' + esc(d.platform) + '</span>' : '') + '</span>'
-        + '<span class="draft-preview">' + esc(d.preview) + '</span>'
-        + '<button type="button" class="btn" data-rt-toggle="' + esc(d.file) + '">查看全文</button>'
-        + '<button type="button" class="btn" data-rt-copy="' + esc(d.file) + '">复制</button>'
-        + '<div class="draft-full" id="rt-full-' + esc(d.file) + '">加载中…</div>'
-        + '</div>'
+  /* ---------------------------------------------------------- 04 需要你动手 */
+  /* 动作只有两种真实形态：展开抽屉，或复制一段可直接粘给 DSH 的口令。
+     静态页面无法触发 skill，因此绝不放"点了没反应"的假按钮。 */
+  function renderTodo() {
+    var mo = mediaOs()
+    var metrics = mo.metrics || {}
+    var pool = mo.topicPool || {}
+    var distillN = (data.distillQueue || []).length
+    var writebackN = (data.writebackQueue || []).length
+    var runtimeN = (data.runtimeDrafts || []).length
+    var rows = []
+
+    if (metrics.present && metrics.rows === 0) {
+      rows.push({ t: '数据回流为空', s: 'metrics.csv 至今 0 条记录，周报没有原料',
+        act: { type: 'copy', text: '跑周报', label: '复制口令「跑周报」' } })
+    } else if (metrics.present && metrics.lastDate) {
+      rows.push({ t: '数据回流', s: '最后一条 ' + metrics.lastDate + ' · 共 ' + metrics.rows + ' 条' })
+    } else if (mo.root) {
+      rows.push({ t: '未找到数据主表', s: mo.root + '/04-data/metrics.csv' })
+    }
+    if (distillN) {
+      rows.push({ t: '蒸馏待审', s: distillN + ' 张待人工审核（四红线）',
+        act: { type: 'drawer', target: 'distill', label: '展开处理' } })
+    }
+    if (runtimeN > 10) {
+      rows.push({ t: '历史草稿积压', s: runtimeN + ' 篇草稿仓文件，已移入折叠区',
+        act: { type: 'drawer', target: 'engine', label: '展开查看' } })
+    }
+    if (writebackN) {
+      rows.push({ t: '待写回星火库', s: writebackN + ' 条，复制后人工写回',
+        act: { type: 'drawer', target: 'writeback', label: '展开处理' } })
+    }
+    var clusters = (data.clusters || {}).items || []
+    var withCards = clusters.filter(function (c) { return (c.knowledgeCards || []).length > 0 }).length
+    var reqs = data.cardRequests || []
+    if (reqs.length) {
+      rows.push({ t: '待补知识卡', s: reqs.length + ' 个够热主题 0 张卡 → 补 1 张即可进创作候选',
+        act: { type: 'drawer', target: 'cards', label: '看补卡清单' } })
+    } else if (clusters.length && withCards === 0) {
+      rows.push({ t: '今日无带卡情报簇', s: clusters.length + ' 条全部 0 卡：补 1 张深读卡即可能立事件',
+        act: { type: 'drawer', target: 'sugg', label: '看补卡建议' } })
+    }
+    if (pool.present) {
+      rows.push({ t: '选题池存量', s: pool.entries + ' 条已入库（media-os 只读）' })
+    }
+
+    if (!rows.length) { $('todo').innerHTML = '<li class="empty">没有待办。</li>'; return }
+    $('todo').innerHTML = rows.map(function (r) {
+      var act = ''
+      if (r.act && r.act.type === 'drawer') {
+        act = '<button type="button" class="btn tiny" data-todo="' + esc(r.act.target) + '">' + esc(r.act.label) + '</button>'
+      } else if (r.act && r.act.type === 'copy') {
+        act = '<button type="button" class="btn tiny" data-copy-phrase="' + esc(r.act.text) + '">' + esc(r.act.label) + '</button>'
+      }
+      return '<li><div><strong>' + esc(r.t) + '</strong><span class="sub">' + esc(r.s) + '</span></div>' + act + '</li>'
     }).join('')
   }
 
-  function renderDistill() {
-    var q = data.distillQueue || []
-    $('distill-count').textContent = q.length + ' 条'
-    if (q.length === 0) { $('distill').innerHTML = '<div class="empty">蒸馏队列为空。</div>'; return }
-    $('distill').innerHTML = q.map(function (e) {
-      return '<div class="distill-item"><div class="distill-summary">' + esc(e.summary || e.file) + '</div>'
-        + '<div class="distill-meta">' + esc(e.dir) + ' · ' + esc(e.file) + (e.targets && e.targets.length ? ' · 建议：' + esc(e.targets.join('、')) : '') + '</div>'
-        + '<button type="button" class="btn primary" data-ds="adopt" data-ds-file="' + esc(e.file) + '">✓ 采纳</button> '
-        + '<button type="button" class="btn subtle" data-ds="ignore" data-ds-file="' + esc(e.file) + '">✗ 忽略</button>'
-        + '</div>'
+  /* ---------------------------------------------------------- 05 主线 */
+  function renderLines() {
+    var ups = (dailyData().line_updates || []).slice()
+    var order = { heating: 0, stable: 1, cooling: 2 }
+    ups.sort(function (a, b) { return (order[a.status] || 3) - (order[b.status] || 3) })
+    if (!ups.length) { $('lines').innerHTML = '<li class="empty">无主线更新。</li>'; return }
+    $('lines').innerHTML = ups.slice(0, 6).map(function (u) {
+      var n = (u.evidence_event_ids || []).length
+      return '<li><span class="dot ' + esc(u.status || '') + '"></span>'
+        + '<span class="nm">' + esc(lineName(u.line)) + '</span>'
+        + '<span class="meta">' + esc(u.status || '') + (n ? ' · ' + n + ' 事件' : '') + '</span></li>'
     }).join('')
   }
 
-  function renderWriteback() {
-    var q = data.writebackQueue || []
-    $('wb-count').textContent = q.length + ' 条'
-    if (q.length === 0) { $('writeback').innerHTML = '<div class="empty">无待写回内容。</div>'; return }
-    $('writeback').innerHTML = q.map(function (e, i) {
-      return '<div class="wb-item"><div class="draft-name">' + esc(e.file) + '</div>'
-        + '<div class="wb-target">建议写入：' + esc(e.target) + '</div>'
-        + '<button type="button" class="btn" data-wb-toggle="' + i + '">查看内容</button> '
-        + '<button type="button" class="btn" data-wb-copy="' + i + '">复制</button> '
-        + '<button type="button" class="btn subtle" data-wb-remove="' + esc(e.file) + '">已写回，移除</button>'
-        + '<div class="wb-content" data-wb-content="' + i + '">' + esc(e.content) + '</div>'
-        + '</div>'
+  /* ---------------------------------------------------------- 06 水位 */
+  function renderMeters() {
+    var mo = mediaOs()
+    var clusters = (data.clusters || {}).items || []
+    var withCards = clusters.filter(function (c) { return (c.knowledgeCards || []).length > 0 }).length
+    var fusionItems = ((data.fusion || {}).items || []).length
+    var metrics = mo.metrics || {}
+    var distillN = (data.distillQueue || []).length
+    var cells = [
+      { v: clusters.length, k: '情报簇', warn: false },
+      { v: withCards, k: '带知识卡', warn: clusters.length > 0 && withCards === 0 },
+      { v: fusionItems, k: '今日融合', warn: false },
+      { v: metrics.rows || 0, k: '数据回流', warn: (metrics.rows || 0) === 0 },
+      { v: distillN, k: '蒸馏待审', warn: distillN >= 3 },
+      { v: (data.writebackQueue || []).length, k: '待写回', warn: false }
+    ]
+    $('meters').innerHTML = cells.map(function (c) {
+      return '<div class="meter"><div class="v' + (c.warn ? ' warn' : '') + '">' + esc(c.v) + '</div>'
+        + '<div class="k">' + esc(c.k) + '</div></div>'
     }).join('')
   }
 
-  function loadDraftFull(file) {
-    return fetch('/sparkos/draft?file=' + encodeURIComponent(file)).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status)
-      return r.json()
+  /* ---------------------------------------------------------- 补卡清单（P3） */
+  function renderCardRequests() {
+    var reqs = data.cardRequests || []
+    $('cards-count').textContent = reqs.length ? reqs.length + ' 条' : ''
+    if (!reqs.length) {
+      $('card-requests').innerHTML = '<p class="empty">当前没有「够热但缺卡」的主题。</p>'
+      return
+    }
+    window._cardLines = {}
+    reqs.forEach(function (r, i) {
+      window._cardLines[i] = r.suggestedUri + ' ' + r.title + '\n' + r.suggestedFile
+        + '\n' + (r.evidenceUrls || []).join('\n')
     })
+    $('card-requests').innerHTML = reqs.map(function (r, i) {
+      var heat = r.sourceHeat === null ? r.heat : r.sourceHeat
+      var ev = (r.evidenceUrls || [])[0]
+      return '<div class="mr-item">'
+        + '<div class="mr-title"><code>' + esc(r.suggestedUri) + '</code> ' + esc(r.title) + '</div>'
+        + '<div class="mr-meta">热度 ' + esc(heat) + ' · 来源 ' + esc(r.sourceCount) + ' · 建议文件 ' + esc(r.suggestedFile) + '</div>'
+        + (ev ? '<div class="mr-meta">证据 ' + esc(ev) + '</div>' : '')
+        + '<div class="acts" style="margin-top:8px">'
+        + '<button type="button" class="btn tiny" data-card-copy="' + i + '">复制建卡信息</button>'
+        + '</div></div>'
+    }).join('')
+  }
+
+  /* ---------------------------------------------------------- 顶部状态条 */
+  function renderStatus() {
+    var d = daily()
+    var mo = mediaOs()
+    var dateStr = d.date || mo.today || ''
+    $('today-date').textContent = dateStr || '—'
+    if (dateStr) {
+      var dt = new Date(dateStr + 'T00:00:00')
+      if (!isNaN(dt.getTime())) $('today-week').textContent = '周' + WEEK[dt.getDay()] + ' · 每天 3 分钟：今天发什么 · 写什么 · 动什么'
+    }
+    var row = []
+    var met = mo.metrics || {}
+    var sched = mo.schedule || {}
+    if (d.date) row.push('<span class="chip ok">daily ' + esc(d.date) + '</span>')
+    else row.push('<span class="chip bad">今日 daily 未生成</span>')
+    if (sched.present) {
+      row.push('<span class="chip ' + (sched.items.length ? 'acc' : '') + '">今日排期 ' + sched.items.length + ' 项</span>')
+    }
+    var drafts = dailyData().drafts || []
+    if (drafts.length) row.push('<span class="chip acc">今日草稿 ' + drafts.length + ' 篇</span>')
+    var health = (data.intel && (data.intel.overall || (data.intel.health && data.intel.health.overall))) || ''
+    if (health) row.push('<span class="chip ' + (health === 'green' ? 'ok' : health === 'yellow' ? 'warn' : 'bad') + '">情报健康 ' + esc(health) + '</span>')
+    if (met.present && met.rows === 0) row.push('<span class="chip warn">数据回流 0</span>')
+    var reqs = data.cardRequests || []
+    if (reqs.length) row.push('<span class="chip warn">待补卡 ' + reqs.length + '</span>')
+    row.push('<span class="chip">外发 0 · 红线</span>')
+    $('status-row').innerHTML = row.join('')
+  }
+
+  /* ---------------------------------------------------------- 折叠抽屉 */
+  function renderBriefing() {
+    var b = daily().briefing
+    $('briefing-text').textContent = b || '今日简报尚未生成。'
+    $('briefing-len').textContent = b ? b.length.toLocaleString('zh-CN') + ' 字 · 默认收起' : '空'
+  }
+  function renderSuggestions() {
+    var s = dailyData().suggestions || []
+    $('sugg-count').textContent = s.length + ' 条'
+    if (!s.length) { $('suggestions').innerHTML = '<li class="empty">无。</li>'; return }
+    $('suggestions').innerHTML = s.map(function (x) {
+      var t = String(x)
+      return '<li>' + esc(t.length > 400 ? t.slice(0, 400) + '…' : t) + '</li>'
+    }).join('')
+  }
+  function renderRuntimeDrafts() {
+    var drafts = data.runtimeDrafts || []
+    var dist = data.distillQueue || []
+    var wb = data.writebackQueue || []
+    $('engine-count').textContent = drafts.length + ' 草稿 / ' + dist.length + ' 蒸馏 / ' + wb.length + ' 写回'
+    $('runtime-drafts').innerHTML = drafts.length
+      ? drafts.map(function (d) {
+          return '<div class="rt-item"><span class="rt-name">' + esc(d.file) + '</span>'
+            + '<span class="rt-preview">' + esc(d.preview || '') + '</span>'
+            + '<button type="button" class="btn tiny" data-rt-toggle="' + esc(d.file) + '">查看全文</button>'
+            + '<button type="button" class="btn tiny" data-rt-copy-file="' + esc(d.file) + '">复制</button>'
+            + '<div class="rt-full" id="rt-full-' + esc(d.file) + '">加载中…</div></div>'
+        }).join('')
+      : '<p class="empty">草稿仓为空。</p>'
+
+    $('distill').innerHTML = dist.length
+      ? dist.map(function (e) {
+          return '<div class="mr-item"><div class="mr-title">' + esc(e.summary || e.file) + '</div>'
+            + '<div class="mr-meta">' + esc(e.dir) + ' · ' + esc(e.file)
+            + (e.targets && e.targets.length ? ' · 建议：' + esc(e.targets.join('、')) : '') + '</div>'
+            + '<div class="acts" style="margin-top:8px">'
+            + '<button type="button" class="btn primary" data-ds="adopt" data-ds-file="' + esc(e.file) + '">✓ 采纳</button>'
+            + '<button type="button" class="btn quiet" data-ds="ignore" data-ds-file="' + esc(e.file) + '">✗ 忽略</button>'
+            + '</div></div>'
+        }).join('')
+      : '<p class="empty">蒸馏队列为空。</p>'
+
+    window._wbEntries = wb
+    $('writeback').innerHTML = wb.length
+      ? wb.map(function (e, i) {
+          return '<div class="wb-item"><div class="wb-name">' + esc(e.file) + '</div>'
+            + '<div class="wb-target">建议写入：' + esc(e.target) + '</div>'
+            + '<div class="acts" style="margin-top:8px">'
+            + '<button type="button" class="btn tiny" data-wb-toggle="' + i + '">查看内容</button>'
+            + '<button type="button" class="btn tiny" data-wb-copy="' + i + '">复制</button>'
+            + '<button type="button" class="btn tiny quiet" data-wb-remove="' + esc(e.file) + '">已写回，移除</button>'
+            + '</div><div class="wb-content" data-wb-content="' + i + '">' + esc(e.content) + '</div></div>'
+        }).join('')
+      : '<p class="empty">无待写回内容。</p>'
+  }
+
+  function renderAll() {
+    renderStatus(); renderSchedule(); renderDrafts(); renderMustReads()
+    renderTodo(); renderLines(); renderMeters()
+    renderBriefing(); renderSuggestions(); renderCardRequests(); renderRuntimeDrafts()
+  }
+
+  /* ---------------------------------------------------------- 交互 */
+  /* 抽屉索引：0=原始简报 1=系统建议 2=补卡清单 3=引擎明细（历史草稿/蒸馏/写回） */
+  var DRAWER = { sugg: 1, cards: 2, distill: 3, writeback: 3, engine: 3 }
+  function openDrawer(which) {
+    var idx = DRAWER[which]
+    if (idx == null) return
+    var all = document.querySelectorAll('details')
+    if (all[idx]) { all[idx].open = true; all[idx].scrollIntoView({ block: 'start' }) }
+  }
+  function loadDraftFull(file) {
+    return fetch('/sparkos/draft?file=' + encodeURIComponent(file)).then(jsonOrThrow)
   }
 
   document.addEventListener('click', function (ev) {
     var t = ev.target
     if (!t || !t.getAttribute) return
 
-    // 必读采纳/忽略
+    // 取用这篇 → 复制一行可粘贴的选题池 Markdown（不写盘）
+    var take = t.closest('[data-take]')
+    if (take) {
+      var idx = take.getAttribute('data-take')
+      var line = (window._takeLines || {})[idx]
+      if (line) copyText(line, '入池行已复制，粘贴进 media-os/01-content/选题池.md')
+      else toast('没有可复制的内容', true)
+      return
+    }
+
+    // 必读采纳/忽略（写决策账本）
     var mr = t.closest('[data-mr]')
     if (mr) {
       var id = mr.getAttribute('data-mr-id'), action = mr.getAttribute('data-mr')
       mr.disabled = true
       apiFetch('/sparkos/mutate', { method: 'POST', body: JSON.stringify({ kind: 'topic', id: id, action: action }) })
-        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return r.json() })
-        .then(function () { toast(action === 'adopt' ? '必读已采纳' : '必读已忽略'); return fetch('/sparkos/data').then(function (r) { return r.json() }) })
-        .then(function (j) { data = j.value; renderMustReads(); renderStatus() })
+        .then(jsonOrThrow)
+        .then(function () { toast(action === 'adopt' ? '必读已采纳' : '必读已忽略'); return reload() })
         .catch(function (e) { toast('操作失败：' + e.message, true); mr.disabled = false })
       return
     }
@@ -269,54 +715,61 @@
       var f = ds.getAttribute('data-ds-file'), dsAct = ds.getAttribute('data-ds')
       ds.disabled = true
       apiFetch('/sparkos/mutate', { method: 'POST', body: JSON.stringify({ kind: 'distill', id: f, action: dsAct }) })
-        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return r.json() })
-        .then(function () { toast(dsAct === 'adopt' ? '蒸馏已采纳，进入待写回' : '蒸馏已忽略'); return fetch('/sparkos/data').then(function (r) { return r.json() }) })
-        .then(function (j) { data = j.value; renderDistill(); renderWriteback(); renderStatus() })
+        .then(jsonOrThrow)
+        .then(function () { toast(dsAct === 'adopt' ? '蒸馏已采纳，进入待写回' : '蒸馏已忽略'); return reload() })
         .catch(function (e) { toast('操作失败：' + e.message, true); ds.disabled = false })
       return
     }
 
-    // 草稿查看全文 / 复制
+    // 任意草稿：按文件名查看全文 / 复制
     var rtT = t.closest('[data-rt-toggle]')
     if (rtT) {
       var file = rtT.getAttribute('data-rt-toggle')
       var box = $('rt-full-' + file)
+      if (!box) return
       if (box.classList.contains('open')) { box.classList.remove('open'); rtT.textContent = '查看全文'; return }
       if (box.dataset.loaded !== '1') {
         loadDraftFull(file).then(function (j) {
-          box.textContent = j.value && j.value.content || ''
+          box.textContent = (j.value && j.value.content) || ''
           box.dataset.loaded = '1'
         }).catch(function (e) { box.textContent = '加载失败：' + e.message })
       }
       box.classList.add('open'); rtT.textContent = '收起'
       return
     }
-    var rtC = t.closest('[data-rt-copy]')
+    var rtC = t.closest('[data-rt-copy-file]')
     if (rtC) {
-      var cf = rtC.getAttribute('data-rt-copy')
+      var cf = rtC.getAttribute('data-rt-copy-file')
       loadDraftFull(cf).then(function (j) {
-        var text = j.value && j.value.content || ''
-        if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(function () { toast('全文已复制') })
-        toast('浏览器不支持自动复制，请用查看全文手动复制', true)
+        return copyText((j.value && j.value.content) || '', '全文已复制')
       }).catch(function (e) { toast('复制失败：' + e.message, true) })
+      return
+    }
+
+    // 今日草稿卡：复制 hook 全文（这些草稿本身就是 hook 级，没有独立文件）
+    var hc = t.closest('[data-hook-copy]')
+    if (hc) {
+      var hi = hc.getAttribute('data-hook-copy')
+      var text = (window._hookTexts || {})[hi]
+      if (text) copyText(text, '草稿全文已复制')
+      else toast('没有可复制的内容', true)
       return
     }
 
     // 待写回 查看/复制/移除
     var wbT = t.closest('[data-wb-toggle]')
     if (wbT) {
-      var idx = wbT.getAttribute('data-wb-toggle')
-      var wbox = document.querySelector('[data-wb-content="' + idx + '"]')
-      wbox.classList.toggle('open')
+      var wi = wbT.getAttribute('data-wb-toggle')
+      var wbox = document.querySelector('[data-wb-content="' + wi + '"]')
+      if (wbox) wbox.classList.toggle('open')
       return
     }
     var wbC = t.closest('[data-wb-copy]')
     if (wbC) {
       var ci = Number(wbC.getAttribute('data-wb-copy'))
-      var entry = (data.writebackQueue || [])[ci]
-      if (entry && navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(entry.content).then(function () { toast('内容已复制') })
-      } else toast('浏览器不支持自动复制，请用查看内容手动复制', true)
+      var entry = (window._wbEntries || [])[ci]
+      if (entry) copyText(entry.content || '', '内容已复制')
+      else toast('内容缺失', true)
       return
     }
     var wbR = t.closest('[data-wb-remove]')
@@ -324,19 +777,36 @@
       var rf = wbR.getAttribute('data-wb-remove')
       wbR.disabled = true
       apiFetch('/sparkos/writeback/remove', { method: 'POST', body: JSON.stringify({ file: rf }) })
-        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return fetch('/sparkos/data').then(function (rr) { return rr.json() }) })
-        .then(function (j) { data = j.value; renderWriteback(); renderStatus(); toast('已移除') })
+        .then(jsonOrThrow)
+        .then(function () { return reload() })
+        .then(function () { toast('已移除') })
         .catch(function (e) { toast('移除失败：' + e.message, true); wbR.disabled = false })
+      return
+    }
+
+    // 补卡清单：复制建卡信息（星火库只读，人工自行建卡）
+    var cardCopy = t.closest('[data-card-copy]')
+    if (cardCopy) {
+      var ci = cardCopy.getAttribute('data-card-copy')
+      var text = (window._cardLines || {})[ci]
+      if (text) copyText(text, '建卡信息已复制（含建议文件名与证据链接）')
+      else toast('没有可复制的内容', true)
+      return
+    }
+
+    // 待办快捷入口：展开对应抽屉
+    var todo = t.closest('[data-todo]')
+    if (todo) { openDrawer(todo.getAttribute('data-todo')); return }
+
+    // 待办快捷入口：复制一段可直接粘给 DSH 的口令（静态页无法触发 skill）
+    var phrase = t.closest('[data-copy-phrase]')
+    if (phrase) {
+      copyText(phrase.getAttribute('data-copy-phrase'), '口令已复制，粘到 DSH 会话即可')
       return
     }
   })
 
-  renderStatus()
-  renderBriefing()
-  renderMustReads()
-  renderDrafts()
-  renderDistill()
-  renderWriteback()
+  renderAll()
 })()
 </script>
 </body>

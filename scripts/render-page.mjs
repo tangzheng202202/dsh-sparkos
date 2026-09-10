@@ -185,5 +185,10 @@ function renderTemplate(templatePath, target) {
 void v2
 const factory = args.includes('--factory')
 renderTemplate(factory ? '../src/server/factory.template.html' : '../src/server/page.template.html', out)
-renderTemplate('../src/server/page.template.html', '/tmp/sparkos-wb-v2.html')
+// dom-check.py 的两页冒烟产物：仅默认调用（未显式指定输出路径）时生成，
+// 避免并行 UI 测试的隔离 fixture 通过共享路径互相覆盖。
+if (positional.length === 0) {
+  renderTemplate('../src/server/page.template.html', '/tmp/sparkos-wb-brief.html')
+  renderTemplate('../src/server/factory.template.html', '/tmp/sparkos-wb-factory.html')
+}
 if (fixtureRoot) rmSync(fixtureRoot, { recursive: true, force: true })

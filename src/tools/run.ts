@@ -36,7 +36,7 @@ export function usage(): string {
     '  sources  信息源（info_sources.json + intel 健康快照）',
     '  publish  发布表现（perf/*.json 汇总，缺失降级）',
     '  advise   系统建议（只读，守卫⑤）',
-    '  intel    情报指挥所（ingest/health；fusion 融合；analyze/submitCluster 情报簇；rank 每日Top5/连续榜；jobs 任务状态；dispatch 生成建议）',
+    '  intel    情报指挥所（ingest/health；fusion 融合；analyze/submitCluster 情报簇；cardRequests 补卡清单；rank 每日Top5/连续榜；jobs 任务状态；dispatch 生成建议）',
     '参数：action(string, 可选) 子命令；payload(object, 可选)；dryRun(bool) 只校验不落盘（8 个子命令全部零写入）',
     'VAULT：' + VAULT_ROOT,
   ].join('\n')
@@ -55,7 +55,7 @@ export function isWriteInvocation(action: string | undefined, payload: Record<st
   if (action === 'draft') return payload.pending !== true && payload.packages !== true
     && (typeof payload.request === 'string' || typeof payload.revise === 'string' || payload.submitPackage !== undefined || Object.keys(payload).length === 0)
   if (action === 'intel') return payload.fusion === true || payload.analyze === true || payload.submitCluster !== undefined
-    || payload.rank === true || payload.dispatch === true || Object.keys(payload).length === 0
+    || payload.rank === true || payload.dispatch === true || payload.cardRequests === true || Object.keys(payload).length === 0
   return false
 }
 
@@ -64,6 +64,7 @@ async function previewIntelDryRun(payload: Record<string, unknown>): Promise<{ t
   if (payload.fusion === true) actions.push('生成当日 fusion JSON/Markdown')
   if (payload.analyze === true) actions.push('生成情报簇 analyze 请求')
   if (payload.clusters === true) actions.push('读取最新情报簇')
+  if (payload.cardRequests === true) actions.push('生成补卡清单（只出建议，不写星火库）')
   if (payload.submitCluster !== undefined) actions.push('保存情报簇并刷新排名')
   if (payload.rank === true) actions.push('刷新每日排名与创作候选')
   if (payload.jobs === true) actions.push('读取工厂任务快照')
@@ -328,6 +329,25 @@ export async function runSparkosCommand(args: RunArgs): Promise<{ text: string }
       const snapshot = buildFactorySnapshot()
       lines.push('jobs: schema=' + snapshot.database.schemaVersion + ' 最近 ' + snapshot.jobs.length + ' 项')
       for (const job of snapshot.jobs) lines.push('  - ' + job.kind + ' [' + job.status + '] attempts=' + job.attempts + '/' + job.maxAttempts + ' id=' + job.id)
+    }
+    if (payload.cardRequests === true) {
+      const { buildCardRequests, writeCardRequests } = await import('../intel/cards.ts')
+      const { latestClusters } = await import('../intel/cluster.ts')
+      const { latestFusion } = await import('../intel/report.ts')
+      const lc = latestClusters(cfg)
+      if (!lc) {
+        lines.push('card-requests: 暂无情报簇（先 payload.analyze=true 生成骨架）')
+      } else {
+        // 骨架 topic 为空 → 用当日融合条目标题兜底，否则清单全是「待分析」
+        const titles = new Map((latestFusion()?.items ?? []).map((i) => [i.eventKey, i.title]))
+        const requests = buildCardRequests(lc.clusters, { titles })
+        const w = writeCardRequests(cfg, requests)
+        lines.push('card-requests: ' + requests.length + ' 条待补（' + w.files.map((f) => f.split('/').pop()).join(', ') + '）')
+        for (const r of requests) {
+          lines.push('  - ' + r.suggestedUri + ' [' + (r.sourceHeat === null ? r.heat : r.sourceHeat) + '] ' + r.title)
+        }
+        if (requests.length > 0) lines.push('  提示：星火库只读，需人工确认后自行建卡（建议文件 ' + requests[0].suggestedFile + '）。')
+      }
     }
     if (payload.dispatch === true) {
       const { generateDispatch } = await import('../intel/dispatch.ts')
