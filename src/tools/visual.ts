@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-attachment'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { FACTORY_DISABLED_MESSAGE, factoryEnabled } from '../server/mode.ts'
 import { openFactoryDatabase } from '../storage/database.ts'
 import {
   claimVisualTask,
@@ -45,6 +46,11 @@ function failed(error: unknown): ToolEnvelope {
   return { text: `SparkOS visual ${code}: ${message}`, value: { ok: false, error: { code, message } } }
 }
 
+function factoryUnavailable(): ToolEnvelope | undefined {
+  if (factoryEnabled()) return undefined
+  return { text: `SparkOS visual factory-disabled: ${FACTORY_DISABLED_MESSAGE}`, value: { ok: false, error: { code: 'factory-disabled', message: FACTORY_DISABLED_MESSAGE } } }
+}
+
 function withDb<T>(operation: (db: ReturnType<typeof openFactoryDatabase>) => T): T {
   const db = openFactoryDatabase()
   try { return operation(db) } finally { db.close() }
@@ -60,6 +66,8 @@ export function registerVisualTools(ctx: Context): void {
     output,
     isConcurrencySafe: () => false,
     async execute(args: { packageId: string }) {
+      const unavailable = factoryUnavailable()
+      if (unavailable) return unavailable
       try {
         const result = withDb((db) => queueVisualBatch(db, args.packageId))
         return ok(`视觉批次${result.created ? '已创建' : '已幂等复用'}：${result.batch.id}，${result.tasks.length} 个独立资产任务。`, result as unknown as Record<string, JsonValue>)
@@ -77,6 +85,8 @@ export function registerVisualTools(ctx: Context): void {
     output,
     isConcurrencySafe: () => false,
     async execute(args: { packageId?: string; leaseSeconds?: number }) {
+      const unavailable = factoryUnavailable()
+      if (unavailable) return unavailable
       try {
         const claim = withDb((db) => claimVisualTask(db, args))
         if (claim === null) return ok('当前没有可领取的视觉任务。', { claimed: false })
@@ -100,6 +110,8 @@ export function registerVisualTools(ctx: Context): void {
     output,
     isConcurrencySafe: () => false,
     async execute(args: { taskId: string; attemptId: string; leaseToken: string; leaseSeconds?: number }) {
+      const unavailable = factoryUnavailable()
+      if (unavailable) return unavailable
       try {
         const result = withDb((db) => heartbeatVisualTask(db, args.taskId, args.attemptId, args.leaseToken, new Date(), args.leaseSeconds))
         return ok(`视觉任务租约已延长至 ${result.leaseExpiresAt}。`, result as unknown as Record<string, JsonValue>)
@@ -121,6 +133,8 @@ export function registerVisualTools(ctx: Context): void {
     output,
     isConcurrencySafe: () => false,
     async execute(args: { taskId: string; attemptId: string; leaseToken: string; code: string; message: string; retryable: boolean }) {
+      const unavailable = factoryUnavailable()
+      if (unavailable) return unavailable
       try {
         const result = withDb((db) => failVisualTask(db, args))
         return ok(`视觉 attempt 已记录失败，任务状态=${result.state}。`, result as unknown as Record<string, JsonValue>)
@@ -163,6 +177,8 @@ export function registerVisualTools(ctx: Context): void {
     output,
     isConcurrencySafe: () => false,
     async execute(args: SubmitVisualInput, execution: { signal?: AbortSignal }) {
+      const unavailable = factoryUnavailable()
+      if (unavailable) return unavailable
       const db = openFactoryDatabase()
       try {
         const attachments = ctx.get('attachments')
@@ -181,6 +197,8 @@ export function registerVisualTools(ctx: Context): void {
     output,
     isConcurrencySafe: () => false,
     async execute(args: { taskId: string }) {
+      const unavailable = factoryUnavailable()
+      if (unavailable) return unavailable
       try {
         const result = withDb((db) => retryVisualTask(db, args.taskId))
         return ok(`视觉任务已按人工意见转入 retry；前次意见：${result.previousNote}`, result as unknown as Record<string, JsonValue>)
@@ -197,6 +215,8 @@ export function registerVisualTools(ctx: Context): void {
     output,
     isConcurrencySafe: () => true,
     async execute(args: { packageId?: string }) {
+      const unavailable = factoryUnavailable()
+      if (unavailable) return unavailable
       try {
         const snapshot = withDb((db) => visualStatus(db, args.packageId))
         return ok(`视觉批次 ${snapshot.batches.length} 个；这里只读报告准备度，不执行批准或发布。`, snapshot as unknown as Record<string, JsonValue>)

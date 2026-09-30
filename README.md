@@ -2,6 +2,8 @@
 
 DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇分析 → 可解释排名 → 编辑策划 → 多平台创作 → 视觉生产与人工审核 → 派生交付 → 人工发布台账，全流程状态可恢复、决策可审计，五守卫硬执行。
 
+**默认启动为 `brief` 简报台。** 页面提供每日简报、运行时草稿、蒸馏与待写回操作；`sparkos_run` 保留简报和情报路径。工厂选题策划、草稿包、排名/任务快照及全部 `sparkos_visual_*` 工具只在显式 `full` 模式下可用；brief 模式在进入 VAULT 初始化或工厂 SQLite 前返回 `factory-disabled`。提交情报簇在 brief 模式仍保存情报产物，但不触发工厂排名。设置 `SPARKOS_WORKBENCH_MODE=full`，或在 VAULT 的 `config/workbench_mode.json` 写入 `{"mode":"full"}` 并重启宿主，才开启完整工厂。
+
 ## 能力总览
 
 ### sparkos_run 工具（8 个子命令全部实装，dryRun 全局零写入）
@@ -16,7 +18,7 @@ DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇�
 - `intel` 情报指挥所：ingest/health、`fusion` 日频融合、`analyze`/`submitCluster` 情报簇、`rank` 每日 Top5、`jobs` 任务状态、`dispatch` 下发建议
 - `dryRun=true`：全部 8 个子命令零写入（不初始化 VAULT、不打开 SQLite、不改任何文件 mtime），只返回"将执行动作 + 参数校验结果"；写调用不再声明并发安全
 
-### 内容工厂里程碑（当前能力）
+### 内容工厂里程碑（仅 `full` 模式）
 
 - **M1 状态底座**：Node 内置 SQLite（schema v7，additive migration）保存任务、租约、重试、情报簇、排名历史、视觉批次与发布台账；原始情报与内容产物保留为 VAULT 文件
 - **M2 情报排名**：情报簇提交后自动生成每日 Top 5、上升榜、连续霸榜与可创作候选；评分分项可解释，仅证据等级 A/B 可进入创作
@@ -35,25 +37,25 @@ DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇�
 
 ## 工作台 UI
 
-**SparkOS 只有一个正式工作台。** `/sparkos` 与 `/sparkos/app` 是唯一正式入口，渲染统一模板 `src/server/page.template.html`（M8 起原 V1 与 V2 两套实现已合并为这一份；旧 `page-v2.template.html` 已删除，仅存 Git 历史）。
+**SparkOS 只有一个正式工作台入口。** `/sparkos` 与 `/sparkos/app` 默认渲染简报模板 `src/server/page.template.html`；显式 `full` 模式渲染工厂模板 `src/server/factory.template.html`。
 
-- `/sparkos/app-v2`：**仅为过渡期兼容别名**，渲染与正式入口完全相同的统一模板，不是第二套实现
+- `/sparkos/app-v2`：**仅为过渡期兼容别名**，渲染与正式入口相同的当前模式模板
 - 安全序列化（`< > & U+2028 U+2029` 全转义）、每请求 CSP nonce、页面内嵌 CSRF token；全部 mutation POST 走统一 `apiFetch`（application/json + CSRF 头）
-- 统一九视图：总览（日报摘要/建议）、情报（Top5/簇/叙事线/时间线搜索/融合/下发/归档）、选题（must_reads 采纳/忽略 + 编辑策划审批）、创作（工厂草稿审批/修订 + 运行时草稿）、审核（收件箱/蒸馏/待写回）、视觉（审核/受控重试）、发布（delivery 台账，**不执行平台发布**）、增长、系统（来源注册表/健康）
+- `full` 模式工厂九视图：总览（日报摘要/建议）、情报（Top5/簇/叙事线/时间线搜索/融合/下发/归档）、选题（must_reads 采纳/忽略 + 编辑策划审批）、创作（工厂草稿审批/修订 + 运行时草稿）、审核（收件箱/蒸馏/待写回）、视觉（审核/受控重试）、发布（delivery 台账，**不执行平台发布**）、增长、系统（来源注册表/健康）
 
 ### 统一工作台受控写端点
 
-统一工作台在只读渲染之外，提供以下受控 POST（全部经服务端安全边界：Content-Type 校验、Origin 同源校验、CSRF token；M7/M8 起原 V1 独有能力已全部并入）：
+工作台写操作均经过服务端 Content-Type、Origin 同源与 CSRF 校验。以下工厂端点仅在 `full` 模式开放，`brief` 模式返回 410：
 
 - `POST /sparkos/editorial/decision` 选题卡人工审批（批准/驳回，驳回必填意见）
 - `POST /sparkos/creation/decision` 草稿包人工审批
 - `POST /sparkos/creation/revise` 创建不可覆盖修订版
 - `POST /sparkos/visual/decision` 批准/驳回图片（驳回必填意见）
 - `POST /sparkos/visual/retry` 受控视觉重试（含 `purpose=replace_stub_with_production` + 人工确认）
-- `POST /sparkos/mutate` 必读采纳/忽略（kind=topic）与蒸馏候选采纳/驳回（kind=distill，四红线人工执行）
-- `POST /sparkos/writeback/remove` 待写回清单人工移除（星火库写入永远人工）
 - `POST /sparkos/visual/delivery` 生成 preview/production 交付包
 - `POST /sparkos/publish` 创建发布台账记录（仅台账，不自动发布）
+
+简报台与工厂页面均可执行 `POST /sparkos/mutate`（必读、蒸馏决策）及 `POST /sparkos/writeback/remove` / `clear`（维护待写回清单）；星火库写入仍由人工完成。
 
 兼容与红线：contractVersion 1/2 与 legacy 小红书规则继续兼容（旧 v1 包不可证明小红书完整，不能进入 production 交付）；**不存在自动发布**——`publication_intents` 仅是台账，Worker 永不领取发布任务，平台 API 调用为零，发布永远由人工在对应后台执行。
 
@@ -69,6 +71,8 @@ DeepSeek Harness（DSH）自媒体工作台插件：情报采集 → 情报簇�
 **干净环境可独立运行**：仓库自带 `seeds/` 种子数据；首次初始化在运行时资产缺失时自动回退 `seeds/`。`prepare` 脚本自动执行 `npm run build`。
 
 ## 运行示例（每日闭环）
+
+以下 `topics.editorial`、`draft` 工厂分支和 `intel.rank` 需先显式开启 `full` 模式；默认 brief 模式可直接运行 `brief` 与情报采集/融合，但不会自动进入工厂审批链。
 
 ```
 sparkos_run {action:"intel", payload:{fusion:true}}   # 09:30 自动：融合当日情报
@@ -132,7 +136,7 @@ sparkos_run {action:"brief"}    # 今日简报
 npm ci            # 安装依赖（.npmrc 已配 legacy-peer-deps，干净 clone 直接可用）
 npm run check     # tsc 类型检查（默认走已发布 @deepseek-ai 类型包）
 npm test          # 全量回归测试（数量随命令输出动态给出，见 # tests 行）
-npm run test:dom  # 渲染工作台并跑 Chrome DOM 断言
+npm run test:dom  # 分别渲染 brief/full 页面并跑 Chrome DOM 断言
 npm run build     # esbuild host 半 + client 半（模板拷贝进 lib/）
 npm audit         # 依赖漏洞审计
 ```

@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { initVault, VAULT_ROOT } from '../vault.ts'
 import { validateDaily } from '../guards.ts'
+import { FACTORY_DISABLED_MESSAGE, factoryEnabled } from '../server/mode.ts'
 import {
   cmdAdvise,
   cmdBrief,
@@ -37,6 +38,7 @@ export function usage(): string {
     '  publish  发布表现（perf/*.json 汇总，缺失降级）',
     '  advise   系统建议（只读，守卫⑤）',
     '  intel    情报指挥所（ingest/health；fusion 融合；analyze/submitCluster 情报簇；rank 每日Top5/连续榜；jobs 任务状态；dispatch 生成建议）',
+    '默认 brief 模式仅开放简报/情报路径；topics.editorial、工厂 draft 分支、intel.rank/jobs 与视觉工具需显式设置 SPARKOS_WORKBENCH_MODE=full。',
     '参数：action(string, 可选) 子命令；payload(object, 可选)；dryRun(bool) 只校验不落盘（8 个子命令全部零写入）',
     'VAULT：' + VAULT_ROOT,
   ].join('\n')
@@ -59,18 +61,27 @@ export function isWriteInvocation(action: string | undefined, payload: Record<st
   return false
 }
 
+/** Factory-only tool branches are unavailable while the Web workbench is in brief mode. */
+function requiresFactoryMode(action: Subcommand, payload: Record<string, unknown>): boolean {
+  if (action === 'topics') return payload.editorial === 'midweek' || payload.editorial === 'weekly'
+  if (action === 'draft') return payload.pending === true || payload.packages === true
+    || typeof payload.request === 'string' || typeof payload.revise === 'string' || payload.submitPackage !== undefined
+  if (action === 'intel') return payload.rank === true || payload.jobs === true
+  return false
+}
+
 async function previewIntelDryRun(payload: Record<string, unknown>): Promise<{ text: string }> {
   const actions = ['runIntelTick（ingest / health / run 日志）']
   if (payload.fusion === true) actions.push('生成当日 fusion JSON/Markdown')
   if (payload.analyze === true) actions.push('生成情报簇 analyze 请求')
   if (payload.clusters === true) actions.push('读取最新情报簇')
-  if (payload.submitCluster !== undefined) actions.push('保存情报簇并刷新排名')
+  if (payload.submitCluster !== undefined) actions.push(factoryEnabled() ? '保存情报簇并刷新排名' : '保存情报簇（简报模式不刷新工厂排名）')
   if (payload.rank === true) actions.push('刷新每日排名与创作候选')
   if (payload.jobs === true) actions.push('读取工厂任务快照')
   if (payload.dispatch === true) actions.push('生成 dispatch preferences.json')
 
   const lines = [
-    '[dryRun] intel 零写入预览；未执行 runIntelTick，未打开 SQLite，未读写 VAULT。',
+    '[dryRun] intel 零写入预览；未执行 runIntelTick，未初始化 VAULT，未打开 SQLite，未写入任何数据。',
     '实际执行时将运行：',
     ...actions.map((action) => '  - ' + action),
   ]
@@ -162,6 +173,9 @@ export async function runSparkosCommand(args: RunArgs): Promise<{ text: string }
   }
   const dryRun = args.dryRun === true
   const payload = args.payload ?? {}
+  if (requiresFactoryMode(args.action as Subcommand, payload) && !factoryEnabled()) {
+    return { text: (dryRun ? '[dryRun] ' : '') + 'factory-disabled: ' + FACTORY_DISABLED_MESSAGE }
+  }
   if (dryRun) return dispatchDryRun(args.action as Subcommand, payload)
   const vault = initVault()
 
@@ -300,12 +314,16 @@ export async function runSparkosCommand(args: RunArgs): Promise<{ text: string }
       else {
         const r = saveClusters(cfg, [c as never], new Date())
         lines.push('submit-cluster OK: ' + c.clusterId + ' → ' + r.file.split('/').pop() + '（共 ' + r.total + ' 簇）')
-        try {
-          const { runLatestRanking } = await import('../factory/service.ts')
-          const ranked = runLatestRanking()
-          lines.push('  自动刷新排名：Top ' + ranked.ranking.top5.length + ' · 连续霸榜 ' + ranked.ranking.persistent.length + ' · 可创作 ' + ranked.ranking.creationCandidates.length)
-        } catch (error) {
-          lines.push('  排名刷新待后续重试：' + (error instanceof Error ? error.message : String(error)))
+        if (factoryEnabled()) {
+          try {
+            const { runLatestRanking } = await import('../factory/service.ts')
+            const ranked = runLatestRanking()
+            lines.push('  自动刷新排名：Top ' + ranked.ranking.top5.length + ' · 连续霸榜 ' + ranked.ranking.persistent.length + ' · 可创作 ' + ranked.ranking.creationCandidates.length)
+          } catch (error) {
+            lines.push('  排名刷新待后续重试：' + (error instanceof Error ? error.message : String(error)))
+          }
+        } else {
+          lines.push('  简报模式未刷新工厂排名。')
         }
       }
     }
@@ -343,7 +361,7 @@ export async function runSparkosCommand(args: RunArgs): Promise<{ text: string }
 export function registerRunTool(ctx: Context): void {
   ctx.tools.register(defineTool({
     name: 'sparkos_run',
-    description: 'SparkOS 自媒体工作台：brief/topics/draft/distill/sources/publish/advise/intel 子命令执行每日内容工作流。写操作先过五守卫（48h窗口/event_id去重/引用卡存在/主线存在/建议只读）。不带参数返回用法。dryRun=true 时全部子命令零写入（仅校验与预览）。',
+    description: 'SparkOS 自媒体工作台：brief/topics/draft/distill/sources/publish/advise/intel 子命令执行每日内容工作流。默认 brief 模式禁用工厂选题、草稿包、排名与任务快照；显式 full 模式才启用。写操作先过五守卫（48h窗口/event_id去重/引用卡存在/主线存在/建议只读）。不带参数返回用法。dryRun=true 时全部子命令零写入（仅校验与预览）。',
     parameters: {
       action: { type: 'string', description: '子命令：' + SUBCOMMANDS.join(' | ') },
       payload: { type: 'object', additionalProperties: true, description: '子命令参数' },

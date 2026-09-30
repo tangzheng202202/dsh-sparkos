@@ -31,7 +31,7 @@ import { openFactoryDatabase } from '../storage/database.ts'
 import { queueVisualBatch, readVisualAsset, visualStatus, VisualPipelineError } from '../visual/service.ts'
 import { createPublishTask, decideVisualAttempt, requestVisualRetry, retryVisualTask } from '../visual/review.ts'
 import { checkMutationRequest, cspWithNonce, escapeJsonForScript, issueCsrfToken, newCspNonce } from './security.ts'
-import { factoryEnabled } from './mode.ts'
+import { FACTORY_DISABLED_MESSAGE, factoryEnabled } from './mode.ts'
 import { createVisualDelivery, listVisualDeliveries, readVisualDeliveryFile, readVisualDeliveryZip } from '../visual/delivery.ts'
 
 
@@ -47,7 +47,7 @@ function factoryDisabled(res: import('node:http').ServerResponse): boolean {
     ok: false,
     error: {
       code: 'factory-disabled',
-      message: '工厂受控管线已停用（SparkOS 降级为简报台）。编辑与发布请使用 media-os 工作流；如需临时恢复，在 VAULT config/workbench_mode.json 写入 {"mode":"full"} 并重启宿主。',
+      message: FACTORY_DISABLED_MESSAGE,
     },
   })
   return true

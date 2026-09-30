@@ -28,6 +28,7 @@ process.env.SPARKOS_VAULT_ROOT = vault
 process.env.SPARKOS_CONTENTOS_ROOT = root
 process.env.SPARKOS_DAILY_BRIEF_DIR = briefDir
 process.env.SPARKOS_DB_PATH = path.join(vault, 'data', 'sparkos.db')
+process.env.SPARKOS_WORKBENCH_MODE = 'full'
 after(() => rmSync(root, { recursive: true, force: true }))
 
 const { openFactoryDatabase } = await import('../src/storage/database.ts')

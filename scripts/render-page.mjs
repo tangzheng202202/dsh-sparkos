@@ -1,8 +1,8 @@
 /**
  * 渲染统一工作台 HTML 到 /tmp/sparkos-wb.html（无宿主也可跑 DOM 检查）。
  * 用法：node --experimental-strip-types scripts/render-page.mjs [out.html]
- * M8 起 /sparkos/app 与 /sparkos/app-v2 是同一份统一模板；--v2 参数保留为兼容
- * （被忽略），渲染结果与默认完全一致，并顺带写 /tmp/sparkos-wb-v2.html 供 DOM 检查。
+ * /sparkos/app 与 /sparkos/app-v2 使用相同的当前模式模板；--v2 参数保留为兼容
+ * （被忽略），并顺带把所选模式的同一模板写到 /tmp/sparkos-wb-v2.html 供别名 DOM 检查。
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -184,6 +184,7 @@ function renderTemplate(templatePath, target) {
 // --v2 兼容参数继续被忽略。
 void v2
 const factory = args.includes('--factory')
-renderTemplate(factory ? '../src/server/factory.template.html' : '../src/server/page.template.html', out)
-renderTemplate('../src/server/page.template.html', '/tmp/sparkos-wb-v2.html')
+const template = factory ? '../src/server/factory.template.html' : '../src/server/page.template.html'
+renderTemplate(template, out)
+renderTemplate(template, '/tmp/sparkos-wb-v2.html')
 if (fixtureRoot) rmSync(fixtureRoot, { recursive: true, force: true })
