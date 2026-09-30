@@ -1,25 +1,49 @@
 #!/usr/bin/env python3
 """Chrome headless DOM 渲染检查（工作台升级后断言集：真实每日产物渲染）。"""
-import subprocess, sys, os
+import subprocess, sys, os, re
 
 CHROME = os.environ.get("SPARKOS_TEST_CHROME") or (
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     if os.path.exists("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
     else "/usr/bin/google-chrome"
 )
-src = sys.argv[1] if len(sys.argv) > 1 else "/tmp/sparkos-wb.html"
+if len(sys.argv) != 3 or sys.argv[1] not in ("brief", "full"):
+    print("usage: dom-check.py brief|full rendered.html")
+    sys.exit(2)
+mode, src = sys.argv[1:]
 if not os.path.exists(CHROME):
-    print("SKIP: Chrome not found at " + CHROME)
-    sys.exit(0)
-dom = subprocess.run([CHROME, "--headless", "--disable-gpu", "--dump-dom", "file://" + src],
-                     capture_output=True, text=True, timeout=60).stdout
+    print("ERROR: Chrome not found at " + CHROME)
+    sys.exit(2)
+if not os.path.isfile(src):
+    print("ERROR: rendered page not found at " + src)
+    sys.exit(2)
+result = subprocess.run([CHROME, "--headless", "--disable-gpu", "--dump-dom", "file://" + os.path.abspath(src)],
+                        capture_output=True, text=True, timeout=60)
+if result.returncode != 0 or not result.stdout.strip():
+    print("ERROR: Chrome DOM render failed: " + result.stderr[-500:])
+    sys.exit(1)
+dom = result.stdout
 ok = True
 def check(name, cond):
     global ok
     ok = ok and bool(cond)
     print(("OK  " if cond else "MISS ") + name)
 
-# M8 统一工作台：/tmp/sparkos-wb.html 即统一模板（原 V1 与 V2 已合并为一份实现）
+alias = "/tmp/sparkos-wb-v2.html"
+check("app-v2 alias uses selected mode", os.path.isfile(alias) and open(alias, encoding="utf8").read() == open(src, encoding="utf8").read())
+if mode == "brief":
+    for kw in ("SparkOS 简报台", "每日简报", "当日必读", "运行时草稿", "蒸馏队列", "待写回星火库"):
+        check("brief keyword " + kw, kw in dom)
+    check("must-read decisions", 'data-mr="adopt"' in dom and 'data-mr="ignore"' in dom)
+    check("runtime draft viewer", 'data-rt-toggle=' in dom and '/sparkos/draft?file=' in dom)
+    check("distill decisions", 'data-ds="adopt"' in dom and 'data-ds="ignore"' in dom)
+    check("writeback removal", 'data-wb-remove=' in dom and '/sparkos/writeback/remove' in dom)
+    check("factory controls absent", 'id="visual-lightbox"' not in dom and '/sparkos/visual/decision' not in dom and '/sparkos/publish' not in dom)
+    check("rendered buttons have explicit type", re.search(r"<button(?![^>]*type=)", dom) is None)
+    print("RESULT:", "PASS" if ok else "FAIL")
+    sys.exit(0 if ok else 1)
+
+# M8 统一工作台：full 模式使用工厂模板。
 for kw in ["SparkOS 统一工作台", "每日简报", "叙事主线", "时间线知识卡", "当日必读",
            "运行时草稿", "来源注册表", "融合产物", "下发建议", "归档计数",
            "情报簇", "每日 Top 5", "系统建议", "信源健康", "待写回"]:

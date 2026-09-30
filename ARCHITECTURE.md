@@ -8,7 +8,7 @@
 DSH 宿主（webServer / tools / attachments 服务）
    │
    ├─ sparkos_run / sparkos_visual_* 工具（agent 调用）
-   ├─ /sparkos/* HTTP 端点（统一工作台 UI：/sparkos/app 唯一正式入口，/sparkos/app-v2 仅兼容别名，同一模板）
+   ├─ /sparkos/* HTTP 端点（/sparkos/app 正式入口，/sparkos/app-v2 同模式兼容别名）
    │
 dsh-sparkos 插件
    │
@@ -23,6 +23,8 @@ dsh-sparkos 插件
    │
    └─ 只读外部资产：contentos 每日产物、星火知识库、intel 三源 archive
 ```
+
+默认 `brief` 模式渲染简报模板并让工厂 HTTP 端点返回 410；`sparkos_run` 的工厂分支和 `sparkos_visual_*` 工具在初始化 VAULT 或打开 SQLite 前返回 `factory-disabled`。情报簇提交在 brief 模式可保存情报产物，但不刷新工厂排名。显式 `full` 模式才启用工厂页面、工具与审批链。
 
 ## 存储边界：VAULT / SQLite / attachments
 

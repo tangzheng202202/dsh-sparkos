@@ -10,6 +10,7 @@ const clustersDir = path.join(vault, 'ops-intel', 'clusters')
 mkdirSync(clustersDir, { recursive: true })
 process.env.SPARKOS_VAULT_ROOT = vault
 process.env.SPARKOS_DB_PATH = path.join(vault, 'data', 'factory.db')
+process.env.SPARKOS_WORKBENCH_MODE = 'full'
 process.env.SPARKOS_ALPHA_ARCHIVE = path.join(root, 'alpha')
 process.env.SPARKOS_HERMES_ARCHIVE = path.join(root, 'hermes')
 

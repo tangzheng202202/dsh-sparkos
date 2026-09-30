@@ -14,6 +14,8 @@ import { VAULT_ROOT } from '../vault.ts'
 
 export type WorkbenchMode = 'brief' | 'full'
 
+export const FACTORY_DISABLED_MESSAGE = '工厂受控管线已停用（SparkOS 降级为简报台）。编辑与发布请使用 media-os 工作流；如需临时恢复，设置 SPARKOS_WORKBENCH_MODE=full，或在 VAULT config/workbench_mode.json 写入 {"mode":"full"}，并重启宿主。'
+
 export function workbenchMode(): WorkbenchMode {
   const env = process.env.SPARKOS_WORKBENCH_MODE
   if (env === 'full' || env === 'brief') return env
