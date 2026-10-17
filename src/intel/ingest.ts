@@ -7,9 +7,8 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, rmSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { homedir } from 'node:os'
 import path from 'node:path'
-import { KNOWLEDGE_ROOT, VAULT_ROOT, envPath, envOrNull } from '../vault.ts'
+import { VAULT_ROOT, envOrNull } from '../vault.ts'
 
 export type SnapshotStatus = 'ok' | 'blocked' | 'rejected' | 'expired' | 'unknown'
 
@@ -57,48 +56,48 @@ export interface IntelConfig {
   keepDays: number
 }
 
-/** 默认源（hermes-cn 已收紧白名单；hn 为按条目展开的 FeedFuse 快照）。 */
+/**
+ * 默认不接入任何情报源。设置对应环境变量后才加入，并保留该源的过滤规则。
+ * hermes-cn 已收紧白名单；hn 为按条目展开的 FeedFuse 快照。
+ */
 export function defaultIntelConfig(): IntelConfig {
   const sources: IntelSourceDef[] = []
+  const alpha = envOrNull('SPARKOS_ALPHA_ARCHIVE')
+  if (alpha) sources.push({ id: 'alpha-signal', dir: alpha, maxStalenessHours: 48, pattern: 'all' })
+  const hn = envOrNull('SPARKOS_HN_ARCHIVE')
+  if (hn) {
+    sources.push({
+      id: 'hn',
+      // FeedFuse/HN 每日快照，一文件约 40 条。条目自带真实热度，是情报层唯一的真实热度来源。
+      dir: hn,
+      maxStalenessHours: 30,
+      pattern: 'all',
+      filePrefix: 'tech-ai-',
+      explodeItems: true,
+    })
+  }
+  const hermes = envOrNull('SPARKOS_HERMES_ARCHIVE')
+  if (hermes) {
+    sources.push({
+      id: 'hermes-cn',
+      dir: hermes,
+      maxStalenessHours: 24,
+      pattern: 'published-only',
+      // 综合新闻管道噪声高：只保留与内容主线相关的版块。
+      // 分类门去掉「国际动态」后，信噪比 20.6%→33.0%。
+      categories: ['科技创新', '财经经济'],
+      // 主题门与分类是「或」关系：救回落在其他版块里、但命中主线的稿件。
+      topicsAllow: ['人工智能', 'AI', '科技', '机器人', '算力', '量子', '芯片', '大模型'],
+    })
+  }
+  const baicaotang = envOrNull('SPARKOS_BAICAOTANG_ARCHIVE')
+  if (baicaotang) sources.push({ id: 'baicaotang', dir: baicaotang, maxStalenessHours: 24, pattern: 'all' })
   const all = envOrNull('SPARKOS_INTEL_ARCHIVE_ALL')
   if (all) sources.push({ id: 'archive-all', dir: all, maxStalenessHours: 48, pattern: 'all' })
   const published = envOrNull('SPARKOS_INTEL_ARCHIVE_PUBLISHED')
   if (published) sources.push({ id: 'archive-published', dir: published, maxStalenessHours: 24, pattern: 'published-only' })
   return {
-    sources: [
-      {
-        id: 'alpha-signal',
-        dir: envPath('SPARKOS_ALPHA_ARCHIVE', path.join(homedir(), '.openclaw', 'telegram-newsroom', 'state', 'archive')),
-        maxStalenessHours: 48,
-        pattern: 'all',
-      },
-      {
-        id: 'hn',
-        // FeedFuse/HN 每日快照（08:01 与 20:00 两波），一文件约 40 条（HN 20 + GitHub 20）。
-        // 条目自带真实热度（score/heat，如 856），是情报层唯一的真实热度来源。
-        dir: envPath('SPARKOS_HN_ARCHIVE', path.join(KNOWLEDGE_ROOT, 'sources', 'raw')),
-        maxStalenessHours: 30,
-        pattern: 'all',
-        filePrefix: 'tech-ai-',
-        explodeItems: true,
-      },
-      {
-        id: 'hermes-cn',
-        // 2026-09-01 newsroom-cn 从 ~/.hermes/newsroom-cn 迁出，现位于 ~/newsroom-cn。
-        // 仍可用 SPARKOS_HERMES_ARCHIVE 覆盖；旧路径的兼容 symlink 仅作双保险。
-        dir: envPath('SPARKOS_HERMES_ARCHIVE', path.join(homedir(), 'newsroom-cn', 'state', 'archive')),
-        maxStalenessHours: 24,
-        pattern: 'published-only',
-        // 综合新闻管道噪声高：只保留与内容主线相关的版块。
-        // 2026-09-10 收紧：去掉「国际动态」——14 天实测该版块 63 条里仅 1 条与 AI/科技相关
-        // （其余为台风/航母调动/俄美通话等），却占白名单通过量的 39%。去掉后信噪比 20.6%→33.0%。
-        categories: ['科技创新', '财经经济'],
-        // P0+ 主题门（与分类是「或」关系）：救回落在时政要闻/国际动态里的主线相关稿件。
-        // 实测 14 天可救回 5 条，其中「教师人工智能素养全覆盖培训」是条真 AI 政策新闻。
-        topicsAllow: ['人工智能', 'AI', '科技', '机器人', '算力', '量子', '芯片', '大模型'],
-      },
-      { id: 'baicaotang', dir: envPath('SPARKOS_BAICAOTANG_ARCHIVE', '' ) || null, maxStalenessHours: 24, pattern: 'all' },
-    ],
+    sources,
     outDir: path.join(VAULT_ROOT, 'ops-intel', 'ingest'),
     runsDir: path.join(VAULT_ROOT, 'ops-intel', 'runs'),
     keepDays: 14,

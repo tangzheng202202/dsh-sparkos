@@ -1,12 +1,10 @@
 /**
  * VAULT（数据区）路径解析与初始化迁移。
  *
- * 合并版：保留上游「数据跟 DSH_HOME 走、不设个人默认路径」的骨架，
- * 同时兼容本机既有数据目录（已存在时优先，避免升级后看起来「数据没了」）。
- *
- * 优先级：SPARKOS_VAULT_ROOT → 已存在的 ~/DeepSeek harness/sparkos → $DSH_HOME/sparkos → ~/.dsh/sparkos。
- * 第二项存在即优先：这是升级兼容，不是默认值（新装环境没有该目录，会直接走 DSH_HOME）。
- * 知识库 / 编辑侧 OS / 每日产物默认指向本机既有目录，均可被环境变量覆盖。
+ * 优先级：SPARKOS_VAULT_ROOT → $DSH_HOME/sparkos → ~/.dsh/sparkos。
+ * 显式 SPARKOS_VAULT_ROOT 或 DSH_HOME 始终生效。不探测本机是否存在某个个人目录。
+ * 知识库、每日产物、编辑侧 OS、情报归档都没有个人默认路径：
+ * 未设置环境变量时，产物落在数据目录里，情报源为空。
  * @module dsh-sparkos/src/vault
  */
 
@@ -21,10 +19,15 @@ export function envPath(name: string, fallback: string): string {
 }
 
 /** 未设置或空白时返回 null，不回落到任何本机目录。 */
-export function envOrNull(name: string): string | null {
-  const v = process.env[name]
+export function optionalRoot(name: string, env: Record<string, string | undefined> = process.env): string | null {
+  const v = env[name]
   if (!v || v.trim() === '') return null
   return v.trim()
+}
+
+/** 未设置或空白时返回 null，不回落到任何本机目录。 */
+export function envOrNull(name: string): string | null {
+  return optionalRoot(name)
 }
 
 /** 展开 `~`、`~/`、`~\`。其余原样返回。与 dsh-home-paths 的规则一致。 */
@@ -36,16 +39,13 @@ export function expandHomePath(input: string, home = homedir()): string {
 
 /**
  * 插件数据目录。
- * 优先级：SPARKOS_VAULT_ROOT → 既有的 ~/DeepSeek harness/sparkos → $DSH_HOME/sparkos → ~/.dsh/sparkos。
+ * 优先级：SPARKOS_VAULT_ROOT → $DSH_HOME/sparkos → ~/.dsh/sparkos。
  * 空白的 DSH_HOME 当作没设，避免落到当前工作目录。
  */
 export function resolveVaultRoot(env: Record<string, string | undefined> = process.env, home = homedir()): string {
   const explicit = env.SPARKOS_VAULT_ROOT
   if (explicit !== undefined && explicit.trim() !== '') return path.resolve(expandHomePath(explicit.trim(), home))
   const fromEnv = env.DSH_HOME
-  // 既有数据目录优先：升级接入时不让旧账本「消失」。新装环境没有这个目录，会照常跟随 DSH_HOME。
-  const legacy = path.join(home, 'DeepSeek harness', 'sparkos')
-  if (existsSync(legacy)) return path.resolve(legacy)
   const dshHome = fromEnv !== undefined && fromEnv.trim() !== ''
     ? expandHomePath(fromEnv.trim(), home)
     : path.join(home, '.dsh')
@@ -54,22 +54,51 @@ export function resolveVaultRoot(env: Record<string, string | undefined> = proce
 
 export const VAULT_ROOT = resolveVaultRoot()
 
-/** 只读知识库（G3 引用卡校验）。 */
-export const KNOWLEDGE_ROOT = envPath('SPARKOS_KNOWLEDGE_ROOT', path.join(homedir(), 'cow', 'knowledge'))
+/** 只读知识库（G3 引用卡校验）。未设置时为空串，不指向任何本机目录。 */
+export function knowledgeRootFrom(env: Record<string, string | undefined> = process.env): string {
+  return optionalRoot('SPARKOS_KNOWLEDGE_ROOT', env) ?? ''
+}
 
-/** 每日工作流运行时根（sparkos-daily skill 的真实产出区，工作台只读）。 */
-export const CONTENTOS_ROOT = envPath('SPARKOS_CONTENTOS_ROOT', path.join(homedir(), 'cow', 'projects', 'contentos-x'))
+/** 每日工作流运行时根。未设置时为 null，产物改落在数据目录。 */
+export function contentosRootFrom(env: Record<string, string | undefined> = process.env): string | null {
+  return optionalRoot('SPARKOS_CONTENTOS_ROOT', env)
+}
+
+/** 编辑侧内容 OS。未设置时为 null，简报台不读外部排期。 */
+export function mediaOsRootFrom(env: Record<string, string | undefined> = process.env): string | null {
+  return optionalRoot('SPARKOS_MEDIA_OS_ROOT', env)
+}
 
 /**
- * 编辑侧内容 OS（New City 13）：选题池 / 30 天排期 / 数据主表。
- * 与 CONTENTOS_ROOT（每日循环引擎）是两套资产，**全程只读**。
+ * 显式环境变量优先；否则挂到 CONTENTOS（仅当已设置）；否则落在数据目录。
  */
-export const MEDIA_OS_ROOT = envPath('SPARKOS_MEDIA_OS_ROOT', path.join(homedir(), 'DeepSeek harness', 'media-os'))
+export function underExternalOrVaultFrom(
+  envName: string,
+  relative: string,
+  env: Record<string, string | undefined>,
+  vaultRoot: string,
+  contentosRoot: string | null,
+): string {
+  const explicit = optionalRoot(envName, env)
+  if (explicit) return explicit
+  if (contentosRoot) return path.join(contentosRoot, relative)
+  return path.join(vaultRoot, relative)
+}
+
+export const KNOWLEDGE_ROOT = knowledgeRootFrom()
+
+/** 每日工作流运行时根（sparkos-daily skill 的真实产出区，工作台只读）。 */
+export const CONTENTOS_ROOT = contentosRootFrom()
+
+/**
+ * 编辑侧内容 OS：选题池 / 30 天排期 / 数据主表。
+ * 与 CONTENTOS_ROOT（每日循环引擎）是两套资产，全程只读。
+ * 未设置 SPARKOS_MEDIA_OS_ROOT 时为 null。
+ */
+export const MEDIA_OS_ROOT = mediaOsRootFrom()
 
 function underExternalOrVault(envName: string, relative: string): string {
-  const explicit = envOrNull(envName)
-  if (explicit) return explicit
-  return path.join(CONTENTOS_ROOT, relative)
+  return underExternalOrVaultFrom(envName, relative, process.env, VAULT_ROOT, CONTENTOS_ROOT)
 }
 
 export const TIMELINE_DATA = envPath('SPARKOS_TIMELINE_DATA', path.join(VAULT_ROOT, 'config', 'timeline_cards.json'))
@@ -80,6 +109,7 @@ export const RUNTIME_EVENTS = underExternalOrVault('SPARKOS_RUNTIME_EVENTS', pat
 
 /** 运行时资产存在则优先，否则用包内 seeds/（干净环境可独立初始化）。 */
 function runtimeIf(relative: string): string | null {
+  if (!CONTENTOS_ROOT) return null
   const p = path.join(CONTENTOS_ROOT, relative)
   return existsSync(p) ? p : null
 }

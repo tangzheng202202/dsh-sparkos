@@ -47,6 +47,7 @@ function pad3(n: number): string {
  * 目录缺失（干净环境）时从 001 开始，不抛错。
  */
 export function nextCardNumbers(knowledgeRoot: string = KNOWLEDGE_ROOT): { obs: number; model: number } {
+  if (!knowledgeRoot) return { obs: 1, model: 1 }
   const scan = (dir: string, pattern: RegExp): number => {
     let max = 0
     const base = path.join(knowledgeRoot, 'spark-notes', dir)

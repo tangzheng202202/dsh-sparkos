@@ -12,8 +12,13 @@
 set -uo pipefail
 
 PLUGIN_ROOT="${SPARKOS_PLUGIN_ROOT:-__PLUGIN_ROOT__}"
-VAULT="${SPARKOS_VAULT_ROOT:-$HOME/DeepSeek harness/sparkos}"
-DSH_CLI="${DSH_CLI:-$HOME/cow/apps/dsh/launch/dsh-cli.sh}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=env.sh
+source "$SCRIPT_DIR/env.sh"
+VAULT="$(resolve_vault)"
+if [ -n "${DSH_CLI:-}" ]; then
+  DSH_CLI="$(opt_path "$DSH_CLI")"
+fi
 ANALYZE_DIR="$VAULT/ops-intel/clusters"
 
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
@@ -37,8 +42,8 @@ if [ "${T0:-0}" -eq 0 ]; then
   exit 0
 fi
 
-if [ ! -x "$DSH_CLI" ] && [ ! -f "$DSH_CLI" ]; then
-  log "FAIL: 找不到 dsh-cli.sh（$DSH_CLI）"
+if [ -z "${DSH_CLI:-}" ] || { [ ! -x "$DSH_CLI" ] && [ ! -f "$DSH_CLI" ]; }; then
+  log "FAIL: 未设置或不存在 DSH_CLI（指向 dsh-cli.sh，没有默认路径）"
   exit 1
 fi
 

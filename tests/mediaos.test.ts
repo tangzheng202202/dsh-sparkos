@@ -99,6 +99,23 @@ test('buildMediaOsSnapshot 装配真实 fixture', async () => {
   assert.ok(snap.schedule.updatedAt, '应带 mtime 供页面判断新鲜度')
 })
 
+test('未配置时不读磁盘，响应也不带回绝对路径', async () => {
+  const { buildMediaOsSnapshot } = await import('../src/server/mediaos.ts')
+  const snap = buildMediaOsSnapshot('2026-09-10', null)
+  assert.equal(snap.configured, false)
+  assert.equal(snap.available, false)
+  assert.equal(snap.root, '')
+})
+
+test('已配置时快照仍不回传绝对路径', async () => {
+  const { buildMediaOsSnapshot } = await import('../src/server/mediaos.ts')
+  const snap = buildMediaOsSnapshot('2026-09-10')
+  assert.equal(snap.configured, true)
+  assert.equal(snap.available, true)
+  assert.equal(snap.root, '')
+  assert.equal(JSON.stringify(snap).includes(mediaOs), false)
+})
+
 test('文件全缺失时降级为空且不抛错（干净环境必须能渲染）', async () => {
   const { buildMediaOsSnapshot } = await import('../src/server/mediaos.ts')
   const snap = buildMediaOsSnapshot('2026-09-10', join(root, 'does-not-exist'))
@@ -111,6 +128,8 @@ test('文件全缺失时降级为空且不抛错（干净环境必须能渲染�
   assert.equal(snap.topicPool.present, false)
   assert.equal(snap.topicPool.entries, 0)
   assert.equal(snap.schedule.updatedAt, null, '缺失文件不应有 mtime')
+  assert.equal(snap.configured, true)
+  assert.equal(snap.root, '')
 })
 
 test('只读红线：mediaos.ts 源码不含任何写 API', async () => {
