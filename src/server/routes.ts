@@ -47,7 +47,7 @@ function factoryDisabled(res: import('node:http').ServerResponse): boolean {
     ok: false,
     error: {
       code: 'factory-disabled',
-      message: '工厂受控管线已停用（SparkOS 降级为简报台）。编辑与发布请使用 media-os 工作流；如需临时恢复，在 VAULT config/workbench_mode.json 写入 {"mode":"full"} 并重启宿主。',
+      message: '工厂管线默认关闭（当前是简报台），这个接口返回 410。发布请在各平台后台人工完成。若要临时打开工厂，设置 SPARKOS_WORKBENCH_MODE=full，或在 VAULT config/workbench_mode.json 写入 {"mode":"full"} 后重启宿主。',
     },
   })
   return true

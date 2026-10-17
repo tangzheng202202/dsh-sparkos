@@ -1,6 +1,7 @@
 /**
  * M0 · intel 健康看板数据：每源 staleness（最新 published 距今小时）+ 连续失败次数。
- * 阈值：alpha-signal ≤48h / hermes-cn ≤24h（决策2）。只读。
+ * 未配置、目录不存在、或还没有任何已发布稿件时为 pending，不标红。
+ * 只有已有稿件过期，或接入后连续失败，才标红。只读。
  * @module dsh-sparkos/src/intel/health
  */
 
@@ -71,18 +72,32 @@ export function computeHealth(cfg: IntelConfig, now = new Date()): HealthReport 
     if (src.dir === null) {
       return {
         id: src.id, status: 'pending', latestPublishedAt: null, stalenessHours: null,
-        maxStalenessHours: src.maxStalenessHours, failStreak: 0, note: 'pending-source（有数据后再拆分接入）',
+        maxStalenessHours: src.maxStalenessHours, failStreak: 0, note: '未配置',
+      }
+    }
+    if (!existsSync(src.dir)) {
+      return {
+        id: src.id, status: 'pending', latestPublishedAt: null, stalenessHours: null,
+        maxStalenessHours: src.maxStalenessHours, failStreak: 0,
+        note: '目录不存在，未标红。请检查路径，或留空表示不接入',
       }
     }
     const latest = latestPublished(src, now.getTime())
     const staleness = latest !== null ? Math.max(0, Math.round((now.getTime() - Date.parse(latest)) / 3600000)) : null
     const streak = failStreak(cfg.runsDir, src.id)
     let status: HealthStatus
-    if (staleness === null || staleness > src.maxStalenessHours || streak > 0) status = 'red'
-    else status = 'green'
+    let note: string | undefined
+    if (latest === null && streak === 0) {
+      status = 'pending'
+      note = '暂无已发布稿件'
+    } else if (staleness === null || staleness > src.maxStalenessHours || streak > 0) {
+      status = 'red'
+    } else {
+      status = 'green'
+    }
     return {
       id: src.id, status, latestPublishedAt: latest, stalenessHours: staleness,
-      maxStalenessHours: src.maxStalenessHours, failStreak: streak,
+      maxStalenessHours: src.maxStalenessHours, failStreak: streak, note,
     }
   })
   // overall 只反映真实接入源：pending-source（待接入）不计入，避免健康灯永远 pending 失去信号意义。

@@ -1,6 +1,8 @@
 # dsh-sparkos 开源引流计划
 
-只做计划，这页不改代码。目标就两件：陌生人 5 分钟能装上并看到东西；然后拿去换 star、X/公众号曝光，并投 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)。
+作者已同意本计划，代码改动在同一分支。这篇只保留当时的发现。个人目录和内部管道名已从本文删掉，git 历史不改。
+
+目标就两件：陌生人 5 分钟能装上并看到东西；然后拿去换 star、X/公众号曝光，并投 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)。
 
 仓库：https://github.com/tangzheng202202/dsh-sparkos （公开，2026-08-20 创建，52 个提交，已有 `dsh-plugin` topic，没有许可证，npm 上没有这个包，也没有 GitHub Release。）
 
@@ -42,16 +44,14 @@
 
 | 位置 | 默认落点 |
 |---|---|
-| `src/vault.ts:19` | `~/DeepSeek harness/sparkos`（目录名带空格） |
-| `src/vault.ts:22` | `~/cow/knowledge` |
-| `src/vault.ts:23` | `~/cow/visualization/timeline_data.json` |
-| `src/vault.ts:26-34` | `~/cow/projects/contentos-x` 以及其下 daily_brief、perf、蒸馏队列、事件账本 |
-| `src/intel/ingest.ts:44` | `~/.openclaw/telegram-newsroom/state/archive` |
-| `src/intel/ingest.ts:50-52` | `~/newsroom-cn/state/archive`（注释写旧路径是 `~/.hermes/newsroom-cn`） |
+| `src/vault.ts:19` | 作者家目录下、名字里带空格的插件数据夹 |
+| `src/vault.ts:22-23` | 作者家目录下的知识库和一条时间线数据文件 |
+| `src/vault.ts:26-34` | 作者家目录下的外部运行时项目，以及其下每日简报、表现数据、蒸馏队列、事件账本 |
+| `src/intel/ingest.ts:44-52` | 作者家目录下的两处情报归档；注释里还留着更早的旧路径。README 写的默认值和代码不一致 |
 
-目录不存在时，ingest 记 `source-missing`（`src/intel/ingest.ts:140-142`），健康灯直接红（`src/intel/health.ts:81`）。`README.md:69` 说「干净环境可独立运行」，种子只覆盖主线名、空事件、空知识卡和一个 example.com RSS（`seeds/`）。每日简报不在种子里，简报仍去读 contentos 目录（`src/daily.ts:4-8`）。
+目录不存在时，ingest 记 `source-missing`（`src/intel/ingest.ts:140-142`），健康灯直接红（`src/intel/health.ts:81`）。`README.md:69` 说「干净环境可独立运行」，种子只覆盖主线名、空事件、空知识卡和一个 example.com RSS（`seeds/`）。每日简报不在种子里，简报仍去读外部运行时目录（`src/daily.ts:4-8`）。
 
-`README.md:94` 把 hermes 默认路径写成 `~/.hermes/...`，和 `src/intel/ingest.ts:52` 的 `~/newsroom-cn/state/archive` 对不上。按 README 去配环境变量会配错。
+按 README 去配环境变量会配错，因为文档里的默认路径和代码不是同一处。
 
 ### 装上了也对不上 README 里的产品
 
@@ -83,7 +83,7 @@ main 上最近一次 CI 同样挂在 `test:dom`：https://github.com/tangzheng20
 1. **改 peer 范围。** `package.json:40-45` 的 `*` 改成收录指南里的写法，把当前 rc 和后面的正式版都显式放行（`cordis`、`dsh-tools` 必选）。`schemastery` 从 dependencies 挪走或删掉（源码没用）。为什么：这是别人装进现有 DSH profile 时最可能直接失败的一步。约 3 小时，含在一个真实 web profile 里复现 `dsh plugin add`。
 2. **README 安装段改成一条命令。** 删掉 `README.md:62-65` 的 `link:/绝对路径`。写成 `dsh plugin --profile web add github:tangzheng202202/dsh-sparkos`，并写一句：GitHub 来源第一次会因为要跑构建脚本被拦住，按提示打开 allowBuilds 再装一次。为什么：现在的说明只有作者自己的机器走得通。约 1 小时。
 3. **给一个不用现场编译的安装包。** 发到 npm，或给 GitHub Release 挂一个不带版本号的 `.tgz`。发之前确认 `npm pack` 里有 `lib/index.js`、两份模板和 `seeds/`。为什么：列表和插件市场对源码安装会多一步构建授权；预构建是 5 分钟路径。约 4 小时。
-4. **默认路径改成「没有就为空」，并放一份能看的示例简报。** `src/vault.ts:19-34`、`src/intel/ingest.ts:44-58` 不要再默认指向 `~/cow`、`~/.openclaw`、`~/newsroom-cn`。缺源时健康灯写「未配置」，不要红灯 `source-missing`（`src/intel/health.ts:81`）。`seeds/` 加一份每日简报和两三条必读，打开 `/sparkos` 就有字。为什么：装上后第一眼如果是空页面加红灯，对方会以为没装上。约 4 小时。
+4. **默认路径改成「没有就为空」，并放一份能看的示例简报。** `src/vault.ts:19-34`、`src/intel/ingest.ts:44-58` 不要再默认指向作者家目录。缺源时健康灯写「未配置」，不要红灯 `source-missing`（`src/intel/health.ts:81`）。`seeds/` 加一份每日简报和两三条必读，打开 `/sparkos` 就有字。为什么：装上后第一眼如果是空页面加红灯，对方会以为没装上。约 4 小时。
 5. **让文档和默认界面一致。** 合入 `codex/20260930-brief-mode-gates` 里已经写好的「默认 brief、工厂要 full」说明，并改掉 GitHub 仓库简介里的「8/9-tab」。为什么：对方按现 README 去点工厂按钮，接口是 410。约 2 小时（含看那支分支、解决冲突、确认 `test:dom` 变绿）。
 6. **安装前提醒 Node ≥ 22.13。** 写在 README 安装段第一行。加载就会用到 `node:sqlite`（`src/storage/database.ts:11`）。约 1 小时。
 
@@ -110,7 +110,7 @@ main 上最近一次 CI 同样挂在 `test:dom`：https://github.com/tangzheng20
 
 ### P3 示例
 
-- `examples/five-minutes.md`：从装插件到打开简报的命令，不出现绝对路径，不依赖 `~/cow`。
+- `examples/five-minutes.md`：从装插件到打开简报的命令，不出现绝对路径，不依赖作者家目录。
 - 一段 `sparkos_run` 的 `dryRun` 示例，用种子数据就能跑，并注明 brief 下哪些 action 会 410。
 - README「运行示例」改成先指向这个文件。
 
@@ -178,14 +178,10 @@ main 上最近一次 CI 同样挂在 `test:dom`：https://github.com/tangzheng20
 
 下面这些可以公开，但会让陌生人觉得这是作者私人环境，建议在 P0 改默认路径时一起收掉：
 
-- `src/vault.ts:19` `~/DeepSeek harness/sparkos`
-- `src/vault.ts:22-23` `~/cow/knowledge`、`~/cow/visualization/timeline_data.json`
-- `src/vault.ts:26` `~/cow/projects/contentos-x`（同文件 28–34 行继续用这个根）
-- `src/index.ts:4` 注释里的同一 VAULT 路径
-- `src/intel/ingest.ts:44` `~/.openclaw/telegram-newsroom/state/archive`
-- `src/intel/ingest.ts:50-52` `~/newsroom-cn/state/archive`，以及旧路径 `~/.hermes/newsroom-cn`
-- `README.md:89-94` 把上述路径写进了文档，其中 hermes 一行还和代码不一致
-- `src/server/data.ts:247` 红线正则里有内部管道名「华夏舆参」「百草堂」（`src/intel/ingest.ts:38` 注释里也有百草堂）。不是密钥，是作者自己的业务名字
+- `src/vault.ts:19-34` 和 `src/index.ts:4` 默认指向作者家目录（知识库、时间线、外部运行时项目）
+- `src/intel/ingest.ts:44-52` 默认指向作者家目录下的情报归档，注释里还有更早的旧路径
+- `README.md:89-94` 把上述路径写进了文档，而且和代码不是同一处
+- `src/server/data.ts:247` 红线正则里有两条内部管道的中文名（`src/intel/ingest.ts:38` 注释里也有其中一条）。不是密钥，是作者自己的业务名字。具体名字已从本文删除
 - `package.json:7` 仓库地址 `github.com/tangzheng202202/dsh-sparkos`。这是公开仓库地址，不是泄漏
 - `tests/visual-retry.test.ts:345`、`tests/v2-retry-ui.test.ts:302` 里的 `/Users/me/pic.png` 是故意写的非法路径样例，不是真人目录
 

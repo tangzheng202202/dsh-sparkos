@@ -21,7 +21,7 @@ dsh-sparkos 插件
    │    ├─ deliveries/      派生交付包（preview/production）
    │    └─ data/sparkos.db  内容工厂 SQLite（schema v7，additive migration）
    │
-   └─ 只读外部资产：contentos 每日产物、星火知识库、intel 三源 archive
+   └─ 可选只读外部资产：每日产物目录、知识库、情报归档（都要自己配环境变量）
 ```
 
 ## 存储边界：VAULT / SQLite / attachments
@@ -37,7 +37,7 @@ dsh-sparkos 插件
 - **SQLite 是产物元数据的唯一权威**：磁盘文件永远按数据库 SHA/bytes 重新校验后才被读取或复用；不一致 → 结构化完整性错误，绝不静默修复或继续预览。
 - **VAULT 产物目录不可变**：已存在目录在复用前做全量 8 文件校验（manifest 覆盖、SHA、bytes、无额外/缺失/symlink/越界）。
 - **可变 JSON 状态原子写**（`src/storage/atomic.ts`）：同目录 tmp → fsync → rename → 失败清理。
-- **外部资产对插件只读**：星火知识库、contentos 运行时、intel archive 永不被写入；写回星火库只能走"待写回清单 + 人工复制"。
+- **外部资产对插件只读**：知识库、外部每日产物、情报归档永不被写入；写回知识库只能走"待写回清单 + 人工复制"。未配置时不读取任何个人目录。
 
 ## 核心状态机
 

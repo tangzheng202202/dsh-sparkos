@@ -20,12 +20,12 @@ async function run() {
     packages: 'external',
     loader: { '.html': 'text' },
     sourcemap: false,
-    banner: { js: '/* dsh-sparkos host half — built. Edit src/, then `pnpm build`. */' },
+    banner: { js: '/* dsh-sparkos host half — built. Edit src/, then `npm run build`. */' },
     logLevel: 'info',
   })
 
   const inner = readFileSync('src/client/index.js', 'utf8')
-  const wrapped = `/* dsh-sparkos client half — built. Edit src/client/, then \`pnpm build\`. */
+  const wrapped = `/* dsh-sparkos client half — built. Edit src/client/, then \`npm run build\`. */
 window.__ModuleLoader__.load({
   id: 'dsh-sparkos',
   factory: (require) => {

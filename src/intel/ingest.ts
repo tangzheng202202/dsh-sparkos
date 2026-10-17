@@ -1,14 +1,13 @@
 /**
- * M0 · intel 快照接入：只读扫描两条管道的 state/archive，
+ * M0 · intel 快照接入：只读扫描外部归档目录，
  * 输出增量快照到 VAULT/ops-intel/ingest/。幂等（同 eventKey 零新增），
  * 快照保留 14 天滚动。绝不写入源目录（只读红线）。
  * @module dsh-sparkos/src/intel/ingest
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, rmSync } from 'node:fs'
-import { homedir } from 'node:os'
 import path from 'node:path'
-import { VAULT_ROOT, envPath } from '../vault.ts'
+import { VAULT_ROOT, envOrNull } from '../vault.ts'
 
 export type SnapshotStatus = 'ok' | 'blocked' | 'rejected' | 'expired' | 'unknown'
 
@@ -18,7 +17,7 @@ export interface IntelSourceDef {
   dir: string | null
   /** 健康阈值（小时）：最新 published 距今超过即标红。 */
   maxStalenessHours: number
-  /** 文件名 glob 简化形式：alpha 全量 *.json；hermes-cn 仅 *.published.json。 */
+  /** all：目录里全部 *.json；published-only：只收 *.published.json。 */
   pattern: 'all' | 'published-only'
   /**
    * 分类白名单（缺省或空数组 = 不过滤）：命中快照 raw.item.category 或
@@ -35,28 +34,19 @@ export interface IntelConfig {
   keepDays: number
 }
 
-/** 默认源（决策1：单源 hermes-cn；百草堂 pending-source）。 */
+/**
+ * 默认不接入任何归档。设置环境变量后才出现对应源；目录缺失不会当成故障红灯。
+ * SPARKOS_INTEL_ARCHIVE_ALL：读取目录内全部 json。
+ * SPARKOS_INTEL_ARCHIVE_PUBLISHED：只读取 *.published.json。
+ */
 export function defaultIntelConfig(): IntelConfig {
+  const sources: IntelSourceDef[] = []
+  const all = envOrNull('SPARKOS_INTEL_ARCHIVE_ALL')
+  if (all) sources.push({ id: 'archive-all', dir: all, maxStalenessHours: 48, pattern: 'all' })
+  const published = envOrNull('SPARKOS_INTEL_ARCHIVE_PUBLISHED')
+  if (published) sources.push({ id: 'archive-published', dir: published, maxStalenessHours: 24, pattern: 'published-only' })
   return {
-    sources: [
-      {
-        id: 'alpha-signal',
-        dir: envPath('SPARKOS_ALPHA_ARCHIVE', path.join(homedir(), '.openclaw', 'telegram-newsroom', 'state', 'archive')),
-        maxStalenessHours: 48,
-        pattern: 'all',
-      },
-      {
-        id: 'hermes-cn',
-        // 2026-09-01 newsroom-cn 从 ~/.hermes/newsroom-cn 迁出，现位于 ~/newsroom-cn。
-        // 仍可用 SPARKOS_HERMES_ARCHIVE 覆盖；旧路径的兼容 symlink 仅作双保险。
-        dir: envPath('SPARKOS_HERMES_ARCHIVE', path.join(homedir(), 'newsroom-cn', 'state', 'archive')),
-        maxStalenessHours: 24,
-        pattern: 'published-only',
-        // 综合新闻管道噪声高：只保留与内容主线相关的版块（2026-09-09 决策）。
-        categories: ['科技创新', '财经经济', '国际动态'],
-      },
-      { id: 'baicaotang', dir: envPath('SPARKOS_BAICAOTANG_ARCHIVE', '' ) || null, maxStalenessHours: 24, pattern: 'all' },
-    ],
+    sources,
     outDir: path.join(VAULT_ROOT, 'ops-intel', 'ingest'),
     runsDir: path.join(VAULT_ROOT, 'ops-intel', 'runs'),
     keepDays: 14,
