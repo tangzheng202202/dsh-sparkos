@@ -297,14 +297,35 @@ test('同 key 多状态文件：写后即记 known，不互相覆盖（状态机
     assert.equal(r2.sources.find((s) => s.source === 'archive-all')!.added, 0)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
-test('默认源：四个源在列；目录缺失时健康灯 pending 而非红灯', () => {
-  const previousAll = process.env.SPARKOS_INTEL_ARCHIVE_ALL
-  const previousPublished = process.env.SPARKOS_INTEL_ARCHIVE_PUBLISHED
-  delete process.env.SPARKOS_INTEL_ARCHIVE_ALL
-  delete process.env.SPARKOS_INTEL_ARCHIVE_PUBLISHED
-  try {
+const INTEL_ARCHIVE_ENV = [
+  'SPARKOS_ALPHA_ARCHIVE',
+  'SPARKOS_HN_ARCHIVE',
+  'SPARKOS_HERMES_ARCHIVE',
+  'SPARKOS_BAICAOTANG_ARCHIVE',
+  'SPARKOS_INTEL_ARCHIVE_ALL',
+  'SPARKOS_INTEL_ARCHIVE_PUBLISHED',
+] as const
+
+function withoutIntelArchiveEnv(run: () => void): void {
+  const saved = new Map<string, string | undefined>()
+  for (const name of INTEL_ARCHIVE_ENV) saved.set(name, process.env[name])
+  for (const name of INTEL_ARCHIVE_ENV) delete process.env[name]
+  try { run() } finally {
+    for (const name of INTEL_ARCHIVE_ENV) {
+      const value = saved.get(name)
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+  }
+}
+
+test('空默认：未配置归档时 0 个源，健康灯 pending', () => {
+  withoutIntelArchiveEnv(() => {
     const cfg = defaultIntelConfig()
-    assert.deepEqual(cfg.sources.map((s) => s.id), ['alpha-signal', 'hn', 'hermes-cn', 'baicaotang'])
+    assert.equal(cfg.sources.length, 0)
+    const health = computeHealth(cfg)
+    assert.equal(health.sources.length, 0)
+    assert.equal(health.overall, 'pending')
     const missing = computeHealth({
       ...cfg,
       sources: [{ id: 'archive-all', dir: join(tmpdir(), 'sparkos-no-such-archive'), maxStalenessHours: 24, pattern: 'all' }],
@@ -313,12 +334,26 @@ test('默认源：四个源在列；目录缺失时健康灯 pending 而非红�
     assert.notEqual(missing.sources[0].status, 'red')
     assert.equal(missing.overall, 'pending')
     assert.match(missing.sources[0].note ?? '', /目录不存在/)
-  } finally {
-    if (previousAll === undefined) delete process.env.SPARKOS_INTEL_ARCHIVE_ALL
-    else process.env.SPARKOS_INTEL_ARCHIVE_ALL = previousAll
-    if (previousPublished === undefined) delete process.env.SPARKOS_INTEL_ARCHIVE_PUBLISHED
-    else process.env.SPARKOS_INTEL_ARCHIVE_PUBLISHED = previousPublished
-  }
+  })
+})
+
+test('设置四个归档环境变量后才接入对应源，并保留过滤规则', () => {
+  withoutIntelArchiveEnv(() => {
+    process.env.SPARKOS_ALPHA_ARCHIVE = '/tmp/sparkos-alpha'
+    process.env.SPARKOS_HN_ARCHIVE = '/tmp/sparkos-hn'
+    process.env.SPARKOS_HERMES_ARCHIVE = '/tmp/sparkos-hermes'
+    process.env.SPARKOS_BAICAOTANG_ARCHIVE = '/tmp/sparkos-baicaotang'
+    const cfg = defaultIntelConfig()
+    assert.deepEqual(cfg.sources.map((s) => s.id), ['alpha-signal', 'hn', 'hermes-cn', 'baicaotang'])
+    const hn = cfg.sources.find((s) => s.id === 'hn')
+    assert.equal(hn?.filePrefix, 'tech-ai-')
+    assert.equal(hn?.explodeItems, true)
+    assert.equal(hn?.dir, '/tmp/sparkos-hn')
+    const hermes = cfg.sources.find((s) => s.id === 'hermes-cn')
+    assert.equal(hermes?.pattern, 'published-only')
+    assert.deepEqual(hermes?.categories, ['科技创新', '财经经济'])
+    assert.ok(hermes?.topicsAllow?.includes('人工智能'))
+  })
 })
 
 test('情报簇：规则骨架预填（分组/来源数/证据URL/热度）+ 校验 + 合并写回', async () => {
@@ -486,15 +521,19 @@ test('多条目馈送：archiveCounts 按条目计数而不是文件数', () => 
 })
 
 test('P0 白名单收紧：hermes-cn 不再放行「国际动态」', () => {
-  const cfg = defaultIntelConfig()
-  const hermes = cfg.sources.find((s) => s.id === 'hermes-cn')
-  assert.ok(hermes?.categories)
-  assert.deepEqual(hermes.categories, ['科技创新', '财经经济'], '14 天实测国际动态 63 条仅 1 条与 AI 相关')
-  const hn = cfg.sources.find((s) => s.id === 'hn')
-  assert.ok(hn, 'hn 源必须登记进情报层')
-  assert.equal(hn.explodeItems, true)
-  assert.equal(hn.filePrefix, 'tech-ai-')
-  assert.equal(hn.categories, undefined, 'hn 条目无 category 字段，不得配白名单（会全滤掉）')
+  withoutIntelArchiveEnv(() => {
+    process.env.SPARKOS_HERMES_ARCHIVE = '/tmp/sparkos-hermes'
+    process.env.SPARKOS_HN_ARCHIVE = '/tmp/sparkos-hn'
+    const cfg = defaultIntelConfig()
+    const hermes = cfg.sources.find((s) => s.id === 'hermes-cn')
+    assert.ok(hermes?.categories)
+    assert.deepEqual(hermes.categories, ['科技创新', '财经经济'], '14 天实测国际动态 63 条仅 1 条与 AI 相关')
+    const hn = cfg.sources.find((s) => s.id === 'hn')
+    assert.ok(hn, '设置 SPARKOS_HN_ARCHIVE 后 hn 才登记进情报层')
+    assert.equal(hn.explodeItems, true)
+    assert.equal(hn.filePrefix, 'tech-ai-')
+    assert.equal(hn.categories, undefined, 'hn 条目无 category 字段，不得配白名单（会全滤掉）')
+  })
 })
 
 test('英文标题防误聚：单字符集合会把无关英文标题串成巨组（混合特征 + 领头聚类回归）', () => {
@@ -626,9 +665,12 @@ test('源闸门：分类与主题是「或」关系（主题门救回被分类�
     const noGate = { ...cfg, sources: [{ ...cfg.sources[0], categories: undefined, topicsAllow: undefined }] }
     assert.equal(collectDailyItems(noGate, now).length, 3)
 
-    // 默认配置必须仍带 topicsAllow（P0+ 已落地）
-    const hermes = defaultIntelConfig().sources.find((s) => s.id === 'hermes-cn')
-    assert.ok(hermes?.topicsAllow?.includes('人工智能'), '默认 hermes-cn 必须配主题白名单')
+    // 配上归档之后必须仍带 topicsAllow（P0+ 已落地）；未配置时这个源不出现。
+    withoutIntelArchiveEnv(() => {
+      process.env.SPARKOS_HERMES_ARCHIVE = '/tmp/sparkos-hermes'
+      const hermes = defaultIntelConfig().sources.find((s) => s.id === 'hermes-cn')
+      assert.ok(hermes?.topicsAllow?.includes('人工智能'), '设置 SPARKOS_HERMES_ARCHIVE 后 hermes-cn 必须配主题白名单')
+    })
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 

@@ -25,7 +25,7 @@ export interface MediaOsPaths {
   topicPool: string
 }
 
-export function mediaOsPaths(root: string = MEDIA_OS_ROOT): MediaOsPaths {
+export function mediaOsPaths(root: string): MediaOsPaths {
   return {
     root,
     schedule: path.join(root, '01-content', '30天排期.md'),
@@ -43,7 +43,13 @@ export interface ScheduleItem {
 }
 
 export interface MediaOsSnapshot {
+  /**
+   * 始终为空串。读取仍用调用方传入的 root，但响应不带回绝对路径，
+   * 避免 /sparkos/data 把本机目录泄漏给页面。
+   */
   root: string
+  /** 是否设置了 SPARKOS_MEDIA_OS_ROOT（或调用方传入了 root）。不暴露路径本身。 */
+  configured: boolean
   /** 排期表 / 数据主表 / 选题池 是否可读（缺失时页面降级，不报错）。 */
   available: boolean
   /** 今天（YYYY-MM-DD，取自每日产物的日期，保证与时区/宿主一致）。 */
@@ -162,11 +168,25 @@ function parseTopicPool(text: string): number {
   return n
 }
 
+function emptyMediaOs(today: string): MediaOsSnapshot {
+  return {
+    root: '',
+    configured: false,
+    available: false,
+    today,
+    schedule: { present: false, items: [], range: null, inRange: false, updatedAt: null },
+    metrics: { present: false, rows: 0, lastDate: null, updatedAt: null },
+    topicPool: { present: false, entries: 0, updatedAt: null },
+  }
+}
+
 /**
- * 装配 media-os 只读快照。任何文件缺失都降级为空值，**绝不抛错**——
- * 简报台在干净环境下必须仍能渲染。
+ * 装配 media-os 只读快照。任何文件缺失都降级为空值，绝不抛错——
+ * 简报台在干净环境下必须仍能渲染。未配置时不访问磁盘。
+ * 返回值的 root 固定为空串，页面只看 configured / available。
  */
-export function buildMediaOsSnapshot(today: string, root: string = MEDIA_OS_ROOT): MediaOsSnapshot {
+export function buildMediaOsSnapshot(today: string, root: string | null = MEDIA_OS_ROOT): MediaOsSnapshot {
+  if (!root) return emptyMediaOs(today)
   const p = mediaOsPaths(root)
   const scheduleText = safeRead(p.schedule)
   const metricsText = safeRead(p.metrics)
@@ -176,7 +196,8 @@ export function buildMediaOsSnapshot(today: string, root: string = MEDIA_OS_ROOT
   const metrics = metricsText ? parseMetrics(metricsText) : null
 
   return {
-    root: p.root,
+    root: '',
+    configured: true,
     available: scheduleText !== null || metricsText !== null || poolText !== null,
     today,
     schedule: {

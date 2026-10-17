@@ -297,7 +297,7 @@
     toast('浏览器不支持自动复制，请手动选择文本', true)
   }
   function reload() {
-    return fetch('/sparkos/data').then(function (r) { return r.json() }).then(function (j) {
+    return apiFetch('/sparkos/data').then(function (r) { return r.json() }).then(function (j) {
       data = j.value
       renderAll()
     })
@@ -336,7 +336,8 @@
       ? '来自 media-os 30 天排期表（' + s.range + '），按今天日期自动对齐。'
       : '来自 media-os 30 天排期表，按今天日期自动对齐。'
     if (!s.present) {
-      box.innerHTML = '<li class="empty">未找到 media-os 排期表（' + esc(mediaOs().root || '路径未配置') + '）。</li>'
+      var why = mediaOs().configured ? '已设置 SPARKOS_MEDIA_OS_ROOT，但排期表不存在' : '未配置 SPARKOS_MEDIA_OS_ROOT'
+      box.innerHTML = '<li class="empty">未找到 media-os 排期表（' + esc(why) + '）。</li>'
       $('sched-note').style.display = 'none'
       return
     }
@@ -474,8 +475,8 @@
         act: { type: 'copy', text: '跑周报', label: '复制口令「跑周报」' } })
     } else if (metrics.present && metrics.lastDate) {
       rows.push({ t: '数据回流', s: '最后一条 ' + metrics.lastDate + ' · 共 ' + metrics.rows + ' 条' })
-    } else if (mo.root) {
-      rows.push({ t: '未找到数据主表', s: mo.root + '/04-data/metrics.csv' })
+    } else if (mo.configured) {
+      rows.push({ t: '未找到数据主表', s: '已设置 SPARKOS_MEDIA_OS_ROOT，但没有 04-data/metrics.csv' })
     }
     if (distillN) {
       rows.push({ t: '蒸馏待审', s: distillN + ' 张待人工审核（四红线）',
@@ -678,7 +679,7 @@
     if (all[idx]) { all[idx].open = true; all[idx].scrollIntoView({ block: 'start' }) }
   }
   function loadDraftFull(file) {
-    return fetch('/sparkos/draft?file=' + encodeURIComponent(file)).then(jsonOrThrow)
+    return apiFetch('/sparkos/draft?file=' + encodeURIComponent(file)).then(jsonOrThrow)
   }
 
   document.addEventListener('click', function (ev) {

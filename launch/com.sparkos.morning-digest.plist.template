@@ -22,6 +22,18 @@
     <key>SPARKOS_PLUGIN_ROOT</key><string>__PLUGIN_ROOT__</string>
     <key>SPARKOS_VAULT_ROOT</key><string>__VAULT_ROOT__</string>
     <key>TELEGRAM_BRIDGE_DIR</key><string>__BRIDGE_DIR__</string>
+    <key>DSH_HOME</key><string>__DSH_HOME__</string>
+    <key>SPARKOS_KNOWLEDGE_ROOT</key><string>__KNOWLEDGE_ROOT__</string>
+    <key>SPARKOS_CONTENTOS_ROOT</key><string>__CONTENTOS_ROOT__</string>
+    <key>SPARKOS_MEDIA_OS_ROOT</key><string>__MEDIA_OS_ROOT__</string>
+    <key>SPARKOS_DAILY_BRIEF_DIR</key><string>__DAILY_BRIEF_DIR__</string>
+    <key>SPARKOS_PERF_DIR</key><string>__PERF_DIR__</string>
+    <key>SPARKOS_RUNTIME_DISTILL_QUEUE</key><string>__DISTILL_QUEUE__</string>
+    <key>SPARKOS_RUNTIME_EVENTS</key><string>__EVENTS__</string>
+    <key>SPARKOS_ALPHA_ARCHIVE</key><string>__ALPHA_ARCHIVE__</string>
+    <key>SPARKOS_HN_ARCHIVE</key><string>__HN_ARCHIVE__</string>
+    <key>SPARKOS_HERMES_ARCHIVE</key><string>__HERMES_ARCHIVE__</string>
+    <key>SPARKOS_BAICAOTANG_ARCHIVE</key><string>__BAICAOTANG_ARCHIVE__</string>
     <key>PATH</key><string>__HOME__/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
   </dict>
   <key>StartCalendarInterval</key>

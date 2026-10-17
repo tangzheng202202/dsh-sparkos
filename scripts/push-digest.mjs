@@ -23,7 +23,14 @@ const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
 const stdoutOnly = args.includes('--stdout')
 
-const BRIDGE_DIR = process.env.TELEGRAM_BRIDGE_DIR ?? path.join(homedir(), 'DeepSeek harness', 'telegram-bridge')
+function expandHome(input) {
+  if (input === '~') return homedir()
+  if (input.startsWith('~/') || input.startsWith('~\\')) return path.join(homedir(), input.slice(2))
+  return input
+}
+
+const bridgeRaw = process.env.TELEGRAM_BRIDGE_DIR?.trim() ?? ''
+const BRIDGE_DIR = bridgeRaw === '' ? '' : expandHome(bridgeRaw)
 
 function loadEnvFile(file) {
   const out = {}
@@ -37,10 +44,10 @@ function loadEnvFile(file) {
 }
 
 function resolveCreds() {
-  const env = loadEnvFile(path.join(BRIDGE_DIR, '.env'))
+  const env = BRIDGE_DIR ? loadEnvFile(path.join(BRIDGE_DIR, '.env')) : {}
   const token = process.env.TELEGRAM_BOT_TOKEN ?? env.TELEGRAM_BOT_TOKEN ?? ''
   let chatId = process.env.SPARKOS_PUSH_CHAT_ID ?? ''
-  if (chatId === '') {
+  if (chatId === '' && BRIDGE_DIR) {
     try {
       const sessions = JSON.parse(readFileSync(path.join(BRIDGE_DIR, 'sessions.json'), 'utf8'))
       chatId = String(Object.keys(sessions)[0] ?? '')
@@ -86,7 +93,7 @@ if (dryRun) {
 const { token, chatId } = resolveCreds()
 if (token === '' || chatId === '') {
   console.error('缺少凭据：token=' + (token ? 'ok' : '缺失') + ' chatId=' + (chatId || '缺失') +
-    '（可设 TELEGRAM_BOT_TOKEN / SPARKOS_PUSH_CHAT_ID，或确认 ' + BRIDGE_DIR + '）')
+    '。设置 TELEGRAM_BOT_TOKEN 与 SPARKOS_PUSH_CHAT_ID，或设置 TELEGRAM_BRIDGE_DIR')
   process.exit(1)
 }
 

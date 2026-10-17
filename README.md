@@ -14,8 +14,12 @@ DeepSeek Harness（DSH）上的本机简报台。它读每日简报和当日必�
 - `publish` 发布表现聚合（只读）
 - `advise` 系统建议（只读，守卫⑤）
 - `intel` 情报指挥所：ingest/health、`fusion` 日频融合、`analyze`/`submitCluster` 情报簇、`cardRequests` 补卡清单、`rank` 每日 Top5、`jobs` 任务状态、`dispatch` 下发建议
-- 情报层信源（2026-09-10 调整）：`alpha-signal` / `hn`（FeedFuse 快照，按条目展开，**唯一带真实热度的源**）/ `hermes-cn` / `baicaotang`（pending）
-  - hermes-cn 闸门 = `categories:['科技创新','财经经济']` **或** `topicsAllow:['人工智能','AI','科技',…]`。去「国际动态」把信噪比 20.6%→33.0%（14 天 160→97 条）；主题门是补漏，实测 14 天仅多救回 5 条
+- 情报层信源默认不接入（0 个源，健康灯是 pending）。要用某个源，设置对应环境变量；过滤规则在变量设上之后才生效：
+  - `SPARKOS_ALPHA_ARCHIVE` → `alpha-signal`（目录内全部 json，48h）
+  - `SPARKOS_HN_ARCHIVE` → `hn`（FeedFuse 快照，只取 `tech-ai-*.json`，按条目展开，**唯一带真实热度的源**）
+  - `SPARKOS_HERMES_ARCHIVE` → `hermes-cn`（只收 published）。闸门 = `categories:['科技创新','财经经济']` **或** `topicsAllow:['人工智能','AI','科技',…]`。去「国际动态」把信噪比 20.6%→33.0%（14 天 160→97 条）；主题门是补漏，实测 14 天仅多救回 5 条
+  - `SPARKOS_BAICAOTANG_ARCHIVE` → `baicaotang`
+  - `SPARKOS_INTEL_ARCHIVE_ALL` / `SPARKOS_INTEL_ARCHIVE_PUBLISHED` 可以再接任意目录
   - `cardRequests`：把「够热（`sourceHeat`≥70）但 0 张知识卡」的主题转成可执行补卡清单（`ops-intel/card-requests-*.json|md`，建议编号如 `obs://056`）。**只出建议，不写星火库**
 - **T0 分析队列 + 定时簇分析（P4）**：插件不调 LLM（红线），所以插件只负责**收窄工作量**，分析交给 agent。
 
@@ -173,21 +177,32 @@ peer 覆盖 DSH `0.0.1-rc.1`、`0.1.0-rc.6` 和 `0.2.x`（含 `0.2.0-rc.2`，以
 
 ## 数据目录
 
-插件数据放在 `$DSH_HOME/sparkos`。没设 `DSH_HOME` 时就是 `~/.dsh/sparkos`。缺目录会自动创建。知识库和情报归档没有默认的个人路径。
+插件数据放在 `$DSH_HOME/sparkos`。没设 `DSH_HOME` 时就是 `~/.dsh/sparkos`。显式 `SPARKOS_VAULT_ROOT` 优先于 `DSH_HOME`。本机就算已经有别的数据目录，也不会自动改用它。缺目录会自动创建。知识库、每日产物、media-os、情报归档都没有默认的个人路径：不设环境变量时，每日产物落在数据目录里，情报源个数是 0。
+
+`/sparkos/data` 不返回 media-os 的绝对路径。页面只显示「未配置」或「已设置但文件不存在」。
 
 | 环境变量 | 未设置时 | 说明 |
 |---|---|---|
-| `SPARKOS_VAULT_ROOT` | `~/DeepSeek harness/sparkos` | 插件数据区（决策/intel/守卫账本/产物/交付） |
+| `SPARKOS_VAULT_ROOT` | `$DSH_HOME/sparkos`，再否则 `~/.dsh/sparkos` | 插件数据区（决策/intel/守卫账本/产物/交付） |
 | `SPARKOS_DB_PATH` | `$SPARKOS_VAULT_ROOT/data/sparkos.db` | 内容工厂 SQLite 状态库（schema v7） |
-| `SPARKOS_CONTENTOS_ROOT` | `~/cow/projects/contentos-x` | 每日工作流运行时根（只读） |
-| `SPARKOS_MEDIA_OS_ROOT` | `~/DeepSeek harness/media-os` | 编辑侧内容 OS（只读：30 天排期 / metrics.csv / 选题池）。缺失时简报台降级但不报错 |
-| `SPARKOS_DAILY_BRIEF_DIR` | `$CONTENTOS_ROOT/daily_brief` | daily_data / daily_briefing / drafts |
-| `SPARKOS_KNOWLEDGE_ROOT` | `~/cow/knowledge` | 星火知识库（只读，G3 引用卡校验） |
-| `SPARKOS_ALPHA_ARCHIVE` / `SPARKOS_HERMES_ARCHIVE` / `SPARKOS_BAICAOTANG_ARCHIVE` | `~/.openclaw/...` / `~/.hermes/...` / null | intel 三源 archive 目录 |
-| `SPARKOS_HN_ARCHIVE` | `$SPARKOS_KNOWLEDGE_ROOT/sources/raw` | FeedFuse/HN 每日快照目录（只取 `tech-ai-*.json`，按条目展开；条目自带真实热度 `score`） |
+| `SPARKOS_CONTENTOS_ROOT` | 不使用外部目录 | 设了之后，每日简报 / 表现 / 蒸馏队列 / 事件账本默认挂在它下面 |
+| `SPARKOS_MEDIA_OS_ROOT` | 不读 media-os | 编辑侧内容 OS（只读：30 天排期 / metrics.csv / 选题池）。缺失时简报台降级但不报错 |
+| `SPARKOS_DAILY_BRIEF_DIR` | 数据目录下的 `daily_brief` | 若设了 `SPARKOS_CONTENTOS_ROOT` 且没设本变量，则用其 `daily_brief` |
+| `SPARKOS_PERF_DIR` | 数据目录下的 `perf` | 同上，可被本变量或 `SPARKOS_CONTENTOS_ROOT` 改走 |
+| `SPARKOS_RUNTIME_DISTILL_QUEUE` | 数据目录下的 `obsidian-bridge/distill_queue` | 同上 |
+| `SPARKOS_RUNTIME_EVENTS` | 数据目录下的 `archive/events.jsonl` | 同上 |
+| `SPARKOS_KNOWLEDGE_ROOT` | 空 | 星火知识库（只读，G3 引用卡校验）。空则视为没有引用卡，不扫描当前目录 |
+| `SPARKOS_ALPHA_ARCHIVE` | 不接入 | `alpha-signal` |
+| `SPARKOS_HN_ARCHIVE` | 不接入 | FeedFuse/HN 每日快照（只取 `tech-ai-*.json`，按条目展开） |
+| `SPARKOS_HERMES_ARCHIVE` | 不接入 | `hermes-cn`（published-only，分类或主题白名单） |
+| `SPARKOS_BAICAOTANG_ARCHIVE` | 不接入 | `baicaotang` |
 | `SPARKOS_SCHEDULE` / `SPARKOS_INTEL_SCHEDULE` / `SPARKOS_EDITORIAL_SCHEDULE` | `0` | 定时任务开关（默认全关，均不自动外发） |
+| `TELEGRAM_BRIDGE_DIR` | 不读桥接目录 | 晨会推送的凭据目录。也可直接设 `TELEGRAM_BOT_TOKEN` 与 `SPARKOS_PUSH_CHAT_ID` |
+| `DSH_CLI` | 不唤起 agent | `dsh-cli.sh` 的路径，只给情报簇分析定时任务用 |
 
-其余路径（`SPARKOS_RUNTIME_DISTILL_QUEUE`、`SPARKOS_RUNTIME_EVENTS`、`SPARKOS_TIMELINE_DATA`）见 `src/vault.ts`。
+晨会推送和情报分析的 launchd 任务不继承当前 shell。安装前先 export 需要的变量，再跑 `bash launch/install-morning-digest.sh` 或 `bash launch/install-intel-analysis.sh`，脚本会把当时的值写进 plist。留空的变量会写成空字符串，不会填个人路径。
+
+`SPARKOS_TIMELINE_DATA` 未设置时是数据目录里的 `config/timeline_cards.json`。
 
 ## 截图
 
