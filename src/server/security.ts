@@ -4,7 +4,7 @@
  * - isSafeExternalUrl / safeExternalUrlOf：动态外链只允许 http/https 绝对地址
  * - CSRF：同源校验 + 不可被跨站读取的 token（页面内嵌 + GET /sparkos/csrf 签发）
  * - CSP：每请求 nonce，script-src 不允许 unsafe-inline
- * DSH webServer 宿主未提供 auth/CSRF API（仅路由注册），此处为插件内可测试的同源保护。
+ * 登录态由宿主 connection.admit 决定（见 access.ts）。这里继续做 CSRF 与 CSP。
  * @module dsh-sparkos/src/server/security
  */
 

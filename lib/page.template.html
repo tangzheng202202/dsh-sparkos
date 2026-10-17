@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SparkOS 简报台</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2733; --muted:#67788c; --line:#e3e8ee; --blue:#2563eb; --green:#16a34a; --gray:#9aa7b5; --red:#dc2626; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 20px 60px; }
+  header.top { display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; justify-content:space-between; margin-bottom:18px; }
+  header.top h1 { font-size:22px; margin:0; }
+  header.top .sub { color:var(--muted); font-size:13px; }
+  .banner { background:#eef4ff; border:1px solid #c7dbff; border-radius:10px; padding:10px 14px; font-size:13px; color:#1e40af; margin-bottom:18px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:18px; }
+  .card h2 { font-size:16px; margin:0 0 12px; display:flex; gap:10px; align-items:baseline; }
+  .card h2 .count { color:var(--muted); font-size:13px; font-weight:normal; }
+  .status-row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:4px; }
+  .pill { background:#f1f5f9; border-radius:999px; padding:4px 12px; font-size:13px; color:var(--muted); }
+  .pill.ok { background:#e9f9ef; color:var(--green); }
+  .pill.warn { background:#fff4e5; color:#b45309; }
+  .pill.bad { background:#fdecec; color:var(--red); }
+  .mr-item { border-top:1px solid var(--line); padding:12px 0; }
+  .mr-item:first-of-type { border-top:none; }
+  .mr-title { font-weight:600; }
+  .mr-meta { color:var(--muted); font-size:13px; margin-top:2px; }
+  .draft-item { display:flex; flex-wrap:wrap; gap:8px; align-items:center; border-top:1px solid var(--line); padding:10px 0; }
+  .draft-item:first-of-type { border-top:none; }
+  .draft-name { font-weight:600; font-size:14px; word-break:break-all; }
+  .draft-preview { color:var(--muted); font-size:13px; flex:1 1 260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .draft-full { display:none; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:12px; margin:8px 0; white-space:pre-wrap; font-size:13px; max-height:420px; overflow:auto; }
+  .draft-full.open { display:block; }
+  button.btn { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:8px; padding:5px 12px; font-size:13px; cursor:pointer; }
+  button.btn:hover { border-color:var(--blue); color:var(--blue); }
+  button.btn.primary { background:var(--blue); border-color:var(--blue); color:#fff; }
+  button.btn.subtle { color:var(--muted); }
+  .briefing-text { white-space:pre-wrap; font-size:14px; max-height:520px; overflow:auto; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:14px; }
+  .distill-item { border-top:1px solid var(--line); padding:12px 0; }
+  .distill-item:first-of-type { border-top:none; }
+  .distill-summary { font-size:14px; }
+  .distill-meta { color:var(--muted); font-size:13px; margin:2px 0 8px; }
+  .wb-item { border-top:1px solid var(--line); padding:12px 0; }
+  .wb-item:first-of-type { border-top:none; }
+  .wb-target { font-size:13px; color:var(--muted); }
+  .wb-content { display:none; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:12px; margin:8px 0; white-space:pre-wrap; font-size:13px; max-height:360px; overflow:auto; }
+  .wb-content.open { display:block; }
+  .empty { color:var(--muted); font-size:14px; }
+  .toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:#1c2733; color:#fff; border-radius:8px; padding:8px 16px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast.show { opacity:.95; }
+  .toast.err { background:var(--red); }
+  .decided { color:var(--muted); font-size:13px; }
+  footer.note { color:var(--muted); font-size:12.5px; margin-top:26px; line-height:1.8; }
+  .spin { display:inline-block; animation:sp 1s linear infinite; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>SparkOS 简报台</h1>
+      <div class="sub">AI 编辑部 · 每日情报简报 + 草稿产出（只读工作台）</div>
+    </div>
+    <div class="sub" id="gen-at"></div>
+  </header>
+
+  <div class="banner" id="mode-banner">
+    当前是简报台。选题审批、草稿包、视觉审核、交付和发布台账默认关闭，对应接口返回 410。
+    本页只做每日简报、运行时草稿和蒸馏队列。发布请在各平台后台人工完成。
+  </div>
+
+  <div class="card">
+    <h2>今日状态</h2>
+    <div class="status-row" id="status-row"></div>
+  </div>
+
+  <div class="card">
+    <h2>每日简报 <span class="count" id="briefing-date"></span></h2>
+    <div class="briefing-text" id="briefing-text">还没有简报。把 daily_briefing_YYYY-MM-DD.md 放到每日简报目录，或设置 SPARKOS_DAILY_BRIEF_DIR。</div>
+  </div>
+
+  <div class="card">
+    <h2>当日必读 <span class="count" id="mr-count"></span></h2>
+    <div id="must-reads"></div>
+  </div>
+
+  <div class="card">
+    <h2>运行时草稿 <span class="count" id="draft-count"></span>（只读 · 可复制全文）</h2>
+    <div id="drafts"></div>
+  </div>
+
+  <div class="card">
+    <h2>蒸馏队列 <span class="count" id="distill-count"></span>（采纳 / 忽略）</h2>
+    <div id="distill"></div>
+  </div>
+
+  <div class="card">
+    <h2>待写回星火库 <span class="count" id="wb-count"></span>（复制后人工写回，再移除）</h2>
+    <div id="writeback"></div>
+  </div>
+
+  <footer class="note">
+    简报台说明：必读采纳/忽略与蒸馏采纳/忽略会写入 VAULT 决策账本（供每日循环去重），不触碰星火库。
+    工厂端点（editorial/creation/visual/publish）已返回 410；如需临时恢复，在 VAULT config/workbench_mode.json 写入 {"mode":"full"} 并重启宿主。
+  </footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict'
+  var data = window._embeddedDailyData || {}
+  var $ = function (id) { return document.getElementById(id) }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    })
+  }
+  function fmtBytes(n) {
+    if (n == null) return ''
+    if (n < 1024) return n + ' B'
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
+    return (n / 1024 / 1024).toFixed(1) + ' MB'
+  }
+  function toast(msg, isErr) {
+    var t = $('toast')
+    t.textContent = msg
+    t.className = 'toast show' + (isErr ? ' err' : '')
+    setTimeout(function () { t.className = 'toast' }, 2200)
+  }
+  function apiFetch(url, opts) {
+    opts = opts || {}
+    opts.credentials = 'include'
+    opts.headers = Object.assign({ 'content-type': 'application/json', 'x-sparkos-csrf': (window._sparkosCsrf || '') }, opts.headers || {})
+    return fetch(url, opts)
+  }
+  // 已有决策（kind=topic 对应必读 event_id；kind=distill 对应蒸馏 file）
+  function decidedMap(kind) {
+    var map = {}
+    ;(data.decisions || []).forEach(function (d) { if (d.kind === kind) map[d.id] = d.action })
+    return map
+  }
+
+  function renderStatus() {
+    $('gen-at').textContent = data.generatedAt ? ('生成于 ' + new Date(data.generatedAt).toLocaleString('zh-CN')) : ''
+    var row = []
+    var daily = data.daily || {}
+    var cycle = data.dailyCycle || {}
+    if (daily.date) row.push('<span class="pill ok">daily ' + esc(daily.date) + '</span>')
+    else row.push('<span class="pill warn">还没有简报</span>')
+    if (cycle.status === 'done') row.push('<span class="pill ok">今日产物已就绪</span>')
+    else if (cycle.status === 'due') row.push('<span class="pill warn">待跑内容循环</span>')
+    var intel = data.intel || {}
+    var overall = intel.overall || (intel.health && intel.health.overall)
+    if (overall) {
+      var healthClass = overall === 'green' ? 'ok' : (overall === 'pending' || overall === 'yellow') ? 'warn' : 'bad'
+      var healthText = overall === 'pending' ? '情报源未配置' : ('情报健康 ' + overall)
+      row.push('<span class="pill ' + healthClass + '">' + esc(healthText) + '</span>')
+    }
+    var mr = (daily.data && daily.data.must_reads) || []
+    row.push('<span class="pill">必读 ' + mr.length + '</span>')
+    row.push('<span class="pill">运行时草稿 ' + (data.runtimeDrafts || []).length + '</span>')
+    row.push('<span class="pill">蒸馏待审 ' + (data.distillQueue || []).length + '</span>')
+    row.push('<span class="pill">待写回 ' + (data.writebackQueue || []).length + '</span>')
+    $('status-row').innerHTML = row.join('')
+  }
+
+  function renderBriefing() {
+    var daily = data.daily || {}
+    $('briefing-date').textContent = daily.briefingDate ? ('· ' + daily.briefingDate) : ''
+    if (daily.briefing) $('briefing-text').textContent = daily.briefing
+  }
+
+  function renderMustReads() {
+    var daily = data.daily || {}
+    var mr = (daily.data && daily.data.must_reads) || []
+    var decided = decidedMap('topic')
+    var lines = data.lines || []
+    var lineName = {}
+    lines.forEach(function (l) { lineName[l.id] = l.name })
+    $('mr-count').textContent = mr.length + ' 条'
+    if (mr.length === 0) { $('must-reads').innerHTML = '<div class="empty">今日无必读。</div>'; return }
+    $('must-reads').innerHTML = mr.map(function (m, i) {
+      var act = decided[m.event_id]
+      var meta = []
+      if (m.fresh_hours != null) meta.push('距今约 ' + m.fresh_hours + ' 小时')
+      var ln = lineName[m.primary_line] || m.primary_line
+      if (ln) meta.push(esc(ln))
+      var body = '<div class="mr-item"><div class="mr-title">' + esc(m.title) + '</div>'
+        + '<div class="mr-meta">' + meta.join(' · ') + '</div>'
+      if (act) {
+        body += '<div class="decided">' + (act === 'adopt' ? '已采纳 ✓' : '已忽略 ✗') + '</div>'
+      } else {
+        body += '<div style="margin-top:8px">'
+          + '<button type="button" class="btn primary" data-mr="adopt" data-mr-id="' + esc(m.event_id) + '">✓ 采纳</button> '
+          + '<button type="button" class="btn subtle" data-mr="ignore" data-mr-id="' + esc(m.event_id) + '">✗ 忽略</button></div>'
+      }
+      return body + '</div>'
+    }).join('')
+  }
+
+  function renderDrafts() {
+    var drafts = data.runtimeDrafts || []
+    $('draft-count').textContent = drafts.length + ' 篇'
+    if (drafts.length === 0) { $('drafts').innerHTML = '<div class="empty">暂无草稿。</div>'; return }
+    $('drafts').innerHTML = drafts.map(function (d) {
+      return '<div class="draft-item">'
+        + '<span class="draft-name">' + esc(d.file) + (d.platform ? ' <span class="pill">' + esc(d.platform) + '</span>' : '') + '</span>'
+        + '<span class="draft-preview">' + esc(d.preview) + '</span>'
+        + '<button type="button" class="btn" data-rt-toggle="' + esc(d.file) + '">查看全文</button>'
+        + '<button type="button" class="btn" data-rt-copy="' + esc(d.file) + '">复制</button>'
+        + '<div class="draft-full" id="rt-full-' + esc(d.file) + '">加载中…</div>'
+        + '</div>'
+    }).join('')
+  }
+
+  function renderDistill() {
+    var q = data.distillQueue || []
+    $('distill-count').textContent = q.length + ' 条'
+    if (q.length === 0) { $('distill').innerHTML = '<div class="empty">蒸馏队列为空。</div>'; return }
+    $('distill').innerHTML = q.map(function (e) {
+      return '<div class="distill-item"><div class="distill-summary">' + esc(e.summary || e.file) + '</div>'
+        + '<div class="distill-meta">' + esc(e.dir) + ' · ' + esc(e.file) + (e.targets && e.targets.length ? ' · 建议：' + esc(e.targets.join('、')) : '') + '</div>'
+        + '<button type="button" class="btn primary" data-ds="adopt" data-ds-file="' + esc(e.file) + '">✓ 采纳</button> '
+        + '<button type="button" class="btn subtle" data-ds="ignore" data-ds-file="' + esc(e.file) + '">✗ 忽略</button>'
+        + '</div>'
+    }).join('')
+  }
+
+  function renderWriteback() {
+    var q = data.writebackQueue || []
+    $('wb-count').textContent = q.length + ' 条'
+    if (q.length === 0) { $('writeback').innerHTML = '<div class="empty">无待写回内容。</div>'; return }
+    $('writeback').innerHTML = q.map(function (e, i) {
+      return '<div class="wb-item"><div class="draft-name">' + esc(e.file) + '</div>'
+        + '<div class="wb-target">建议写入：' + esc(e.target) + '</div>'
+        + '<button type="button" class="btn" data-wb-toggle="' + i + '">查看内容</button> '
+        + '<button type="button" class="btn" data-wb-copy="' + i + '">复制</button> '
+        + '<button type="button" class="btn subtle" data-wb-remove="' + esc(e.file) + '">已写回，移除</button>'
+        + '<div class="wb-content" data-wb-content="' + i + '">' + esc(e.content) + '</div>'
+        + '</div>'
+    }).join('')
+  }
+
+  function loadDraftFull(file) {
+    return apiFetch('/sparkos/draft?file=' + encodeURIComponent(file)).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      return r.json()
+    })
+  }
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target
+    if (!t || !t.getAttribute) return
+
+    // 必读采纳/忽略
+    var mr = t.closest('[data-mr]')
+    if (mr) {
+      var id = mr.getAttribute('data-mr-id'), action = mr.getAttribute('data-mr')
+      mr.disabled = true
+      apiFetch('/sparkos/mutate', { method: 'POST', body: JSON.stringify({ kind: 'topic', id: id, action: action }) })
+        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return r.json() })
+        .then(function () { toast(action === 'adopt' ? '必读已采纳' : '必读已忽略'); return apiFetch('/sparkos/data').then(function (r) { return r.json() }) })
+        .then(function (j) { data = j.value; renderMustReads(); renderStatus() })
+        .catch(function (e) { toast('操作失败：' + e.message, true); mr.disabled = false })
+      return
+    }
+
+    // 蒸馏采纳/忽略
+    var ds = t.closest('[data-ds]')
+    if (ds) {
+      var f = ds.getAttribute('data-ds-file'), dsAct = ds.getAttribute('data-ds')
+      ds.disabled = true
+      apiFetch('/sparkos/mutate', { method: 'POST', body: JSON.stringify({ kind: 'distill', id: f, action: dsAct }) })
+        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return r.json() })
+        .then(function () { toast(dsAct === 'adopt' ? '蒸馏已采纳，进入待写回' : '蒸馏已忽略'); return apiFetch('/sparkos/data').then(function (r) { return r.json() }) })
+        .then(function (j) { data = j.value; renderDistill(); renderWriteback(); renderStatus() })
+        .catch(function (e) { toast('操作失败：' + e.message, true); ds.disabled = false })
+      return
+    }
+
+    // 草稿查看全文 / 复制
+    var rtT = t.closest('[data-rt-toggle]')
+    if (rtT) {
+      var file = rtT.getAttribute('data-rt-toggle')
+      var box = $('rt-full-' + file)
+      if (box.classList.contains('open')) { box.classList.remove('open'); rtT.textContent = '查看全文'; return }
+      if (box.dataset.loaded !== '1') {
+        loadDraftFull(file).then(function (j) {
+          box.textContent = j.value && j.value.content || ''
+          box.dataset.loaded = '1'
+        }).catch(function (e) { box.textContent = '加载失败：' + e.message })
+      }
+      box.classList.add('open'); rtT.textContent = '收起'
+      return
+    }
+    var rtC = t.closest('[data-rt-copy]')
+    if (rtC) {
+      var cf = rtC.getAttribute('data-rt-copy')
+      loadDraftFull(cf).then(function (j) {
+        var text = j.value && j.value.content || ''
+        if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(function () { toast('全文已复制') })
+        toast('浏览器不支持自动复制，请用查看全文手动复制', true)
+      }).catch(function (e) { toast('复制失败：' + e.message, true) })
+      return
+    }
+
+    // 待写回 查看/复制/移除
+    var wbT = t.closest('[data-wb-toggle]')
+    if (wbT) {
+      var idx = wbT.getAttribute('data-wb-toggle')
+      var wbox = document.querySelector('[data-wb-content="' + idx + '"]')
+      wbox.classList.toggle('open')
+      return
+    }
+    var wbC = t.closest('[data-wb-copy]')
+    if (wbC) {
+      var ci = Number(wbC.getAttribute('data-wb-copy'))
+      var entry = (data.writebackQueue || [])[ci]
+      if (entry && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(entry.content).then(function () { toast('内容已复制') })
+      } else toast('浏览器不支持自动复制，请用查看内容手动复制', true)
+      return
+    }
+    var wbR = t.closest('[data-wb-remove]')
+    if (wbR) {
+      var rf = wbR.getAttribute('data-wb-remove')
+      wbR.disabled = true
+      apiFetch('/sparkos/writeback/remove', { method: 'POST', body: JSON.stringify({ file: rf }) })
+        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return apiFetch('/sparkos/data').then(function (rr) { return rr.json() }) })
+        .then(function (j) { data = j.value; renderWriteback(); renderStatus(); toast('已移除') })
+        .catch(function (e) { toast('移除失败：' + e.message, true); wbR.disabled = false })
+      return
+    }
+  })
+
+  renderStatus()
+  renderBriefing()
+  renderMustReads()
+  renderDrafts()
+  renderDistill()
+  renderWriteback()
+})()
+</script>
+</body>
+</html>

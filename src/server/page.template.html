@@ -66,8 +66,8 @@
   </header>
 
   <div class="banner" id="mode-banner">
-    工厂受控管线（选题审批 / 草稿包 / 视觉审核 / 交付 / 发布台账）已停用：编辑与发布请使用既有 media-os 工作流（选题雷达 / 一鱼多吃）。
-    本页仅保留每日简报、运行时草稿与蒸馏队列的查看与轻量操作。
+    当前是简报台。选题审批、草稿包、视觉审核、交付和发布台账默认关闭，对应接口返回 410。
+    本页只做每日简报、运行时草稿和蒸馏队列。发布请在各平台后台人工完成。
   </div>
 
   <div class="card">
@@ -77,7 +77,7 @@
 
   <div class="card">
     <h2>每日简报 <span class="count" id="briefing-date"></span></h2>
-    <div class="briefing-text" id="briefing-text">今日简报尚未生成（每日 07:30 自动生成）。</div>
+    <div class="briefing-text" id="briefing-text">还没有简报。把 daily_briefing_YYYY-MM-DD.md 放到每日简报目录，或设置 SPARKOS_DAILY_BRIEF_DIR。</div>
   </div>
 
   <div class="card">
@@ -132,6 +132,7 @@
   }
   function apiFetch(url, opts) {
     opts = opts || {}
+    opts.credentials = 'include'
     opts.headers = Object.assign({ 'content-type': 'application/json', 'x-sparkos-csrf': (window._sparkosCsrf || '') }, opts.headers || {})
     return fetch(url, opts)
   }
@@ -148,12 +149,16 @@
     var daily = data.daily || {}
     var cycle = data.dailyCycle || {}
     if (daily.date) row.push('<span class="pill ok">daily ' + esc(daily.date) + '</span>')
-    else row.push('<span class="pill bad">今日 daily 未生成</span>')
+    else row.push('<span class="pill warn">还没有简报</span>')
     if (cycle.status === 'done') row.push('<span class="pill ok">今日产物已就绪</span>')
     else if (cycle.status === 'due') row.push('<span class="pill warn">待跑内容循环</span>')
     var intel = data.intel || {}
     var overall = intel.overall || (intel.health && intel.health.overall)
-    if (overall) row.push('<span class="pill ' + (overall === 'green' ? 'ok' : overall === 'yellow' ? 'warn' : 'bad') + '">情报健康 ' + esc(overall) + '</span>')
+    if (overall) {
+      var healthClass = overall === 'green' ? 'ok' : (overall === 'pending' || overall === 'yellow') ? 'warn' : 'bad'
+      var healthText = overall === 'pending' ? '情报源未配置' : ('情报健康 ' + overall)
+      row.push('<span class="pill ' + healthClass + '">' + esc(healthText) + '</span>')
+    }
     var mr = (daily.data && daily.data.must_reads) || []
     row.push('<span class="pill">必读 ' + mr.length + '</span>')
     row.push('<span class="pill">运行时草稿 ' + (data.runtimeDrafts || []).length + '</span>')
@@ -240,7 +245,7 @@
   }
 
   function loadDraftFull(file) {
-    return fetch('/sparkos/draft?file=' + encodeURIComponent(file)).then(function (r) {
+    return apiFetch('/sparkos/draft?file=' + encodeURIComponent(file)).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status)
       return r.json()
     })
@@ -257,7 +262,7 @@
       mr.disabled = true
       apiFetch('/sparkos/mutate', { method: 'POST', body: JSON.stringify({ kind: 'topic', id: id, action: action }) })
         .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return r.json() })
-        .then(function () { toast(action === 'adopt' ? '必读已采纳' : '必读已忽略'); return fetch('/sparkos/data').then(function (r) { return r.json() }) })
+        .then(function () { toast(action === 'adopt' ? '必读已采纳' : '必读已忽略'); return apiFetch('/sparkos/data').then(function (r) { return r.json() }) })
         .then(function (j) { data = j.value; renderMustReads(); renderStatus() })
         .catch(function (e) { toast('操作失败：' + e.message, true); mr.disabled = false })
       return
@@ -270,7 +275,7 @@
       ds.disabled = true
       apiFetch('/sparkos/mutate', { method: 'POST', body: JSON.stringify({ kind: 'distill', id: f, action: dsAct }) })
         .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return r.json() })
-        .then(function () { toast(dsAct === 'adopt' ? '蒸馏已采纳，进入待写回' : '蒸馏已忽略'); return fetch('/sparkos/data').then(function (r) { return r.json() }) })
+        .then(function () { toast(dsAct === 'adopt' ? '蒸馏已采纳，进入待写回' : '蒸馏已忽略'); return apiFetch('/sparkos/data').then(function (r) { return r.json() }) })
         .then(function (j) { data = j.value; renderDistill(); renderWriteback(); renderStatus() })
         .catch(function (e) { toast('操作失败：' + e.message, true); ds.disabled = false })
       return
@@ -324,7 +329,7 @@
       var rf = wbR.getAttribute('data-wb-remove')
       wbR.disabled = true
       apiFetch('/sparkos/writeback/remove', { method: 'POST', body: JSON.stringify({ file: rf }) })
-        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return fetch('/sparkos/data').then(function (rr) { return rr.json() }) })
+        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return apiFetch('/sparkos/data').then(function (rr) { return rr.json() }) })
         .then(function (j) { data = j.value; renderWriteback(); renderStatus(); toast('已移除') })
         .catch(function (e) { toast('移除失败：' + e.message, true); wbR.disabled = false })
       return

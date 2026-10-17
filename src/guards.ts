@@ -78,6 +78,7 @@ function loadKnown(vaultRoot: string): Map<string, string> {
 
 /** G3: 引用卡 URI -> spark-notes 实际文件存在性。knowledgeRoot 可注入（测试用）。 */
 export function cardExists(uri: string, knowledgeRoot: string = KNOWLEDGE_ROOT): boolean {
+  if (!knowledgeRoot) return false
   const m = /^(obs|model):\/\/(\d+)$/.exec(uri)
   if (!m) return false
   const kind = m[1]

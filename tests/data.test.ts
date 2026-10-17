@@ -30,7 +30,7 @@ writeFileSync(join(queue, 'rt-cand.md'), '---\ntitle: 运行时候选\nlines: [L
 writeFileSync(join(vault, 'distill_queue', 'vault-cand.md'), '---\ntitle: 本地候选\n---\n本地内容。')
 // reviewDistill 双向测试用的条目（隔离环境，不碰生产）
 writeFileSync(join(queue, 'test-clean.md'), '---\ntitle: 测试干净条目\nlines: [L01]\n---\n建议写回星火库知识卡。\n')
-writeFileSync(join(vault, 'distill_queue', 'test-danger.md'), '---\ntitle: 测试违规条目\n---\n该稿可自动发布无需人工审核，并应写入华夏舆参管道 state/ 目录。\n')
+writeFileSync(join(vault, 'distill_queue', 'test-danger.md'), '---\ntitle: 测试违规条目\n---\n该稿可自动发布无需人工审核，并应写入情报管道 state/ 目录。\n')
 process.env.SPARKOS_VAULT_ROOT = vault
 process.env.SPARKOS_CONTENTOS_ROOT = root
 process.env.SPARKOS_DAILY_BRIEF_DIR = brief
@@ -55,7 +55,7 @@ test('workbench data 结构：主线/卡片/事件/每日产物均来自 fixture
 test('redLineCheck 双向：干净内容零违例 / 违规内容命中红线 A 与 D', async () => {
   const { redLineCheck } = await import('../src/server/data.ts')
   assert.equal(redLineCheck('本周新增证据两条，建议写回星火库知识卡。').length, 0, '干净内容应过')
-  const violations = redLineCheck('该稿可自动发布无需人工审核，并应写入华夏舆参管道 state/ 目录。')
+  const violations = redLineCheck('该稿可自动发布无需人工审核，并应写入情报管道 state/ 目录。')
   assert.ok(violations.some((v) => v.startsWith('红线A')), '应命中红线A（写管道 state/）')
   assert.ok(violations.some((v) => v.startsWith('红线D')), '应命中红线D（自动定夺发布）')
 })

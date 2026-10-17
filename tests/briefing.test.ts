@@ -61,12 +61,12 @@ function mockRes(): MockRes {
   return { res, out }
 }
 
-const { handleSparkosHttp } = await import('../src/server/routes.ts')
+const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
 
 /** 取一个合法 CSRF token（mutation 守卫先于工厂 410 门，请求必须三重守卫全过）。 */
 async function csrfToken(): Promise<string> {
   const { res, out } = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/csrf'), res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/csrf'), res, admitTestOperator)
   return (JSON.parse(out.body) as { value: { token: string } }).value.token
 }
 
@@ -92,7 +92,7 @@ test('工厂受控端点在 brief 模式下统一 410 factory-disabled', async (
     const { res, out } = mockRes()
     const req = mockReq(method, url, body)
     ;(req.headers as Record<string, string>)['x-sparkos-csrf'] = token
-    await handleSparkosHttp(req, res)
+    await handleSparkosHttp(req, res, admitTestOperator)
     assert.equal(out.status, 410, method + ' ' + url + ' 应为 410，实际 ' + out.status)
     const parsed = JSON.parse(out.body) as { error: { code: string } }
     assert.equal(parsed.error.code, 'factory-disabled', method + ' ' + url)
@@ -101,7 +101,7 @@ test('工厂受控端点在 brief 模式下统一 410 factory-disabled', async (
 
 test('brief 模式页面渲染简报台而非工厂工作台', async () => {
   const { res, out } = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/app'), res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/app'), res, admitTestOperator)
   assert.equal(out.status, 200)
   assert.ok(out.body.includes('SparkOS 简报台'), '应渲染简报台标题')
   assert.ok(out.body.includes('data-mr='), '必读采纳/忽略按钮应存在')
@@ -113,12 +113,12 @@ test('brief 模式页面渲染简报台而非工厂工作台', async () => {
 
 test('daily 轻量端点保持可用（data / draft）', async () => {
   const d = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/data'), d.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/data'), d.res, admitTestOperator)
   assert.equal(d.out.status, 200)
   const parsed = JSON.parse(d.out.body) as { value: { daily: { date: string | null } } }
   assert.equal(parsed.value.daily.date, '2026-08-30')
 
   const r = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/draft?file=2026-08-30-wechat.md'), r.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/draft?file=2026-08-30-wechat.md'), r.res, admitTestOperator)
   assert.equal(r.out.status, 200)
 })

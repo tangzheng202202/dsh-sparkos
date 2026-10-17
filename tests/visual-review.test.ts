@@ -26,7 +26,7 @@ const { claimVisualTask, failVisualTask, queueVisualBatch, submitVisualAttachmen
 const { decideVisualAttempt, retryVisualTask } = await import('../src/visual/review.ts')
 const { createVisualDelivery, readVisualDeliveryFile, readVisualDeliveryZip } = await import('../src/visual/delivery.ts')
 const { deterministicZip } = await import('../src/visual/zip.ts')
-const { handleSparkosHttp } = await import('../src/server/routes.ts')
+const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
 
 const evidenceUrl = 'https://official.example/m5b'
 let fixtureNo = 0
@@ -355,7 +355,7 @@ async function http(method: string, url: string, body?: unknown): Promise<HttpRe
     writeHead(status: number, headers: Record<string, string>) { result.status = status; result.headers = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value)])) },
     end(chunk?: string | Buffer) { result.body = chunk === undefined ? Buffer.alloc(0) : Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk) },
   } as unknown as ServerResponse
-  await handleSparkosHttp(req, res)
+  await handleSparkosHttp(req, res, admitTestOperator)
   return result
 }
 

@@ -474,7 +474,7 @@ var esc = function(s){return String(s==null?'':s).split('&').join('&amp;').split
 function isSafeUrl(u){if(typeof u!=="string")return false;if(u===""||u.length>2048)return false;if(u!==u.trim())return false;if(/[\u0000-\u001f\u007f]/.test(u))return false;if(!/^https?:\/\//i.test(u))return false;try{var p=new URL(u);return p.protocol==="http:"||p.protocol==="https:";}catch(e){return false;}}
 function safeExtLink(u){return isSafeUrl(u)?"<a href=\""+esc(u)+"\" target=\"_blank\" rel=\"noopener noreferrer\">"+esc(u)+"</a>":"<span class=\"mono\">"+esc(u)+"</span>";}
 // 写端点请求包装：mutation POST 统一 application/json + CSRF token
-function apiFetch(url,opts){opts=opts||{};opts.headers=Object.assign({"content-type":"application/json","x-sparkos-csrf":(window._sparkosCsrf||"")},opts.headers||{});return fetch(url,opts);}
+function apiFetch(url,opts){opts=opts||{};opts.credentials='include';opts.headers=Object.assign({"content-type":"application/json","x-sparkos-csrf":(window._sparkosCsrf||"")},opts.headers||{});return fetch(url,opts);}
 function fmtISO(iso){if(!iso)return '—';var d=new Date(iso);if(isNaN(d.getTime()))return esc(iso);var p=function(n){return (n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}
 function safeDecode(v){try{return decodeURIComponent(v);}catch(e){return v;}}
 var ICONS={
@@ -1394,7 +1394,7 @@ function renderGrowth(){
   var perf=D.perf||{files:0,totalPosts:0,platforms:[]};
   var h=[];
   h.push('<div class="card"><div class="card-head"><div class="card-title">'+icon('growth')+'发布表现（真实数据）</div>'+(perf.platforms&&perf.platforms.length?'<span class="pill pill-gray">'+perf.files+' 个数据文件 · '+perf.totalPosts+' 篇</span>':'')+'</div>');
-  if(!perf.platforms||!perf.platforms.length){h.push(empty('尚未接入真实平台表现数据','当前为空属于正常状态：系统不会展示示例数据。接入方式：在各平台后台导出发布数据（JSON，含 posts 数组，字段如 published_at、read_count、like_count、share_count），放入 PERF_DIR（默认 contentos-x/perf/），插件自动汇总出指标、趋势与平台对比。','growth'));}
+  if(!perf.platforms||!perf.platforms.length){h.push(empty('尚未接入真实平台表现数据','当前为空属于正常状态：系统不会展示示例数据。接入方式：在各平台后台导出发布数据（JSON，含 posts 数组，字段如 published_at、read_count、like_count、share_count），放入 PERF_DIR（默认在插件数据目录的 perf/，也可用 SPARKOS_PERF_DIR 指定），插件自动汇总出指标、趋势与平台对比。','growth'));}
   else{
     h.push('<table><thead><tr><th>平台</th><th>篇数</th><th>总阅读</th><th>平均阅读</th><th>最近发布</th></tr></thead><tbody>');
     perf.platforms.forEach(function(p){h.push('<tr><td>'+esc(p.platform)+'</td><td>'+p.posts+'</td><td>'+p.totalReads+'</td><td>'+p.avgReads+'</td><td>'+esc(p.last||'—')+'</td></tr>');});

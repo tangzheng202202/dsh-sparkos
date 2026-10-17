@@ -1,10 +1,8 @@
 /**
  * 每日工作流运行时产物读取（工作台/工具共用的只读数据层）。
  *
- * sparkos-daily skill 的真实产出区在运行时根（默认 contentos-x）：
- *   daily_brief/daily_data_YYYY-MM-DD.json、daily_briefing_*.md、drafts/
- *   obsidian-bridge/distill_queue/（蒸馏候选）
- *   perf/*.json（发布表现）
+ * 每日产物默认在 VAULT/daily_brief。设置 SPARKOS_CONTENTOS_ROOT 或
+ * SPARKOS_DAILY_BRIEF_DIR 可改到别的目录。目录缺失时读出来是空，不报错。
  * 本模块对以上全部只读；写侧只有 VAULT state/（决策、蒸馏审核、待写回清单）。
  * 路径均可用 SPARKOS_* env 覆盖（见 vault.ts）。
  * @module dsh-sparkos/src/daily
@@ -74,7 +72,7 @@ export interface DailyBriefing {
 
 export interface DistillEntry {
   file: string
-  /** runtime=skill 真实候选区（contentos-x）；vault=插件本地队列。 */
+  /** runtime=外部或 VAULT 里的候选目录；vault=插件本地队列。 */
   dir: 'runtime' | 'vault'
   path: string
   summary: string
@@ -322,5 +320,9 @@ export function runtimeEventsCount(): number {
 // ---- 信息源注册表（只读） ----
 
 export function infoSources(): InfoSources | null {
-  return jsonIf<InfoSources>(path.join(CONTENTOS_ROOT, 'config', 'info_sources.json'))
+  if (CONTENTOS_ROOT) {
+    const external = jsonIf<InfoSources>(path.join(CONTENTOS_ROOT, 'config', 'info_sources.json'))
+    if (external) return external
+  }
+  return jsonIf<InfoSources>(path.join(VAULT_ROOT, 'config', 'info_sources.json'))
 }

@@ -62,9 +62,9 @@ function mockRes(): MockRes {
 }
 
 test('GET /sparkos/data：嵌入每日产物（daily.date / briefing / drafts / distill / events）', async () => {
-  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
   const { res, out } = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/data'), res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/data'), res, admitTestOperator)
   assert.equal(out.status, 200)
   const j = JSON.parse(out.body)
   assert.equal(j.ok, true)
@@ -77,33 +77,33 @@ test('GET /sparkos/data：嵌入每日产物（daily.date / briefing / drafts / 
 })
 
 test('GET /sparkos/draft：按文件名读全文；路径穿越拒绝', async () => {
-  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
   const ok1 = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/draft?file=2026-08-20-wechat.md'), ok1.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/draft?file=2026-08-20-wechat.md'), ok1.res, admitTestOperator)
   assert.equal(ok1.out.status, 200)
   assert.ok(JSON.parse(ok1.out.body).value.content.includes('全文内容'))
   const bad = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/draft?file=..%2F..%2Fetc%2Fpasswd'), bad.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/draft?file=..%2F..%2Fetc%2Fpasswd'), bad.res, admitTestOperator)
   assert.equal(bad.out.status, 400)
   const missing = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/draft?file=nope.md'), missing.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/draft?file=nope.md'), missing.res, admitTestOperator)
   assert.equal(missing.out.status, 404)
 })
 
 test('POST /sparkos/mutate：topic 决策落盘；非法 action 400；蒸馏采纳进待写回', async () => {
-  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
   const res = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', { kind: 'topic', id: 'ev-1', action: 'adopt' }), res.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', { kind: 'topic', id: 'ev-1', action: 'adopt' }), res.res, admitTestOperator)
   assert.equal(res.out.status, 200)
   assert.equal(JSON.parse(res.out.body).entry.action, 'adopt')
   const decisionsFile = join(vault, 'state', 'decisions.json')
   assert.ok(existsSync(decisionsFile))
   const bad = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', { kind: 'topic', id: 'ev-1', action: 'hack' }), bad.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', { kind: 'topic', id: 'ev-1', action: 'hack' }), bad.res, admitTestOperator)
   assert.equal(bad.out.status, 400)
   // 蒸馏采纳（runtime 队列）→ 待写回清单
   const dres = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', { kind: 'distill', id: '2026-08-20-cand.md', action: 'adopt' }), dres.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', { kind: 'distill', id: '2026-08-20-cand.md', action: 'adopt' }), dres.res, admitTestOperator)
   assert.equal(dres.out.status, 200)
   const wbFile = join(vault, 'state', 'writeback_queue.json')
   assert.ok(existsSync(wbFile))
@@ -113,32 +113,32 @@ test('POST /sparkos/mutate：topic 决策落盘；非法 action 400；蒸馏采�
 })
 
 test('写回清单端点：GET 列表 / POST remove 单条移除', async () => {
-  const { handleSparkosHttp } = await import('../src/server/routes.ts')
-  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', { kind: 'distill', id: '2026-08-20-cand.md', action: 'adopt' }), mockRes().res)
+  const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
+  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', { kind: 'distill', id: '2026-08-20-cand.md', action: 'adopt' }), mockRes().res, admitTestOperator)
   const gres = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/writeback'), gres.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/writeback'), gres.res, admitTestOperator)
   assert.equal(gres.out.status, 200)
   assert.equal(JSON.parse(gres.out.body).value.length, 1)
   const rres = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/writeback/remove', { file: '2026-08-20-cand.md' }), rres.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/writeback/remove', { file: '2026-08-20-cand.md' }), rres.res, admitTestOperator)
   assert.equal(rres.out.status, 200)
   assert.equal(JSON.parse(rres.out.body).value.length, 0)
 })
 
 test('POST /sparkos/creation/decision：驳回必须携带非空 note，批准不强制', async () => {
-  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
   const packageId = 'dp-0000000000000000'
   for (const body of [
     { packageId, decision: 'rejected' },
     { packageId, decision: 'rejected', note: '   ' },
   ]) {
     const rejected = mockRes()
-    await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', body), rejected.res)
+    await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', body), rejected.res, admitTestOperator)
     assert.equal(rejected.out.status, 400)
     assert.match(JSON.parse(rejected.out.body).error.message, /必须填写审核意见/)
   }
   const approved = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', { packageId, decision: 'approved' }), approved.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', { packageId, decision: 'approved' }), approved.res, admitTestOperator)
   assert.equal(approved.out.status, 422, '批准无 note 应通过 HTTP 参数校验并进入业务状态检查')
 })
 
@@ -157,9 +157,9 @@ test('POST /sparkos/editorial/decision：选题卡人工批准落 SQLite 审批�
   const plan = generateEditorialPlan(db, 'weekly', '2026-08-22')
   db.close()
 
-  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
   const ok = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/editorial/decision', { cardId: plan.cards[0].id, decision: 'approved' }), ok.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/editorial/decision', { cardId: plan.cards[0].id, decision: 'approved' }), ok.res, admitTestOperator)
   assert.equal(ok.out.status, 200)
   assert.equal(JSON.parse(ok.out.body).value.decision, 'approved')
   const { buildFactorySnapshot, runDraftSubmission } = await import('../src/factory/service.ts')
@@ -191,29 +191,29 @@ test('POST /sparkos/editorial/decision：选题卡人工批准落 SQLite 审批�
     ],
   })
   const preview = mockRes()
-  await handleSparkosHttp(mockReq('GET', `/sparkos/creation/artifact?packageId=${draftPackage.id}&file=wechat.html`), preview.res)
+  await handleSparkosHttp(mockReq('GET', `/sparkos/creation/artifact?packageId=${draftPackage.id}&file=wechat.html`), preview.res, admitTestOperator)
   assert.equal(preview.out.status, 200)
   assert.match(String(preview.out.body), /<!doctype html>/)
   const rejectDraft = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', { packageId: draftPackage.id, decision: 'rejected', note: '请重写开头' }), rejectDraft.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/decision', { packageId: draftPackage.id, decision: 'rejected', note: '请重写开头' }), rejectDraft.res, admitTestOperator)
   assert.equal(rejectDraft.out.status, 200)
   assert.equal(JSON.parse(rejectDraft.out.body).value.status, 'rejected')
   assert.equal(JSON.parse(rejectDraft.out.body).value.reviewNote, '请重写开头')
   const rejectedSnapshot = buildFactorySnapshot().drafts.find((item) => item.id === draftPackage.id)!
   assert.equal(rejectedSnapshot.reviewNote, '请重写开头')
   const revision = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/revise', { packageId: draftPackage.id }), revision.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/creation/revise', { packageId: draftPackage.id }), revision.res, admitTestOperator)
   assert.equal(revision.out.status, 200)
   assert.equal(JSON.parse(revision.out.body).value.parentReviewNote, '请重写开头')
   const bad = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/editorial/decision', { cardId: 'bad', decision: 'approved' }), bad.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/editorial/decision', { cardId: 'bad', decision: 'approved' }), bad.res, admitTestOperator)
   assert.equal(bad.out.status, 400)
 })
 
 test('GET /sparkos/app-v2：V2 统一受控工作台（GET 200 · 内嵌数据 · 仅含九类受控 POST · 无其它写端点）', async () => {
-  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
   const res = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/app-v2'), res.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/app-v2'), res.res, admitTestOperator)
   assert.equal(res.out.status, 200)
   const html = res.out.body
   assert.ok(html.includes('window._embeddedDailyData'), 'V2 注入同一数据范式')
@@ -251,10 +251,10 @@ test('GET /sparkos/app-v2：V2 统一受控工作台（GET 200 · 内嵌数据 �
   assert.ok(html.includes('data-nav='), 'V2 含 hash 路由导航')
   // M8 统一工作台：/sparkos、/sparkos/app、/sparkos/app-v2 三入口渲染同一模板，无功能分叉
   const unified = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/app'), unified.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/app'), unified.res, admitTestOperator)
   assert.equal(unified.out.status, 200)
   const root = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos'), root.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos'), root.res, admitTestOperator)
   assert.equal(root.out.status, 200)
   assert.ok(unified.out.body.includes('data-nav='), '/sparkos/app 渲染统一工作台')
   assert.ok(!unified.out.body.includes('nav-tab'), '/sparkos/app 不再是旧 9-tab 模板')
@@ -266,21 +266,21 @@ test('GET /sparkos/app-v2：V2 统一受控工作台（GET 200 · 内嵌数据 �
   }
   // 只读：POST /sparkos/app-v2 一律 404
   const post = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/app-v2'), post.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/app-v2'), post.res, admitTestOperator)
   assert.equal(post.out.status, 404)
 })
 
 test('404：未知路径返回 not-found', async () => {
-  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
   const res = mockRes()
-  await handleSparkosHttp(mockReq('GET', '/sparkos/nope'), res.res)
+  await handleSparkosHttp(mockReq('GET', '/sparkos/nope'), res.res, admitTestOperator)
   assert.equal(res.out.status, 404)
   assert.ok(JSON.parse(res.out.body).error.code === 'not-found')
 })
 test('POST body 超限返回 413', async () => {
-  const { handleSparkosHttp } = await import('../src/server/routes.ts')
+  const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
   const big = { kind: 'topic', id: 'x', action: 'adopt', pad: 'a'.repeat(300 * 1024) }
   const res = mockRes()
-  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', big), res.res)
+  await handleSparkosHttp(mockReq('POST', '/sparkos/mutate', big), res.res, admitTestOperator)
   assert.equal(res.out.status, 413)
 })

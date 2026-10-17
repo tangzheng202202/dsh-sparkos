@@ -74,7 +74,7 @@ function SparkosPanel(props) {
   const [state, setState] = useState(null)
   const [error, setError] = useState('')
   const load = useCallback(() => {
-    fetch(PREFIX + '/intel')
+    fetch(PREFIX + '/intel', { credentials: 'include' })
       .then((r) => r.json())
       .then((body) => {
         if (body && body.ok) { setState(body.value); setError('') }
