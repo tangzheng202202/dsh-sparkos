@@ -22,7 +22,7 @@
     <key>SPARKOS_PLUGIN_ROOT</key><string>__PLUGIN_ROOT__</string>
     <key>SPARKOS_VAULT_ROOT</key><string>__VAULT_ROOT__</string>
     <key>TELEGRAM_BRIDGE_DIR</key><string>__BRIDGE_DIR__</string>
-    <key>PATH</key><string>/Users/mac/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>PATH</key><string>__HOME__/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
   </dict>
   <key>StartCalendarInterval</key>
   <dict>

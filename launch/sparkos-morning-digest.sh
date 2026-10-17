@@ -21,7 +21,7 @@ cd "$PLUGIN_ROOT" || { echo "FAIL: 找不到插件目录 $PLUGIN_ROOT"; exit 1; 
 # launchd 的 PATH 极简，node 必须绝对路径
 NODE_BIN="${NODE_BIN:-}"
 if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
-  for cand in /Users/mac/.local/bin/node "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node; do
+  for cand in "$HOME/.local/bin/node" "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node; do
     if [ -n "${cand:-}" ] && [ -x "$cand" ]; then NODE_BIN="$cand"; break; fi
   done
 fi

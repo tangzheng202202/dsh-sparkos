@@ -26,6 +26,7 @@ chmod +x "$PLUGIN_ROOT/launch/sparkos-morning-digest.sh"
 mkdir -p "$VAULT_ROOT/system"
 
 sed -e "s|__PLUGIN_ROOT__|$PLUGIN_ROOT|g" \
+    -e "s|__HOME__|$HOME|g" \
     -e "s|__VAULT_ROOT__|$VAULT_ROOT|g" \
     -e "s|__BRIDGE_DIR__|$BRIDGE_DIR|g" \
   "$PLUGIN_ROOT/launch/$LABEL.plist.template" > "$TARGET"
