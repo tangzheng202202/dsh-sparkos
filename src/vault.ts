@@ -5,6 +5,7 @@
  * 同时兼容本机既有数据目录（已存在时优先，避免升级后看起来「数据没了」）。
  *
  * 优先级：SPARKOS_VAULT_ROOT → 已存在的 ~/DeepSeek harness/sparkos → $DSH_HOME/sparkos → ~/.dsh/sparkos。
+ * 第二项存在即优先：这是升级兼容，不是默认值（新装环境没有该目录，会直接走 DSH_HOME）。
  * 知识库 / 编辑侧 OS / 每日产物默认指向本机既有目录，均可被环境变量覆盖。
  * @module dsh-sparkos/src/vault
  */
@@ -42,8 +43,9 @@ export function resolveVaultRoot(env: Record<string, string | undefined> = proce
   const explicit = env.SPARKOS_VAULT_ROOT
   if (explicit !== undefined && explicit.trim() !== '') return path.resolve(expandHomePath(explicit.trim(), home))
   const fromEnv = env.DSH_HOME
+  // 既有数据目录优先：升级接入时不让旧账本「消失」。新装环境没有这个目录，会照常跟随 DSH_HOME。
   const legacy = path.join(home, 'DeepSeek harness', 'sparkos')
-  if ((fromEnv === undefined || fromEnv.trim() === '') && existsSync(legacy)) return path.resolve(legacy)
+  if (existsSync(legacy)) return path.resolve(legacy)
   const dshHome = fromEnv !== undefined && fromEnv.trim() !== ''
     ? expandHomePath(fromEnv.trim(), home)
     : path.join(home, '.dsh')
