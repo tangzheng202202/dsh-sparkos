@@ -132,6 +132,7 @@
   }
   function apiFetch(url, opts) {
     opts = opts || {}
+    opts.credentials = 'include'
     opts.headers = Object.assign({ 'content-type': 'application/json', 'x-sparkos-csrf': (window._sparkosCsrf || '') }, opts.headers || {})
     return fetch(url, opts)
   }
@@ -244,7 +245,7 @@
   }
 
   function loadDraftFull(file) {
-    return fetch('/sparkos/draft?file=' + encodeURIComponent(file)).then(function (r) {
+    return apiFetch('/sparkos/draft?file=' + encodeURIComponent(file)).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status)
       return r.json()
     })
@@ -261,7 +262,7 @@
       mr.disabled = true
       apiFetch('/sparkos/mutate', { method: 'POST', body: JSON.stringify({ kind: 'topic', id: id, action: action }) })
         .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return r.json() })
-        .then(function () { toast(action === 'adopt' ? '必读已采纳' : '必读已忽略'); return fetch('/sparkos/data').then(function (r) { return r.json() }) })
+        .then(function () { toast(action === 'adopt' ? '必读已采纳' : '必读已忽略'); return apiFetch('/sparkos/data').then(function (r) { return r.json() }) })
         .then(function (j) { data = j.value; renderMustReads(); renderStatus() })
         .catch(function (e) { toast('操作失败：' + e.message, true); mr.disabled = false })
       return
@@ -274,7 +275,7 @@
       ds.disabled = true
       apiFetch('/sparkos/mutate', { method: 'POST', body: JSON.stringify({ kind: 'distill', id: f, action: dsAct }) })
         .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return r.json() })
-        .then(function () { toast(dsAct === 'adopt' ? '蒸馏已采纳，进入待写回' : '蒸馏已忽略'); return fetch('/sparkos/data').then(function (r) { return r.json() }) })
+        .then(function () { toast(dsAct === 'adopt' ? '蒸馏已采纳，进入待写回' : '蒸馏已忽略'); return apiFetch('/sparkos/data').then(function (r) { return r.json() }) })
         .then(function (j) { data = j.value; renderDistill(); renderWriteback(); renderStatus() })
         .catch(function (e) { toast('操作失败：' + e.message, true); ds.disabled = false })
       return
@@ -328,7 +329,7 @@
       var rf = wbR.getAttribute('data-wb-remove')
       wbR.disabled = true
       apiFetch('/sparkos/writeback/remove', { method: 'POST', body: JSON.stringify({ file: rf }) })
-        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return fetch('/sparkos/data').then(function (rr) { return rr.json() }) })
+        .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j && j.error && j.error.message || ('HTTP ' + r.status)) }); return apiFetch('/sparkos/data').then(function (rr) { return rr.json() }) })
         .then(function (j) { data = j.value; renderWriteback(); renderStatus(); toast('已移除') })
         .catch(function (e) { toast('移除失败：' + e.message, true); wbR.disabled = false })
       return

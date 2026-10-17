@@ -12,11 +12,11 @@ DeepSeek Harness（DSH）上的本机简报台。它读每日简报和当日必�
 dsh plugin --profile web add github:tangzheng202202/dsh-sparkos#main
 ```
 
-重启宿主，打开 `http://<host>:<port>/sparkos`。
+重启宿主，用启动时打印的登录地址打开，再访问 `/sparkos`。页面请求会带上 dsh 的 cookie；没登录时这些地址返回 401 或 403，不返回本机路径。
 
-npm 上还没有 `dsh-sparkos` 这个包，`dsh plugin add dsh-sparkos` 会失败。GitHub 安装会跑 `prepare` 里的构建；如果宿主询问是否允许构建，需要允许。
+npm 上还没有 `dsh-sparkos` 这个包，`dsh plugin add dsh-sparkos` 会失败。仓库里已经提交了 `lib/`，安装不会再跑构建，也不需要打开 pnpm 的 `allowBuilds`。
 
-peer 依赖按 DSH 当前两条预发布线来写，`0.0.1-rc.1` 和 `0.1.0-rc.6` 都能对上，不靠仓库里的 `.npmrc` 压冲突。
+peer 覆盖 DSH `0.0.1-rc.1`、`0.1.0-rc.6` 和 `0.2.x`（含 `0.2.0-rc.2`，以及目前 npm 上的 `0.2.1` 预发布版）。`0.2.6` 及以后的预发布版如果装不上，是范围还没写到那一档。
 
 ## 打开之后
 
@@ -39,11 +39,12 @@ peer 依赖按 DSH 当前两条预发布线来写，`0.0.1-rc.1` 和 `0.1.0-rc.6
 
 ## 数据目录
 
-插件自己的数据默认在 `~/.dsh/sparkos`，缺目录会自动创建。知识库和情报归档没有默认的个人路径。
+插件数据放在 `$DSH_HOME/sparkos`。没设 `DSH_HOME` 时就是 `~/.dsh/sparkos`。缺目录会自动创建。知识库和情报归档没有默认的个人路径。
 
 | 环境变量 | 未设置时 | 说明 |
 |---|---|---|
-| `SPARKOS_VAULT_ROOT` | `~/.dsh/sparkos` | 插件数据区，自动创建 |
+| `DSH_HOME` | `~/.dsh` | DSH 自己的家目录。插件数据在它下面的 `sparkos/` |
+| `SPARKOS_VAULT_ROOT` | `$DSH_HOME/sparkos` | 要单独改插件数据目录时再用 |
 | `SPARKOS_DB_PATH` | `$SPARKOS_VAULT_ROOT/data/sparkos.db` | SQLite，只在打开工厂状态时用 |
 | `SPARKOS_DAILY_BRIEF_DIR` | 数据目录下的 `daily_brief/` | 每日简报和必读 |
 | `SPARKOS_CONTENTOS_ROOT` | 不设置 | 可选的外部只读运行时根；设置后，未单独指定的每日目录改到这里 |
@@ -70,8 +71,10 @@ npm ci
 npm test
 npm run check
 npm run test:dom   # 简报台 + 工厂模板各跑一遍 Chrome DOM 断言，需要本机 Chrome
-npm run build
+npm run build      # 改了 src/ 之后要重新构建，并把 lib/ 一起提交
 ```
+
+安装方用的是仓库里的 `lib/`。`prepack` 只在打包发布时构建，git 安装不会跑它。
 
 `npm run test:dom` 先渲染默认简报台，再带 `--factory` 渲染工厂模板。DOM 检查脚本：`python3 scripts/dom-check.py brief|full <html>`。
 

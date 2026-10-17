@@ -52,6 +52,7 @@ if mode == "brief":
     check("unconfigured intel is not a red pill", "情报源未配置" in dom)
     check("factory writes say 410", "410" in dom)
     check("no native prompt", "window.prompt(" not in dom and "window.alert(" not in dom and "window.confirm(" not in dom)
+    check("browser requests send cookies", "credentials = 'include'" in dom)
 else:
     for kw in ["SparkOS 统一工作台", "每日简报", "叙事主线", "时间线知识卡", "当日必读",
                "运行时草稿", "来源注册表", "融合产物", "下发建议", "归档计数",
@@ -102,6 +103,7 @@ else:
     check("inline svg icons", dom.count("<svg") >= 3 and all(x in dom for x in ["intel:[", "visual:[", "growth:[", "system:["]))
     check("reduced motion + focus visible", "prefers-reduced-motion" in dom and ":focus-visible" in dom)
     check("escape handled", "==='Escape'" in dom or "'Escape'" in dom)
+    check("browser requests send cookies", "credentials='include'" in dom)
 
 print("RESULT:", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)

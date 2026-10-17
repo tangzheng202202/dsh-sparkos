@@ -54,7 +54,7 @@ process.env.SPARKOS_RUNTIME_EVENTS = path.join(root, 'events.jsonl')
 process.env.SPARKOS_TIMELINE_DATA = path.join(vault, 'config', 'timeline_cards.json')
 process.env.SPARKOS_DB_PATH = path.join(root, 'fixture.db')
 
-const { handleSparkosHttp } = await import('../src/server/routes.ts')
+const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
 const security = await import('../src/server/security.ts')
 
 // ---- 隔离 SQLite fixture：视觉任务 prompt/altText/placement 携带注入 payload ----
@@ -81,7 +81,7 @@ const security = await import('../src/server/security.ts')
 let server: Server
 let base = ''
 before(async () => {
-  server = createServer((req, res) => { handleSparkosHttp(req, res) })
+  server = createServer((req, res) => { handleSparkosHttp(req, res, admitTestOperator) })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   base = 'http://127.0.0.1:' + String((server.address() as { port: number }).port)
 })

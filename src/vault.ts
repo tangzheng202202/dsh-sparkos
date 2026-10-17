@@ -1,7 +1,8 @@
 /**
  * VAULT（数据区）路径解析与初始化迁移。
  *
- * 插件自己的数据在 ~/.dsh/sparkos（可用 SPARKOS_VAULT_ROOT 改）。
+ * 插件数据跟 DSH 的家目录走：`$DSH_HOME/sparkos`。
+ * 没设 DSH_HOME 时是 `~/.dsh/sparkos`。`SPARKOS_VAULT_ROOT` 仍可单独改。
  * 知识库、每日产物、情报归档都是可选的只读目录，不设个人默认路径。
  * @module dsh-sparkos/src/vault
  */
@@ -23,7 +24,29 @@ export function envOrNull(name: string): string | null {
   return v.trim()
 }
 
-export const VAULT_ROOT = envPath('SPARKOS_VAULT_ROOT', path.join(homedir(), '.dsh', 'sparkos'))
+/** 展开 `~`、`~/`、`~\`。其余原样返回。与 dsh-home-paths 的规则一致。 */
+export function expandHomePath(input: string, home = homedir()): string {
+  if (input === '~') return home
+  if (input.startsWith('~/') || input.startsWith('~\\')) return path.join(home, input.slice(2))
+  return input
+}
+
+/**
+ * 插件数据目录。
+ * 优先级：SPARKOS_VAULT_ROOT、DSH_HOME/sparkos、~/.dsh/sparkos。
+ * 空白的 DSH_HOME 当作没设，避免落到当前工作目录。
+ */
+export function resolveVaultRoot(env: Record<string, string | undefined> = process.env, home = homedir()): string {
+  const explicit = env.SPARKOS_VAULT_ROOT
+  if (explicit !== undefined && explicit.trim() !== '') return path.resolve(expandHomePath(explicit.trim(), home))
+  const fromEnv = env.DSH_HOME
+  const dshHome = fromEnv !== undefined && fromEnv.trim() !== ''
+    ? expandHomePath(fromEnv.trim(), home)
+    : path.join(home, '.dsh')
+  return path.resolve(dshHome, 'sparkos')
+}
+
+export const VAULT_ROOT = resolveVaultRoot()
 
 /** 只读知识库。未配置时为空字符串，引用卡校验视为不存在，不会去读别人的目录。 */
 export const KNOWLEDGE_ROOT = envOrNull('SPARKOS_KNOWLEDGE_ROOT') ?? ''
