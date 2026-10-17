@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { existsSync, readFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { initVault } from '../src/vault.ts'
+import { expandHomePath, initVault, resolveVaultRoot } from '../src/vault.ts'
 
 test('initVault 幂等：重复运行不重复迁移不覆盖', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'sparkos-vault-'))
@@ -15,6 +15,16 @@ test('initVault 幂等：重复运行不重复迁移不覆盖', () => {
     assert.ok(existsSync(path.join(root, dest)), dest)
   }
   rmSync(root, { recursive: true, force: true })
+})
+
+test('数据目录跟随 DSH_HOME，SPARKOS_VAULT_ROOT 优先', () => {
+  const home = '/tmp/sparkos-home'
+  assert.equal(resolveVaultRoot({}, home), path.join(home, '.dsh', 'sparkos'))
+  assert.equal(resolveVaultRoot({ DSH_HOME: '   ' }, home), path.join(home, '.dsh', 'sparkos'))
+  assert.equal(resolveVaultRoot({ DSH_HOME: '/var/dsh' }, home), path.join('/var/dsh', 'sparkos'))
+  assert.equal(resolveVaultRoot({ DSH_HOME: '~/profiles' }, home), path.join(home, 'profiles', 'sparkos'))
+  assert.equal(resolveVaultRoot({ DSH_HOME: '/var/dsh', SPARKOS_VAULT_ROOT: '/tmp/explicit' }, home), '/tmp/explicit')
+  assert.equal(expandHomePath('~', home), home)
 })
 
 test('initVault 迁移清单落 MANIFEST', () => {

@@ -1,5 +1,5 @@
 /**
- * 工作台数据装配：VAULT + 只读运行时资产（contentos-x 每日产物）→ _embeddedDailyData。
+ * 工作台数据装配：VAULT + 可选的只读每日产物 → _embeddedDailyData。
  * 星火知识库、timeline、daily_brief、perf 一律只读；写回仅经 VAULT state/ 与待写回清单。
  * @module dsh-sparkos/src/server/data
  */
@@ -264,7 +264,7 @@ export function recordDecision(kind: string, id: string, action: 'adopt' | 'igno
 }
 
 const RED_LINE_PATTERNS: Array<{ id: string; label: string; pattern: RegExp }> = [
-  { id: 'A', label: '不得要求写情报管道 state/ 或动 token/钥匙串/launchd', pattern: /(华夏舆参|百草堂|管道).{0,20}(state\/|token|钥匙串|launchd)|(state\/|token|钥匙串|launchd).{0,20}(华夏舆参|百草堂|管道)/ },
+  { id: 'A', label: '不得要求写情报管道 state/ 或动 token/钥匙串/launchd', pattern: /(管道).{0,24}(state\/|token|钥匙串|launchd)|(state\/|token|钥匙串|launchd).{0,24}(管道)/ },
   { id: 'B', label: 'ownership 必须保持 pending（不允许一刀切接管）', pattern: /ownership.{0,20}(takeover|接管生效|owner\s*[:=]\s*dsch?)/i },
   { id: 'D', label: '不得自动定夺发布（最终裁决归人工）', pattern: /自动发布|自动定夺|无需人工|跳过审核/ },
 ]

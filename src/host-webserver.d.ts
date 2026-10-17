@@ -11,6 +11,15 @@ import type { Context } from '@deepseek-ai/cordis'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
+    /**
+     * dsh web 的 connection.admit。0.2.0-rc.2 的 operator 只有 id/ctx/scope。
+     * 插件路由用它做和 /api 一样的 cookie 准入。
+     */
+    connection: {
+      admit(request: { readonly headers: import('node:http').IncomingMessage['headers'] }):
+        | { readonly peer: { readonly id: string; readonly ctx: unknown; readonly scope?: unknown } }
+        | { readonly rejection: 401 | 403 }
+    }
     webServer: {
       register(route: {
         kind: 'exact' | 'prefix'

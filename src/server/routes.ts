@@ -31,6 +31,9 @@ import { openFactoryDatabase } from '../storage/database.ts'
 import { queueVisualBatch, readVisualAsset, visualStatus, VisualPipelineError } from '../visual/service.ts'
 import { createPublishTask, decideVisualAttempt, requestVisualRetry, retryVisualTask } from '../visual/review.ts'
 import { checkMutationRequest, cspWithNonce, escapeJsonForScript, issueCsrfToken, newCspNonce } from './security.ts'
+import { admitTestOperator, denyAdmission, refuseAdmission, type SparkosAdmit } from './access.ts'
+
+export { admitTestOperator }
 import { factoryEnabled } from './mode.ts'
 import { createVisualDelivery, listVisualDeliveries, readVisualDeliveryFile, readVisualDeliveryZip } from '../visual/delivery.ts'
 
@@ -47,7 +50,7 @@ function factoryDisabled(res: import('node:http').ServerResponse): boolean {
     ok: false,
     error: {
       code: 'factory-disabled',
-      message: '工厂受控管线已停用（SparkOS 降级为简报台）。编辑与发布请使用 media-os 工作流；如需临时恢复，在 VAULT config/workbench_mode.json 写入 {"mode":"full"} 并重启宿主。',
+      message: '工厂管线默认关闭（当前是简报台），这个接口返回 410。发布请在各平台后台人工完成。若要临时打开工厂，设置 SPARKOS_WORKBENCH_MODE=full，或在 VAULT config/workbench_mode.json 写入 {"mode":"full"} 后重启宿主。',
     },
   })
   return true
@@ -107,7 +110,16 @@ async function readJsonBody(req: import('node:http').IncomingMessage): Promise<R
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as Record<string, unknown>
 }
 
-export async function handleSparkosHttp(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse): Promise<void> {
+export async function handleSparkosHttp(
+  req: import('node:http').IncomingMessage,
+  res: import('node:http').ServerResponse,
+  admit: SparkosAdmit = denyAdmission,
+): Promise<void> {
+  const admission = admit(req)
+  if ('rejection' in admission) {
+    refuseAdmission(res, admission.rejection)
+    return
+  }
   const url = new URL(req.url ?? '/', 'http://dsh-sparkos.local')
   const path = url.pathname.replace(/\/+$/, '') || '/sparkos'
   try {
@@ -575,12 +587,12 @@ export async function handleSparkosHttp(req: import('node:http').IncomingMessage
 }
 
 export function registerWorkbench(ctx: Context): void {
-  ctx.inject(['webServer'], (httpCtx: Context) => {
+  ctx.inject(['webServer', 'connection'], (httpCtx: Context) => {
     httpCtx.effect(() => httpCtx.webServer.register({
       kind: 'prefix',
       path: '/sparkos',
       handler: async (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => {
-        await handleSparkosHttp(req, res)
+        await handleSparkosHttp(req, res, (request) => httpCtx.connection.admit(request))
       },
     }))
   })

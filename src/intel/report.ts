@@ -132,7 +132,7 @@ export function initOpsIntel(root = VAULT_ROOT): { created: string[] } {
       '- runs/：每轮 run 留痕（source-missing 必须 fail，不静默）',
       '- dispatch/：预留（外发须经人工裁决，本插件不自动外发）',
       '',
-      '红线：源管道 state/ 只读；ownership 保持 migration pending。',
+      '红线：外部归档只读；未配置环境变量时不接入。',
       '',
     ].join('\n'))
     created.push('README.md')
@@ -140,12 +140,10 @@ export function initOpsIntel(root = VAULT_ROOT): { created: string[] } {
   const ownership = path.join(ops, 'ownership.yml')
   if (!existsSync(ownership)) {
     writeFileSync(ownership, [
-      '# intel 指挥所所有权登记（intel 蓝图 §1）',
-      'migration: pending   # 不允许一刀切接管；变更须经用户确认关卡',
-      'sources:',
-      '  alpha-signal: read-only',
-      '  hermes-cn: read-only',
-      '  baicaotang: pending-source',
+      '# 情报数据区所有权',
+      'migration: pending',
+      'sources: []',
+      '# 可选只读归档：SPARKOS_INTEL_ARCHIVE_ALL / SPARKOS_INTEL_ARCHIVE_PUBLISHED',
       '',
     ].join('\n'))
     created.push('ownership.yml')

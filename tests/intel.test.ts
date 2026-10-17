@@ -14,26 +14,26 @@ import { VAULT_ROOT } from '../src/vault.ts'
 
 function fixtureCfg() {
   const root = mkdtempSync(join(tmpdir(), 'sparkos-intel-'))
-  const alphaDir = join(root, 'alpha-archive')
-  const hermesDir = join(root, 'hermes-archive')
-  mkdirSync(alphaDir, { recursive: true })
-  mkdirSync(hermesDir, { recursive: true })
-  // 假 archive：alpha 一个 published + 一个 unsent-scope-blocked
-  writeFileSync(join(alphaDir, 'd20260810123456_a001.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-10T00:00:00Z', title: 'alpha item' }))
-  writeFileSync(join(alphaDir, 'd20260810123457_a002.unsent-scope-blocked.json'), JSON.stringify({ created_at: '2026-08-10T00:00:00Z', title: 'blocked item' }))
-  // 假 archive：hermes 一个 published（正文含 item/draft 结构）
-  writeFileSync(join(hermesDir, 'd20260820070000_h001.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-20T07:00:00Z', item: { title: 'hermes item' }, draft: { title: 'hermes draft' } }))
+  const allDir = join(root, 'all-archive')
+  const publishedDir = join(root, 'published-archive')
+  mkdirSync(allDir, { recursive: true })
+  mkdirSync(publishedDir, { recursive: true })
+  // 假 archive：all 一个 published + 一个 unsent-scope-blocked
+  writeFileSync(join(allDir, 'd20260810123456_a001.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-10T00:00:00Z', title: 'all item' }))
+  writeFileSync(join(allDir, 'd20260810123457_a002.unsent-scope-blocked.json'), JSON.stringify({ created_at: '2026-08-10T00:00:00Z', title: 'blocked item' }))
+  // 假 archive：published 一个 published（正文含 item/draft 结构）
+  writeFileSync(join(publishedDir, 'd20260820070000_h001.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-20T07:00:00Z', item: { title: 'published item' }, draft: { title: 'published draft' } }))
   const cfg: IntelConfig = {
     sources: [
-      { id: 'alpha-signal', dir: alphaDir, maxStalenessHours: 48, pattern: 'all' },
-      { id: 'hermes-cn', dir: hermesDir, maxStalenessHours: 24, pattern: 'published-only' },
-      { id: 'baicaotang', dir: null, maxStalenessHours: 24, pattern: 'all' },
+      { id: 'archive-all', dir: allDir, maxStalenessHours: 48, pattern: 'all' },
+      { id: 'archive-published', dir: publishedDir, maxStalenessHours: 24, pattern: 'published-only' },
+      { id: 'archive-extra', dir: null, maxStalenessHours: 24, pattern: 'all' },
     ],
     outDir: join(root, 'out', 'ingest'),
     runsDir: join(root, 'out', 'runs'),
     keepDays: 14,
   }
-  return { root, cfg, alphaDir, hermesDir }
+  return { root, cfg, allDir, publishedDir }
 }
 
 test('eventKeyOf/statusOf 映射：文件名去后缀 + 后缀状态', () => {
@@ -46,31 +46,31 @@ test('eventKeyOf/statusOf 映射：文件名去后缀 + 后缀状态', () => {
 })
 
 test('ingest 字段映射：eventKey/source/status/raw 保留 + 幂等（二次零新增）', () => {
-  const { root, cfg, hermesDir } = fixtureCfg()
+  const { root, cfg, publishedDir } = fixtureCfg()
   const r1 = runIngest(cfg)
   assert.equal(r1.ok, true)
-  const hermes = r1.sources.find((s) => s.source === 'hermes-cn')!
-  assert.equal(hermes.scanned, 1)
-  assert.equal(hermes.added, 1)
-  const snap = JSON.parse(readFileSync(join(cfg.outDir, 'hermes-cn', 'd20260820070000_h001.snapshot.json'), 'utf8'))
+  const publishedSrc = r1.sources.find((s) => s.source === 'archive-published')!
+  assert.equal(publishedSrc.scanned, 1)
+  assert.equal(publishedSrc.added, 1)
+  const snap = JSON.parse(readFileSync(join(cfg.outDir, 'archive-published', 'd20260820070000_h001.snapshot.json'), 'utf8'))
   assert.equal(snap.eventKey, 'd20260820070000_h001')
-  assert.equal(snap.source, 'hermes-cn')
+  assert.equal(snap.source, 'archive-published')
   assert.equal(snap.status, 'ok')
   assert.ok(snap.raw.draft.title, 'raw 保留原文件内容')
   // 幂等：二次 run 零新增
   const r2 = runIngest(cfg)
-  assert.equal(r2.sources.find((s) => s.source === 'hermes-cn')!.added, 0)
+  assert.equal(r2.sources.find((s) => s.source === 'archive-published')!.added, 0)
   rmSync(root, { recursive: true, force: true })
 })
 
 test('只读红线回归：源 archive 文件 mtime 与内容在 ingest 前后不变', () => {
-  const { root, cfg, alphaDir } = fixtureCfg()
-  const before = statSync(join(alphaDir, 'd20260810123456_a001.published.json')).mtimeMs
-  const contentBefore = readFileSync(join(alphaDir, 'd20260810123456_a001.published.json'), 'utf8')
+  const { root, cfg, allDir } = fixtureCfg()
+  const before = statSync(join(allDir, 'd20260810123456_a001.published.json')).mtimeMs
+  const contentBefore = readFileSync(join(allDir, 'd20260810123456_a001.published.json'), 'utf8')
   runIngest(cfg)
   runIngest(cfg)
-  const after = statSync(join(alphaDir, 'd20260810123456_a001.published.json')).mtimeMs
-  const contentAfter = readFileSync(join(alphaDir, 'd20260810123456_a001.published.json'), 'utf8')
+  const after = statSync(join(allDir, 'd20260810123456_a001.published.json')).mtimeMs
+  const contentAfter = readFileSync(join(allDir, 'd20260810123456_a001.published.json'), 'utf8')
   assert.equal(after, before, '源文件 mtime 不得变化（只读红线）')
   assert.equal(contentAfter, contentBefore)
   rmSync(root, { recursive: true, force: true })
@@ -89,12 +89,12 @@ test('源目录缺失必须显式 fail: source-missing（不静默）', () => {
 test('健康阈值：新鲜 published → green；陈旧 → red；pending-source → pending', () => {
   const { root, cfg } = fixtureCfg()
   const fresh = new Date('2026-08-20T08:00:00Z')
-  const h1 = computeHealth(cfg, fresh) // hermes 07:00 发布，距今 1h < 24h
-  assert.equal(h1.sources.find((s) => s.id === 'hermes-cn')!.status, 'green')
-  const stale = new Date('2026-08-21T20:00:00Z') // hermes 距今 37h > 24h
+  const h1 = computeHealth(cfg, fresh) // published 07:00 发布，距今 1h < 24h
+  assert.equal(h1.sources.find((s) => s.id === 'archive-published')!.status, 'green')
+  const stale = new Date('2026-08-21T20:00:00Z') // published 距今 37h > 24h
   const h2 = computeHealth(cfg, stale)
-  assert.equal(h2.sources.find((s) => s.id === 'hermes-cn')!.status, 'red')
-  assert.equal(h2.sources.find((s) => s.id === 'baicaotang')!.status, 'pending')
+  assert.equal(h2.sources.find((s) => s.id === 'archive-published')!.status, 'red')
+  assert.equal(h2.sources.find((s) => s.id === 'archive-extra')!.status, 'pending')
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -113,15 +113,15 @@ test('tick 全链：initOpsIntel 建目录 + run 留痕 + 空源 run.ok=false', 
 test('S1 report：archiveCounts 实算 published/blocked/rejected/total（fixture）', () => {
   const { root, cfg } = fixtureCfg()
   const counts = buildIntelReport(cfg).archiveCounts
-  const alpha = counts.find((c) => c.source === 'alpha-signal')!
-  const hermes = counts.find((c) => c.source === 'hermes-cn')!
-  assert.equal(alpha.total, 2)
-  assert.equal(alpha.published, 1)
-  assert.equal(alpha.blocked, 1)
-  assert.equal(alpha.rejected, 0)
-  assert.equal(hermes.total, 1)
-  assert.equal(hermes.published, 1)
-  assert.equal(hermes.blocked, 0)
+  const allSrc = counts.find((c) => c.source === 'archive-all')!
+  const publishedSrc = counts.find((c) => c.source === 'archive-published')!
+  assert.equal(allSrc.total, 2)
+  assert.equal(allSrc.published, 1)
+  assert.equal(allSrc.blocked, 1)
+  assert.equal(allSrc.rejected, 0)
+  assert.equal(publishedSrc.total, 1)
+  assert.equal(publishedSrc.published, 1)
+  assert.equal(publishedSrc.blocked, 0)
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -131,7 +131,7 @@ test('S3 dispatch：preferences.json 生成且发布权归原 Owner（fixture）
   const fusionDir = join(path.dirname(cfg.outDir), 'fusion')
   mkdirSync(fusionDir, { recursive: true })
   writeFileSync(join(fusionDir, 'fusion-20260820.json'), JSON.stringify({
-    items: [{ eventKey: 'd20260820070000_h001', source: 'hermes-cn', title: 'hermes item' }],
+    items: [{ eventKey: 'd20260820070000_h001', source: 'archive-published', title: 'published item' }],
   }))
   const d = generateDispatch(cfg)
   assert.equal(d.items.length, 1)
@@ -141,41 +141,41 @@ test('S3 dispatch：preferences.json 生成且发布权归原 Owner（fixture）
   assert.equal(saved.mode, 'manual-optional')
   assert.ok(saved.redLine.includes('红线'))
   assert.ok(saved.ownerNote.includes('原 Owner'))
-  assert.equal(saved.items[0].source, 'hermes-cn')
+  assert.equal(saved.items[0].source, 'archive-published')
   // 不碰源目录
-  assert.ok(existsSync(join(root, 'alpha-archive', 'd20260810123456_a001.published.json')))
+  assert.ok(existsSync(join(root, 'all-archive', 'd20260810123456_a001.published.json')))
   rmSync(root, { recursive: true, force: true })
 })
-test('expired 状态：statusOf 映射 + countArchive 计数（alpha 词表补全）', () => {
-  const { root, cfg, alphaDir } = fixtureCfg()
+test('expired 状态：statusOf 映射 + countArchive 计数（archive-all 词表补全）', () => {
+  const { root, cfg, allDir } = fixtureCfg()
   try {
     // statusOf 直接映射
     assert.equal(statusOf('a.expired.json', {}), 'expired')
     assert.equal(statusOf('a.json', { status: 'expired' }), 'expired')
     // fixture 加一个 expired 文件，countArchive 应计入
-    writeFileSync(join(alphaDir, 'd20260811111111_a003.expired.json'), JSON.stringify({ created_at: '2026-08-11T00:00:00Z', title: 'expired item' }))
+    writeFileSync(join(allDir, 'd20260811111111_a003.expired.json'), JSON.stringify({ created_at: '2026-08-11T00:00:00Z', title: 'expired item' }))
     const counts = buildIntelReport(cfg).archiveCounts
-    const alpha = counts.find((c) => c.source === 'alpha-signal')!
-    assert.equal(alpha.total, 3)
-    assert.equal(alpha.expired, 1, 'expired 单独计数')
+    const allSrc = counts.find((c) => c.source === 'archive-all')!
+    assert.equal(allSrc.total, 3)
+    assert.equal(allSrc.expired, 1, 'expired 单独计数')
     // ingest 也识别 expired
     const r = runIngest(cfg)
-    const snap = JSON.parse(readFileSync(join(cfg.outDir, 'alpha-signal', 'd20260811111111_a003.snapshot.json'), 'utf8'))
+    const snap = JSON.parse(readFileSync(join(cfg.outDir, 'archive-all', 'd20260811111111_a003.snapshot.json'), 'utf8'))
     assert.equal(snap.status, 'expired')
     assert.equal(r.ok, true)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
 test('健康 overall 语义：pending-source 不计入；仅全部 pending 才 pending', () => {
-  const { root, cfg, alphaDir } = fixtureCfg()
+  const { root, cfg, allDir } = fixtureCfg()
   try {
     const fresh = new Date('2026-08-20T08:00:00Z')
-    // 给 alpha 补一条新鲜的 published（fixture 原有 08-10 的已过期）
-    writeFileSync(join(alphaDir, 'd20260820080000_a004.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-20T07:30:00Z', title: 'fresh alpha' }))
+    // 给 archive-all 补一条新鲜的 published（fixture 原有 08-10 的已过期）
+    writeFileSync(join(allDir, 'd20260820080000_a004.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-20T07:30:00Z', title: 'fresh all' }))
     const h = computeHealth(cfg, fresh)
-    // hermes 新鲜 + alpha 新鲜 → green；baicaotang pending 不影响 overall
+    // 两个已接入源都新鲜 → green；未配置源 pending 不影响 overall
     assert.equal(h.overall, 'green', '真实源健康时 overall 不应因 pending-source 变 pending')
-    const allPending = computeHealth({ ...cfg, sources: [{ id: 'baicaotang', dir: null, maxStalenessHours: 24, pattern: 'all' }] }, fresh)
+    const allPending = computeHealth({ ...cfg, sources: [{ id: 'archive-extra', dir: null, maxStalenessHours: 24, pattern: 'all' }] }, fresh)
     assert.equal(allPending.overall, 'pending', '全部 pending 才 pending')
     const stale = new Date('2026-08-21T20:00:00Z')
     const hr = computeHealth(cfg, stale)
@@ -185,45 +185,45 @@ test('健康 overall 语义：pending-source 不计入；仅全部 pending 才 p
 test('fusion 快照输入：observedAt 本地日期归类 + 昨日排除 + title 提取', () => {
   const { root, cfg } = fixtureCfg()
   try {
-    const outAlpha = join(cfg.outDir, 'alpha-signal')
-    const outHermes = join(cfg.outDir, 'hermes-cn')
-    mkdirSync(outAlpha, { recursive: true })
-    mkdirSync(outHermes, { recursive: true })
+    const outAll = join(cfg.outDir, 'archive-all')
+    const outPublished = join(cfg.outDir, 'archive-published')
+    mkdirSync(outAll, { recursive: true })
+    mkdirSync(outPublished, { recursive: true })
     const now = new Date()
     const iso = (dayOffset: number, hour: number) =>
       new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, hour, 0).toISOString()
-    // 今日（本地）两条：alpha 用 UTC 命名的晚落盘稿件（observedAt 仍是今日本地时间）
-    writeFileSync(join(outAlpha, 'a1.snapshot.json'), JSON.stringify({
-      eventKey: 'a1', source: 'alpha-signal', status: 'ok', observedAt: iso(0, 8), raw: { title: 'alpha 今日稿' },
+    // 今日（本地）两条：archive-all 用 UTC 命名的晚落盘稿件（observedAt 仍是今日本地时间）
+    writeFileSync(join(outAll, 'a1.snapshot.json'), JSON.stringify({
+      eventKey: 'a1', source: 'archive-all', status: 'ok', observedAt: iso(0, 8), raw: { title: 'all 今日稿' },
     }))
-    writeFileSync(join(outHermes, 'h1.snapshot.json'), JSON.stringify({
-      eventKey: 'h1', source: 'hermes-cn', status: 'ok', observedAt: iso(0, 9), raw: { draft: { title: 'hermes 今日稿' } },
+    writeFileSync(join(outPublished, 'h1.snapshot.json'), JSON.stringify({
+      eventKey: 'h1', source: 'archive-published', status: 'ok', observedAt: iso(0, 9), raw: { draft: { title: 'published 今日稿' } },
     }))
     // 昨日快照不应进今日
-    writeFileSync(join(outHermes, 'h0.snapshot.json'), JSON.stringify({
-      eventKey: 'h0', source: 'hermes-cn', status: 'ok', observedAt: iso(-1, 9), raw: { title: '昨日稿' },
+    writeFileSync(join(outPublished, 'h0.snapshot.json'), JSON.stringify({
+      eventKey: 'h0', source: 'archive-published', status: 'ok', observedAt: iso(-1, 9), raw: { title: '昨日稿' },
     }))
     // 非法 JSON 快照跳过
-    writeFileSync(join(outHermes, 'bad.snapshot.json'), '{broken')
+    writeFileSync(join(outPublished, 'bad.snapshot.json'), '{broken')
     const items = collectDailyItems(cfg, now)
     const keys = items.map((i) => i.eventKey).sort()
-    assert.deepEqual(keys, ['a1', 'h1'], '只有今日两条（含 UTC 命名的 alpha）')
+    assert.deepEqual(keys, ['a1', 'h1'], '只有今日两条（含 UTC 命名的 all）')
     assert.ok(items.every((i) => i.observedAt !== ''), 'observedAt 均非空')
-    const hermes = items.find((i) => i.eventKey === 'h1')!
-    assert.equal(hermes.title, 'hermes 今日稿', 'title 从 raw.draft 提取')
-    assert.equal(hermes.source, 'hermes-cn')
-    assert.equal(hermes.status, 'ok')
+    const publishedSrc = items.find((i) => i.eventKey === 'h1')!
+    assert.equal(publishedSrc.title, 'published 今日稿', 'title 从 raw.draft 提取')
+    assert.equal(publishedSrc.source, 'archive-published')
+    assert.equal(publishedSrc.status, 'ok')
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 test('分类白名单：配了必须命中才进融合，未配全收，过滤数可统计', () => {
   const { root, cfg } = fixtureCfg()
   try {
     const day = new Date('2026-08-20T08:00:00Z')
-    const outHermes = join(cfg.outDir, 'hermes-cn')
-    mkdirSync(outHermes, { recursive: true })
+    const outPublished = join(cfg.outDir, 'archive-published')
+    mkdirSync(outPublished, { recursive: true })
     const mk = (key: string, category: string): void => {
-      writeFileSync(join(outHermes, key + '.snapshot.json'), JSON.stringify({
-        eventKey: key, source: 'hermes-cn', status: 'ok', observedAt: '2026-08-20T07:00:00Z',
+      writeFileSync(join(outPublished, key + '.snapshot.json'), JSON.stringify({
+        eventKey: key, source: 'archive-published', status: 'ok', observedAt: '2026-08-20T07:00:00Z',
         raw: { item: { title: key, category }, draft: { title: key } },
       }))
     }
@@ -234,22 +234,22 @@ test('分类白名单：配了必须命中才进融合，未配全收，过滤�
     // 配白名单：只留命中的，并统计被过滤条数
     const scoped: IntelConfig = {
       ...cfg,
-      sources: cfg.sources.map((s) => (s.id === 'hermes-cn' ? { ...s, categories: ['科技创新', '财经经济'] } : s)),
+      sources: cfg.sources.map((s) => (s.id === 'archive-published' ? { ...s, categories: ['科技创新', '财经经济'] } : s)),
     }
     const stats = { filtered: {} as Record<string, number> }
     const kept = collectDailyItems(scoped, day, stats)
     assert.deepEqual(kept.map((i) => i.eventKey), ['d20260820070001_keep'])
-    assert.equal(stats.filtered['hermes-cn'], 1, '被过滤 1 条')
-    // alpha 类快照用 source_hint.category 也能命中
-    const outAlpha = join(cfg.outDir, 'alpha-signal')
-    mkdirSync(outAlpha, { recursive: true })
-    writeFileSync(join(outAlpha, 'a9.snapshot.json'), JSON.stringify({
-      eventKey: 'a9', source: 'alpha-signal', status: 'ok', observedAt: '2026-08-20T07:00:00Z',
-      raw: { source_hint: { category: '财经经济' }, title: 'alpha 财经稿' },
+    assert.equal(stats.filtered['archive-published'], 1, '被过滤 1 条')
+    // 线索类快照用 source_hint.category 也能命中
+    const outAll = join(cfg.outDir, 'archive-all')
+    mkdirSync(outAll, { recursive: true })
+    writeFileSync(join(outAll, 'a9.snapshot.json'), JSON.stringify({
+      eventKey: 'a9', source: 'archive-all', status: 'ok', observedAt: '2026-08-20T07:00:00Z',
+      raw: { source_hint: { category: '财经经济' }, title: 'all 财经稿' },
     }))
     const scopedAlpha: IntelConfig = {
       ...cfg,
-      sources: cfg.sources.map((s) => (s.id === 'alpha-signal' ? { ...s, categories: ['财经经济'] } : s)),
+      sources: cfg.sources.map((s) => (s.id === 'archive-all' ? { ...s, categories: ['财经经济'] } : s)),
     }
     assert.ok(collectDailyItems(scopedAlpha, day).some((i) => i.eventKey === 'a9'), 'source_hint.category 命中白名单')
   } finally { rmSync(root, { recursive: true, force: true }) }
@@ -278,25 +278,49 @@ test('clusterDuplicates：聚类疑似重复组；不相关不聚；阈值可调
   assert.equal(clusterDuplicates(items, 0.9).length, 0, '阈值 0.9 不应聚类')
 })
 test('同 key 多状态文件：写后即记 known，不互相覆盖（状态机防扫描顺序依赖）', () => {
-  const { root, cfg, alphaDir } = fixtureCfg()
+  const { root, cfg, allDir } = fixtureCfg()
   try {
     // 同一 eventKey 两个状态文件（published + blocked）
-    writeFileSync(join(alphaDir, 'dup001.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-20T00:00:00Z', title: 'dup pub' }))
-    writeFileSync(join(alphaDir, 'dup001.unsent-scope-blocked.json'), JSON.stringify({ created_at: '2026-08-20T01:00:00Z', title: 'dup blocked' }))
+    writeFileSync(join(allDir, 'dup001.published.json'), JSON.stringify({ status: 'published', created_at: '2026-08-20T00:00:00Z', title: 'dup pub' }))
+    writeFileSync(join(allDir, 'dup001.unsent-scope-blocked.json'), JSON.stringify({ created_at: '2026-08-20T01:00:00Z', title: 'dup blocked' }))
     const r = runIngest(cfg)
-    const alpha = r.sources.find((s) => s.source === 'alpha-signal')!
-    assert.equal(alpha.added, 3, 'a001+a002+dup001 首个共 3（写后即记 known）')
-    assert.equal(alpha.skipped, 1, '另一状态文件被 skip（不覆盖）')
+    const allSrc = r.sources.find((s) => s.source === 'archive-all')!
+    assert.equal(allSrc.added, 3, 'a001+a002+dup001 首个共 3（写后即记 known）')
+    assert.equal(allSrc.skipped, 1, '另一状态文件被 skip（不覆盖）')
     // 快照存在且内容来自首次写入
-    const snapFile = join(cfg.outDir, 'alpha-signal', 'dup001.snapshot.json')
+    const snapFile = join(cfg.outDir, 'archive-all', 'dup001.snapshot.json')
     assert.ok(existsSync(snapFile))
     const snap = JSON.parse(readFileSync(snapFile, 'utf8'))
     assert.equal(snap.eventKey, 'dup001')
     // 第二轮零新增
     const r2 = runIngest(cfg)
-    assert.equal(r2.sources.find((s) => s.source === 'alpha-signal')!.added, 0)
+    assert.equal(r2.sources.find((s) => s.source === 'archive-all')!.added, 0)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+test('默认源：四个源在列；目录缺失时健康灯 pending 而非红灯', () => {
+  const previousAll = process.env.SPARKOS_INTEL_ARCHIVE_ALL
+  const previousPublished = process.env.SPARKOS_INTEL_ARCHIVE_PUBLISHED
+  delete process.env.SPARKOS_INTEL_ARCHIVE_ALL
+  delete process.env.SPARKOS_INTEL_ARCHIVE_PUBLISHED
+  try {
+    const cfg = defaultIntelConfig()
+    assert.deepEqual(cfg.sources.map((s) => s.id), ['alpha-signal', 'hn', 'hermes-cn', 'baicaotang'])
+    const missing = computeHealth({
+      ...cfg,
+      sources: [{ id: 'archive-all', dir: join(tmpdir(), 'sparkos-no-such-archive'), maxStalenessHours: 24, pattern: 'all' }],
+    })
+    assert.equal(missing.sources[0].status, 'pending')
+    assert.notEqual(missing.sources[0].status, 'red')
+    assert.equal(missing.overall, 'pending')
+    assert.match(missing.sources[0].note ?? '', /目录不存在/)
+  } finally {
+    if (previousAll === undefined) delete process.env.SPARKOS_INTEL_ARCHIVE_ALL
+    else process.env.SPARKOS_INTEL_ARCHIVE_ALL = previousAll
+    if (previousPublished === undefined) delete process.env.SPARKOS_INTEL_ARCHIVE_PUBLISHED
+    else process.env.SPARKOS_INTEL_ARCHIVE_PUBLISHED = previousPublished
+  }
+})
+
 test('情报簇：规则骨架预填（分组/来源数/证据URL/热度）+ 校验 + 合并写回', async () => {
   const { root, cfg } = fixtureCfg()
   try {

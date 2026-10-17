@@ -3,9 +3,9 @@
  * 输出 ops-intel/fusion/fusion-YYYYMMDD.md + .json。每条判断必须回链 ≥1 个 eventKey。
  *
  * 数据源用 ingest 快照而非源 archive 的原因：
- * 1) 源文件名时区不统一（alpha=UTC / hermes=本地），按文件名前缀归类会错天；
+ * 1) 源文件名时区不统一，按文件名前缀归类会错天；
  *    快照 observedAt 是 ISO，统一转本地日期归类。
- * 2) 源落盘有延迟（alpha 稿件可能上午才写入 archive），只要当天被 ingest 就能进当日融合；
+ * 2) 源落盘有延迟，只要当天被 ingest 就能进当日融合；
  *    晚落盘稿件可手动重跑融合（同名覆盖）补齐。
  *
  * 重复主题提示：机械装配后按标题相似度聚类（Jaccard 字符 bigram），疑似同主题组
@@ -68,7 +68,7 @@ function evidenceUrlOf(raw: Record<string, unknown>): string {
   // 结构化字段优先：item.url 是快照里最干净的绝对地址，必须排在正文兜底之前。
   const direct = sh?.url ?? raw.url ?? raw.link ?? item?.url
   if (typeof direct === 'string' && direct !== '') return direct
-  // 兜底：hermes 类快照 URL 在 channel_text/text 正文「▎来源：… https://…」里。
+  // 兜底：正文快照的 URL 在 channel_text/text「▎来源：… https://…」里。
   // 引号/尖括号必须进排除集，否则 <a href="…">阅读原文</a> 会把 HTML 尾巴带进 URL。
   for (const t of [raw.channel_text, raw.text, item?.text, draft?.text]) {
     if (typeof t === 'string') {
@@ -197,7 +197,7 @@ export function clusterDuplicates(items: FusionItem[], threshold = 0.5): string[
   return groups.filter((g) => g.keys.length > 1).map((g) => g.keys)
 }
 
-/** 快照分类：hermes 类在 raw.item.category，alpha 类在 raw.source_hint.category。 */
+/** 快照分类：正文稿在 raw.item.category，线索稿在 raw.source_hint.category。 */
 function categoryOf(raw: Record<string, unknown>): string {
   const item = raw.item as Record<string, unknown> | undefined
   const sh = raw.source_hint as Record<string, unknown> | undefined

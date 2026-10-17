@@ -2,7 +2,7 @@
  * M2 · 选题建议下发（手动触发，零侵入）。
  *
  * 只生成 ops-intel/dispatch/preferences.json（统筹层自己的目录），
- * 三管道默认不消费；发布权/稿件质量判定永远归原 Owner 与用户（红线 C/D）。
+ * 外部归档默认不消费本文件；发布权永远归用户，插件不自动发布。
  * @module dsh-sparkos/src/intel/dispatch
  */
 
@@ -60,7 +60,7 @@ export function generateDispatch(cfg: IntelConfig, now = new Date()): DispatchPr
   const out: DispatchPreferences = {
     generatedAt: now.toISOString(),
     mode: 'manual-optional',
-    ownerNote: '本文件仅作选题方向参考，三管道默认不消费；发布权与最终裁决归原 Owner 与用户。',
+    ownerNote: '本文件仅作选题方向参考，外部归档默认不消费；发布权与最终裁决归原 Owner 与用户。',
     redLine: '红线A/C/D：不写管道 state/、不碰 token/launchd、不自动定夺发布。',
     items,
     suggestion: items.length > 0

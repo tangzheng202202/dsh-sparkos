@@ -10,8 +10,10 @@ const clustersDir = path.join(vault, 'ops-intel', 'clusters')
 mkdirSync(clustersDir, { recursive: true })
 process.env.SPARKOS_VAULT_ROOT = vault
 process.env.SPARKOS_DB_PATH = path.join(vault, 'data', 'factory.db')
-process.env.SPARKOS_ALPHA_ARCHIVE = path.join(root, 'alpha')
-process.env.SPARKOS_HERMES_ARCHIVE = path.join(root, 'hermes')
+process.env.SPARKOS_INTEL_ARCHIVE_ALL = path.join(root, 'archive-all')
+process.env.SPARKOS_INTEL_ARCHIVE_PUBLISHED = path.join(root, 'archive-published')
+mkdirSync(path.join(root, 'archive-all'), { recursive: true })
+mkdirSync(path.join(root, 'archive-published'), { recursive: true })
 
 writeFileSync(path.join(clustersDir, 'clusters-20260822.json'), JSON.stringify([{
   clusterId: 'c-20260822-001', topicKey: 't-factory-integration', date: '20260822', topic: '内容工厂集成测试',

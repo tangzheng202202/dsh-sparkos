@@ -34,7 +34,7 @@ const {
   VisualPipelineError,
 } = await import('../src/visual/service.ts')
 const { buildFactorySnapshot } = await import('../src/factory/service.ts')
-const { handleSparkosHttp } = await import('../src/server/routes.ts')
+const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
 const { registerVisualTools } = await import('../src/tools/visual.ts')
 
 const evidenceUrl = 'https://official.example/visual'
@@ -424,7 +424,7 @@ async function http(method: string, url: string, body?: unknown): Promise<MockRe
     writeHead(status: number, headers: Record<string, string>) { result.status = status; result.headers = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value)])) },
     end(chunk?: string | Buffer) { result.body = chunk === undefined ? Buffer.alloc(0) : Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk) },
   } as unknown as ServerResponse
-  await handleSparkosHttp(req, res)
+  await handleSparkosHttp(req, res, admitTestOperator)
   return result
 }
 

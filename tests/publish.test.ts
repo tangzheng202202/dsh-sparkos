@@ -28,7 +28,7 @@ const { ensureDraftRequest, submitDraftPackage, decideDraftPackage } = await imp
 const { claimVisualTask, queueVisualBatch, submitVisualAttachment, visualStatus, VisualPipelineError } = await import('../src/visual/service.ts')
 const { createVisualDelivery } = await import('../src/visual/delivery.ts')
 const { decideVisualAttempt, createPublishTask, latestPublishTask } = await import('../src/visual/review.ts')
-const { handleSparkosHttp } = await import('../src/server/routes.ts')
+const { handleSparkosHttp, admitTestOperator } = await import('../src/server/routes.ts')
 
 const evidenceUrl = 'https://official.example/publish'
 
@@ -223,7 +223,7 @@ async function http(method: string, url: string, body?: unknown): Promise<HttpRe
     writeHead(status: number, headers: Record<string, string>) { result.status = status; result.headers = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value)])) },
     end(chunk?: string | Buffer) { result.body = chunk === undefined ? Buffer.alloc(0) : Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk) },
   } as unknown as ServerResponse
-  await handleSparkosHttp(req, res)
+  await handleSparkosHttp(req, res, admitTestOperator)
   return result
 }
 

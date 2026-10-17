@@ -1,0 +1,11 @@
+{
+  "date": "2000-01-01",
+  "must_reads": [
+    {
+      "event_id": "sample-must-read",
+      "title": "示例必读：点采纳只会记在本机",
+      "fresh_hours": 1,
+      "primary_line": "line-001"
+    }
+  ]
+}

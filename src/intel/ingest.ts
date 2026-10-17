@@ -1,5 +1,5 @@
 /**
- * M0 · intel 快照接入：只读扫描两条管道的 state/archive，
+ * M0 · intel 快照接入：只读扫描外部归档目录，
  * 输出增量快照到 VAULT/ops-intel/ingest/。幂等（同 eventKey 零新增），
  * 快照保留 14 天滚动。绝不写入源目录（只读红线）。
  * @module dsh-sparkos/src/intel/ingest
@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import { KNOWLEDGE_ROOT, VAULT_ROOT, envPath } from '../vault.ts'
+import { KNOWLEDGE_ROOT, VAULT_ROOT, envPath, envOrNull } from '../vault.ts'
 
 export type SnapshotStatus = 'ok' | 'blocked' | 'rejected' | 'expired' | 'unknown'
 
@@ -19,7 +19,7 @@ export interface IntelSourceDef {
   dir: string | null
   /** 健康阈值（小时）：最新 published 距今超过即标红。 */
   maxStalenessHours: number
-  /** 文件名 glob 简化形式：alpha 全量 *.json；hermes-cn 仅 *.published.json。 */
+  /** all：目录里全部 *.json；published-only：只收 *.published.json。 */
   pattern: 'all' | 'published-only'
   /**
    * 分类白名单（缺省或空数组 = 不过滤）：命中快照 raw.item.category 或
@@ -59,6 +59,11 @@ export interface IntelConfig {
 
 /** 默认源（hermes-cn 已收紧白名单；hn 为按条目展开的 FeedFuse 快照）。 */
 export function defaultIntelConfig(): IntelConfig {
+  const sources: IntelSourceDef[] = []
+  const all = envOrNull('SPARKOS_INTEL_ARCHIVE_ALL')
+  if (all) sources.push({ id: 'archive-all', dir: all, maxStalenessHours: 48, pattern: 'all' })
+  const published = envOrNull('SPARKOS_INTEL_ARCHIVE_PUBLISHED')
+  if (published) sources.push({ id: 'archive-published', dir: published, maxStalenessHours: 24, pattern: 'published-only' })
   return {
     sources: [
       {
